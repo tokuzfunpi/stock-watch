@@ -1,2 +1,2 @@
-﻿date,ticker,name,close,ret5_pct,ret20_pct,volume,avg_vol20,ma20,ma60,ma120,drawdown120_pct,bias20_pct,setup_score,risk_score,signals,score_band,regime,group,grade
-2026-04-10,2399.TW,映泰,34.2,7.38,40.45,14210362,14807176,31.74,26.9,25.12,-9.88,7.76,4,2,NONE,開始留意,一般觀察,theme,X
+﻿date,ticker,name,close,ret5_pct,ret20_pct,volume,avg_vol20,ma20,ma60,ma120,drawdown120_pct,bias20_pct,setup_score,risk_score,signals,score_band,regime,group,grade,ret1_pct,ret3_pct,ret10_pct,volume_ratio20,ma5,ma10,drawdown20_pct,drawdown60_pct,bias5_pct
+2026-04-10,2399.TW,映泰,34.2,7.38,40.45,14210362,14807176,31.74,26.9,,,,5,0,NONE,開始轉強,一般觀察,theme,B,-3.53,-0.87,8.4,0.96,35.18,32.86,-9.88,-9.88,-2.79
