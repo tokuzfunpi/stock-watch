@@ -1,0 +1,2 @@
+﻿date,ticker,name,close,ret5_pct,ret20_pct,volume,avg_vol20,ma20,ma60,ma120,drawdown120_pct,bias20_pct,setup_score,risk_score,signals,score_band,regime
+2026-04-10,3013.TW,晟銘電,103.5,3.6,10.11,2173429,3009810,99.29,108.85,118.34,-26.07,4.24,2,0,PULLBACK,一般觀察,高檔回落整理

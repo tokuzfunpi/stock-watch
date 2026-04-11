@@ -1,0 +1,2 @@
+﻿date,ticker,name,close,ret5_pct,ret20_pct,volume,avg_vol20,ma20,ma60,ma120,drawdown120_pct,bias20_pct,setup_score,risk_score,signals,score_band,regime
+2026-04-10,3057.TW,喬鼎,17.35,10.16,11.94,257228,295326,16.23,17.32,16.18,-27.41,6.88,4,0,PULLBACK,開始留意,高檔回落整理
