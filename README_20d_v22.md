@@ -16,3 +16,6 @@
 - config_20d_v22.json
 - watchlist_20d_v22.csv
 - .github/workflows/stock-watch.yml
+
+
+補充：daily_report.md 現在會包含 Signals 對照表與 Regime 解釋，方便直接看報表判讀。
