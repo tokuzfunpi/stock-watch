@@ -11,7 +11,7 @@ permissions:
 jobs:
   run-watchlist:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
 
     steps:
       - name: Checkout
@@ -29,20 +29,20 @@ jobs:
           python -m pip install --upgrade pip
           pip install pandas requests yfinance
 
-      - name: Run 20D v2.1 watchlist
+      - name: Run 20D v2.2 watchlist
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_IDS: ${{ secrets.TELEGRAM_CHAT_IDS }}
           LOG_LEVEL: INFO
-          CONFIG_PATH: config_20d_v21.json
-          WATCHLIST_CSV: watchlist_20d_v21.csv
+          CONFIG_PATH: config_20d_v22.json
+          WATCHLIST_CSV: watchlist_20d_v22.csv
         run: |
-          python daily_theme_watchlist_20d_v21.py
+          python daily_theme_watchlist_20d_v22.py
 
       - name: Commit updated artifacts
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add config_20d_v21.json watchlist_20d_v21.csv theme_watchlist_daily/
-          git diff --cached --quiet || git commit -m "Update 20D v2.1 stock watch artifacts [skip ci]"
+          git add config_20d_v22.json watchlist_20d_v22.csv theme_watchlist_daily/
+          git diff --cached --quiet || git commit -m "Update 20D v2.2 stock watch artifacts [skip ci]"
           git push
