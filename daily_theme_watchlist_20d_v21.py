@@ -18,7 +18,9 @@ from urllib3.util.retry import Retry
 
 BASE_DIR = Path(__file__).resolve().parent
 CONFIG_PATH = Path(os.getenv("CONFIG_PATH", BASE_DIR / "config_20d_v21.json"))
-WATCHLIST_CSV = Path(os.getenv("WATCHLIST_CSV", BASE_DIR / "watchlist_20d_v21.csv"))
+WATCHLIST_CSV = Path(
+    os.getenv("WATCHLIST_CSV", BASE_DIR / "watchlist_20d_v21.csv")
+)
 OUTDIR = Path(os.getenv("OUTDIR", BASE_DIR / "theme_watchlist_daily"))
 OUTDIR.mkdir(parents=True, exist_ok=True)
 
@@ -31,9 +33,14 @@ LOG_DIR = OUTDIR / "logs"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "").strip()
-TELEGRAM_CHAT_IDS = [int(x.strip()) for x in os.getenv("TELEGRAM_CHAT_IDS", "").split(",") if x.strip()]
+TELEGRAM_CHAT_IDS = [
+    int(x.strip())
+    for x in os.getenv("TELEGRAM_CHAT_IDS", "").split(",")
+    if x.strip()
+]
 HTTP_TIMEOUT = int(os.getenv("HTTP_TIMEOUT", "20"))
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+
 
 @dataclass
 class MarketFilter:
@@ -45,6 +52,7 @@ class MarketFilter:
     volume_ratio_min: float
     allow_a_grade_even_if_weak: bool
 
+
 @dataclass
 class NotificationRule:
     top_n: int
@@ -55,17 +63,20 @@ class NotificationRule:
     min_volume_ratio: float
     priority_groups: List[str]
 
+
 @dataclass
 class BacktestConfig:
     enabled: bool
     period: str
     lookahead_days: List[int]
 
+
 @dataclass
 class GroupWeights:
     theme_bonus: int
     core_penalty: int
     etf_penalty: int
+
 
 @dataclass
 class AppConfig:
@@ -78,6 +89,7 @@ class AppConfig:
     notify: NotificationRule
     backtest: BacktestConfig
     group_weights: GroupWeights
+
 
 def load_config(path: Path) -> AppConfig:
     raw = json.loads(path.read_text(encoding="utf-8"))
@@ -93,19 +105,34 @@ def load_config(path: Path) -> AppConfig:
         group_weights=GroupWeights(**raw["group_weights"]),
     )
 
+
 CONFIG = load_config(CONFIG_PATH)
-logging.basicConfig(level=getattr(logging, LOG_LEVEL, logging.INFO), format="%(asctime)s | %(levelname)s | %(message)s")
+logging.basicConfig(
+    level=getattr(logging, LOG_LEVEL, logging.INFO),
+    format="%(asctime)s | %(levelname)s | %(message)s",
+)
 logger = logging.getLogger("theme_watchlist_20d_v21")
 
+
 def build_session() -> requests.Session:
-    retry = Retry(total=3, connect=3, read=3, backoff_factor=1.0, status_forcelist=(429,500,502,503,504), allowed_methods=frozenset(["GET","POST"]), raise_on_status=False)
+    retry = Retry(
+        total=3,
+        connect=3,
+        read=3,
+        backoff_factor=1.0,
+        status_forcelist=(429, 500, 502, 503, 504),
+        allowed_methods=frozenset(["GET", "POST"]),
+        raise_on_status=False,
+    )
     adapter = HTTPAdapter(max_retries=retry)
     session = requests.Session()
     session.mount("https://", adapter)
     session.mount("http://", adapter)
     return session
 
+
 HTTP = build_session()
+
 
 def load_watchlist(csv_path: Path) -> List[dict]:
     rows = []
@@ -118,30 +145,40 @@ def load_watchlist(csv_path: Path) -> List[dict]:
             enabled = (row.get("enabled") or "true").strip().lower()
             if not ticker or not name:
                 continue
-            if enabled in {"false","0","no","n"}:
+            if enabled in {"false", "0", "no", "n"}:
                 continue
             rows.append({"ticker": ticker, "name": name, "group": group})
     if not rows:
         raise ValueError("No enabled symbols found in watchlist csv")
     return rows
 
+
 WATCHLIST = load_watchlist(WATCHLIST_CSV)
 
+
 def yf_download_one(ticker: str, period: str) -> pd.DataFrame:
-    df = yf.download(ticker, period=period, interval="1d", auto_adjust=True, progress=False, threads=False)
+    df = yf.download(
+        ticker,
+        period=period,
+        interval="1d",
+        auto_adjust=True,
+        progress=False,
+        threads=False,
+    )
     if df.empty:
         raise ValueError(f"No data returned for {ticker}")
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = df.columns.get_level_values(0)
     df = df.rename(columns=str.title)
-    df = df[["Open","High","Low","Close","Volume"]].dropna().copy()
+    df = df[["Open", "High", "Low", "Close", "Volume"]].dropna().copy()
     if len(df) < 250:
         raise ValueError(f"Insufficient history for {ticker}: {len(df)} rows")
     return df
 
+
 def add_indicators(df: pd.DataFrame, ma_period: int = 20) -> pd.DataFrame:
     out = df.copy()
-    for n in [5,10,20,60,120,250]:
+    for n in [5, 10, 20, 60, 120, 250]:
         out[f"MA{n}"] = out["Close"].rolling(n).mean()
     out["AvgVol20"] = out["Volume"].rolling(20).mean()
     out["Ret1D"] = out["Close"].pct_change(1)
@@ -152,12 +189,15 @@ def add_indicators(df: pd.DataFrame, ma_period: int = 20) -> pd.DataFrame:
     out["High250D"] = out["Close"].rolling(250).max()
     out["Low250D"] = out["Close"].rolling(250).min()
     out["Drawdown120D"] = out["Close"] / out["High120D"] - 1.0
-    out["Range20"] = (out["High"].rolling(20).max() - out["Low"].rolling(20).min()) / out["Close"]
+    out["Range20"] = (
+        out["High"].rolling(20).max() - out["Low"].rolling(20).min()
+    ) / out["Close"]
     out["DistToLow250"] = out["Close"] / out["Low250D"] - 1.0
     out["VolumeRatio20"] = out["Volume"] / out["AvgVol20"]
-    if ma_period not in [5,10,20,60,120,250]:
+    if ma_period not in [5, 10, 20, 60, 120, 250]:
         out[f"MA{ma_period}"] = out["Close"].rolling(ma_period).mean()
     return out
+
 
 def apply_group_weight(base_score: int, group: str) -> int:
     score = base_score
@@ -169,19 +209,28 @@ def apply_group_weight(base_score: int, group: str) -> int:
         score -= CONFIG.group_weights.etf_penalty
     return max(score, 0)
 
+
 def score_band(setup_score: int, risk_score: int) -> str:
-    if risk_score >= 6: return "高風險追價區"
-    if setup_score >= 7: return "高關注啟動區"
-    if setup_score >= 5: return "可能啟動前"
-    if setup_score >= 3: return "開始留意"
+    if risk_score >= 6:
+        return "高風險追價區"
+    if setup_score >= 7:
+        return "高關注啟動區"
+    if setup_score >= 5:
+        return "可能啟動前"
+    if setup_score >= 3:
+        return "開始留意"
     return "一般觀察"
+
 
 def detect_row(df: pd.DataFrame, ticker: str, name: str, group: str) -> dict:
     x = df.iloc[-1]
     prev = df.iloc[-2] if len(df) >= 2 else x
-    close_ = float(x["Close"]); volume = float(x["Volume"])
+    close_ = float(x["Close"])
+    volume = float(x["Volume"])
     avg_vol20 = float(x["AvgVol20"]) if pd.notna(x["AvgVol20"]) else 0.0
-    vol_ratio20 = float(x["VolumeRatio20"]) if pd.notna(x["VolumeRatio20"]) else 0.0
+    vol_ratio20 = (
+        float(x["VolumeRatio20"]) if pd.notna(x["VolumeRatio20"]) else 0.0
+    )
     ma20 = float(x["MA20"]) if pd.notna(x["MA20"]) else None
     ma60 = float(x["MA60"]) if pd.notna(x["MA60"]) else None
     ma120 = float(x["MA120"]) if pd.notna(x["MA120"]) else None
@@ -190,68 +239,135 @@ def detect_row(df: pd.DataFrame, ticker: str, name: str, group: str) -> dict:
     ret5 = float(x["Ret5D"]) if pd.notna(x["Ret5D"]) else 0.0
     ret10 = float(x["Ret10D"]) if pd.notna(x["Ret10D"]) else 0.0
     ret20 = float(x["Ret20D"]) if pd.notna(x["Ret20D"]) else 0.0
-    drawdown120 = float(x["Drawdown120D"]) if pd.notna(x["Drawdown120D"]) else 0.0
+    drawdown120 = (
+        float(x["Drawdown120D"]) if pd.notna(x["Drawdown120D"]) else 0.0
+    )
     range20 = float(x["Range20"]) if pd.notna(x["Range20"]) else 999.0
-    dist_low250 = float(x["DistToLow250"]) if pd.notna(x["DistToLow250"]) else 999.0
+    dist_low250 = (
+        float(x["DistToLow250"]) if pd.notna(x["DistToLow250"]) else 999.0
+    )
 
-    base_signal = bool(low250 is not None and close_ <= low250 * 1.20 and avg_vol20 > 0 and volume < avg_vol20 and range20 < 0.15)
-    rebreak_signal = bool(ma20 is not None and ma60 is not None and avg_vol20 > 0 and close_ > ma20 and close_ > ma60 and vol_ratio20 > 1.4 and pd.notna(prev.get("MA20")) and float(prev["Close"]) <= float(prev["MA20"]))
+    base_signal = bool(
+        low250 is not None
+        and close_ <= low250 * 1.20
+        and avg_vol20 > 0
+        and volume < avg_vol20
+        and range20 < 0.15
+    )
+    rebreak_signal = bool(
+        ma20 is not None
+        and ma60 is not None
+        and avg_vol20 > 0
+        and close_ > ma20
+        and close_ > ma60
+        and vol_ratio20 > 1.4
+        and pd.notna(prev.get("MA20"))
+        and float(prev["Close"]) <= float(prev["MA20"])
+    )
     surge_signal = bool(ret20 > 0.22 and vol_ratio20 > 1.6)
-    trend_signal = bool(ma20 is not None and ma60 is not None and close_ > ma20 and ma20 > ma60 and ret20 > 0.08)
-    accel_signal = bool((ret5 > 0.08 and vol_ratio20 > 1.3) or (ret10 > 0.12 and vol_ratio20 > 1.2))
+    trend_signal = bool(
+        ma20 is not None
+        and ma60 is not None
+        and close_ > ma20
+        and ma20 > ma60
+        and ret20 > 0.08
+    )
+    accel_signal = bool(
+        (ret5 > 0.08 and vol_ratio20 > 1.3)
+        or (ret10 > 0.12 and vol_ratio20 > 1.2)
+    )
     pullback_signal = bool(drawdown120 <= -0.20)
 
     setup_score = 0
-    if low250 is not None and close_ <= low250 * 1.20: setup_score += 2
-    elif low250 is not None and close_ <= low250 * 1.35: setup_score += 1
-    if avg_vol20 > 0 and volume < avg_vol20: setup_score += 1
-    if range20 < 0.15: setup_score += 1
-    if range20 < 0.10: setup_score += 1
-    if ma20 is not None and close_ > ma20: setup_score += 1
-    if ma60 is not None and close_ > ma60: setup_score += 2
-    if vol_ratio20 > 1.5: setup_score += 2
-    elif vol_ratio20 > 1.2: setup_score += 1
-    if dist_low250 < 0.25 and ret20 > 0.10: setup_score += 1
-    if ret20 > 0.12: setup_score += 1
-    if rebreak_signal: setup_score += 1
-    if surge_signal: setup_score += 1
-    if trend_signal: setup_score += 1
-    if ret5 > 0.08: setup_score += 2
-    elif ret5 > 0.04: setup_score += 1
-    if vol_ratio20 > 1.5: setup_score += 1
+    if low250 is not None and close_ <= low250 * 1.20:
+        setup_score += 2
+    elif low250 is not None and close_ <= low250 * 1.35:
+        setup_score += 1
+    if avg_vol20 > 0 and volume < avg_vol20:
+        setup_score += 1
+    if range20 < 0.15:
+        setup_score += 1
+    if range20 < 0.10:
+        setup_score += 1
+    if ma20 is not None and close_ > ma20:
+        setup_score += 1
+    if ma60 is not None and close_ > ma60:
+        setup_score += 2
+    if vol_ratio20 > 1.5:
+        setup_score += 2
+    elif vol_ratio20 > 1.2:
+        setup_score += 1
+    if dist_low250 < 0.25 and ret20 > 0.10:
+        setup_score += 1
+    if ret20 > 0.12:
+        setup_score += 1
+    if rebreak_signal:
+        setup_score += 1
+    if surge_signal:
+        setup_score += 1
+    if trend_signal:
+        setup_score += 1
+    if ret5 > 0.08:
+        setup_score += 2
+    elif ret5 > 0.04:
+        setup_score += 1
+    if vol_ratio20 > 1.5:
+        setup_score += 1
 
     risk_score = 0
-    if ret5 > 0.18: risk_score += 2
-    if ret20 > 0.30: risk_score += 2
-    if ret20 > 0.50: risk_score += 2
-    if vol_ratio20 > 2.5: risk_score += 2
-    elif vol_ratio20 > 1.8: risk_score += 1
-    if drawdown120 > -0.05: risk_score += 1
+    if ret5 > 0.18:
+        risk_score += 2
+    if ret20 > 0.30:
+        risk_score += 2
+    if ret20 > 0.50:
+        risk_score += 2
+    if vol_ratio20 > 2.5:
+        risk_score += 2
+    elif vol_ratio20 > 1.8:
+        risk_score += 1
+    if drawdown120 > -0.05:
+        risk_score += 1
 
     if ma20 is not None and ma20 > 0:
         bias20 = close_ / ma20 - 1.0
-        if bias20 > 0.15: risk_score += 2
-        elif bias20 > 0.08: risk_score += 1
+        if bias20 > 0.15:
+            risk_score += 2
+        elif bias20 > 0.08:
+            risk_score += 1
     else:
         bias20 = 0.0
 
     setup_score = apply_group_weight(setup_score, group)
     signals = []
-    if base_signal: signals.append("BASE")
-    if rebreak_signal: signals.append("REBREAK")
-    if surge_signal: signals.append("SURGE")
-    if trend_signal: signals.append("TREND")
-    if accel_signal: signals.append("ACCEL")
-    if pullback_signal: signals.append("PULLBACK")
+    if base_signal:
+        signals.append("BASE")
+    if rebreak_signal:
+        signals.append("REBREAK")
+    if surge_signal:
+        signals.append("SURGE")
+    if trend_signal:
+        signals.append("TREND")
+    if accel_signal:
+        signals.append("ACCEL")
+    if pullback_signal:
+        signals.append("PULLBACK")
 
-    if risk_score >= 6: regime = "高風險追價區"
-    elif surge_signal: regime = "題材暴衝段"
-    elif rebreak_signal: regime = "重新啟動"
-    elif accel_signal: regime = "轉強加速"
-    elif trend_signal: regime = "中段延續"
-    elif base_signal: regime = "低檔盤整"
-    elif pullback_signal: regime = "高檔回落整理"
-    else: regime = "一般觀察"
+    if risk_score >= 6:
+        regime = "高風險追價區"
+    elif surge_signal:
+        regime = "題材暴衝段"
+    elif rebreak_signal:
+        regime = "重新啟動"
+    elif accel_signal:
+        regime = "轉強加速"
+    elif trend_signal:
+        regime = "中段延續"
+    elif base_signal:
+        regime = "低檔盤整"
+    elif pullback_signal:
+        regime = "高檔回落整理"
+    else:
+        regime = "一般觀察"
 
     return {
         "date": df.index[-1].strftime("%Y-%m-%d"),
@@ -278,15 +394,28 @@ def detect_row(df: pd.DataFrame, ticker: str, name: str, group: str) -> dict:
         "regime": regime,
     }
 
+
 def grade_signal(row: dict) -> str:
-    setup = row["setup_score"]; risk = row["risk_score"]; signals = row["signals"]; ret5 = row["ret5_pct"]
-    if setup >= 6 and risk <= 4 and (("REBREAK" in signals) or ("SURGE" in signals) or ("ACCEL" in signals)):
+    setup = row["setup_score"]
+    risk = row["risk_score"]
+    signals = row["signals"]
+    ret5 = row["ret5_pct"]
+    if (
+        setup >= 6
+        and risk <= 4
+        and (
+            ("REBREAK" in signals)
+            or ("SURGE" in signals)
+            or ("ACCEL" in signals)
+        )
+    ):
         return "A"
     if setup >= 5 and risk <= 4 and ret5 >= 5:
         return "B"
     if risk >= 6:
         return "C"
     return "X"
+
 
 def append_stock_log(row: dict) -> None:
     log_csv = LOG_DIR / f"{row['ticker'].replace('.', '_')}.csv"
@@ -300,6 +429,7 @@ def append_stock_log(row: dict) -> None:
         df_all = df_new
     df_all.to_csv(log_csv, index=False, encoding="utf-8-sig")
 
+
 def load_previous_rank() -> Optional[pd.DataFrame]:
     if not RANK_CSV.exists():
         return None
@@ -308,7 +438,10 @@ def load_previous_rank() -> Optional[pd.DataFrame]:
     except Exception:
         return None
 
-def enrich_rank_changes(df_rank: pd.DataFrame, prev_rank: Optional[pd.DataFrame]) -> pd.DataFrame:
+
+def enrich_rank_changes(
+    df_rank: pd.DataFrame, prev_rank: Optional[pd.DataFrame]
+) -> pd.DataFrame:
     df = df_rank.copy()
     df["rank_change"] = 0
     df["setup_change"] = 0
@@ -324,35 +457,51 @@ def enrich_rank_changes(df_rank: pd.DataFrame, prev_rank: Optional[pd.DataFrame]
         if ticker in prev.index:
             old = prev.loc[ticker]
             old_rank = int(old["rank"]) if pd.notna(old["rank"]) else 0
-            old_setup = int(old["setup_score"]) if pd.notna(old["setup_score"]) else 0
-            old_risk = int(old["risk_score"]) if pd.notna(old["risk_score"]) else 0
+            old_setup = (
+                int(old["setup_score"]) if pd.notna(old["setup_score"]) else 0
+            )
+            old_risk = (
+                int(old["risk_score"]) if pd.notna(old["risk_score"]) else 0
+            )
             df.at[i, "rank_change"] = old_rank - int(row["rank"])
             df.at[i, "setup_change"] = int(row["setup_score"]) - old_setup
             df.at[i, "risk_change"] = int(row["risk_score"]) - old_risk
-            if df.at[i, "setup_change"] > 0 or df.at[i, "rank_change"] > 0: df.at[i, "status_change"] = "UP"
-            elif df.at[i, "setup_change"] < 0 or df.at[i, "rank_change"] < 0: df.at[i, "status_change"] = "DOWN"
-            else: df.at[i, "status_change"] = "FLAT"
+            if df.at[i, "setup_change"] > 0 or df.at[i, "rank_change"] > 0:
+                df.at[i, "status_change"] = "UP"
+            elif df.at[i, "setup_change"] < 0 or df.at[i, "rank_change"] < 0:
+                df.at[i, "status_change"] = "DOWN"
+            else:
+                df.at[i, "status_change"] = "FLAT"
     return df
 
-def save_daily_rank(rows: List[dict], prev_rank: Optional[pd.DataFrame]) -> pd.DataFrame:
+
+def save_daily_rank(
+    rows: List[dict], prev_rank: Optional[pd.DataFrame]
+) -> pd.DataFrame:
     df = pd.DataFrame(rows)
     df["grade"] = df.apply(lambda r: grade_signal(r.to_dict()), axis=1)
-    df = df.sort_values(by=["setup_score","risk_score","ret20_pct","ret10_pct"], ascending=[False,True,False,False]).reset_index(drop=True)
-    df.insert(0, "rank", range(1, len(df)+1))
+    df = df.sort_values(
+        by=["setup_score", "risk_score", "ret20_pct", "ret10_pct"],
+        ascending=[False, True, False, False],
+    ).reset_index(drop=True)
+    df.insert(0, "rank", range(1, len(df) + 1))
     df = enrich_rank_changes(df, prev_rank)
     if RANK_CSV.exists():
         RANK_CSV.replace(PREV_RANK_CSV)
     df.to_csv(RANK_CSV, index=False, encoding="utf-8-sig")
     return df
 
+
 def load_last_state() -> str:
     if not CONFIG.state_enabled or not STATE_FILE.exists():
         return ""
     return STATE_FILE.read_text(encoding="utf-8").strip()
 
+
 def save_last_state(state: str) -> None:
     if CONFIG.state_enabled:
         STATE_FILE.write_text(state, encoding="utf-8")
+
 
 def get_market_regime() -> dict:
     if not CONFIG.market_filter.enabled:
@@ -363,8 +512,14 @@ def get_market_regime() -> dict:
     close_ = float(x["Close"])
     ma = float(x[f"MA{CONFIG.market_filter.ma_period}"])
     ret20 = float(x["Ret20D"]) if pd.notna(x["Ret20D"]) else 0.0
-    vol_ratio = float(x["VolumeRatio20"]) if pd.notna(x["VolumeRatio20"]) else 1.0
-    is_bullish = close_ >= ma and ret20 >= CONFIG.market_filter.min_ret20 and vol_ratio >= CONFIG.market_filter.volume_ratio_min
+    vol_ratio = (
+        float(x["VolumeRatio20"]) if pd.notna(x["VolumeRatio20"]) else 1.0
+    )
+    is_bullish = (
+        close_ >= ma
+        and ret20 >= CONFIG.market_filter.min_ret20
+        and vol_ratio >= CONFIG.market_filter.volume_ratio_min
+    )
     return {
         "enabled": True,
         "ticker": CONFIG.market_filter.ticker,
@@ -377,6 +532,7 @@ def get_market_regime() -> dict:
         "comment": f"{CONFIG.market_filter.name} {'偏多' if is_bullish else '偏保守'} | Close {round(close_,2)} / MA{CONFIG.market_filter.ma_period} {round(ma,2)} / 20D {round(ret20*100,2)}% / VolRatio {round(vol_ratio,2)}",
     }
 
+
 def select_push_candidates(df_rank: pd.DataFrame) -> pd.DataFrame:
     rule = CONFIG.notify
     df = df_rank.copy()
@@ -387,26 +543,53 @@ def select_push_candidates(df_rank: pd.DataFrame) -> pd.DataFrame:
     base_mask = (
         (df["setup_score"] >= rule.min_setup_score)
         & (df["risk_score"] <= rule.max_risk_score)
-        & ((df["ret20_pct"] >= rule.min_ret20_pct) | (df["ret5_pct"] >= rule.min_ret5_pct) | (df["volume_ratio20"] >= rule.min_volume_ratio))
+        & (
+            (df["ret20_pct"] >= rule.min_ret20_pct)
+            | (df["ret5_pct"] >= rule.min_ret5_pct)
+            | (df["volume_ratio20"] >= rule.min_volume_ratio)
+        )
     )
     cond_a = df["grade"] == "A"
     cond_b = (df["setup_score"] >= 5) & (df["rank"] <= 3)
     cond_c = df["ret5_pct"] > 10
     cond_d = (df["setup_change"] > 0) | (df["rank_change"] > 0)
-    return df[base_mask & (cond_a | cond_b | cond_c | cond_d)].head(rule.top_n).copy()
+    return (
+        df[base_mask & (cond_a | cond_b | cond_c | cond_d)]
+        .head(rule.top_n)
+        .copy()
+    )
+
 
 def build_state(df_rank: pd.DataFrame, market_regime: dict) -> str:
-    base_state = "|".join(f"{r.ticker}:{r.setup_score}:{r.risk_score}:{r.signals}:{r.rank}:{r.grade}" for r in df_rank.itertuples(index=False))
+    base_state = "|".join(
+        f"{r.ticker}:{r.setup_score}:{r.risk_score}:{r.signals}:{r.rank}:{r.grade}"
+        for r in df_rank.itertuples(index=False)
+    )
     return f"market={market_regime.get('is_bullish', True)}||{base_state}"
 
-def should_alert(df_rank: pd.DataFrame, current_state: str, last_state: str, market_regime: dict) -> bool:
-    if CONFIG.always_notify: return True
-    if current_state == last_state: return False
+
+def should_alert(
+    df_rank: pd.DataFrame,
+    current_state: str,
+    last_state: str,
+    market_regime: dict,
+) -> bool:
+    if CONFIG.always_notify:
+        return True
+    if current_state == last_state:
+        return False
     candidates = select_push_candidates(df_rank)
-    if candidates.empty: return False
-    if market_regime.get("is_bullish", True): return True
-    if CONFIG.market_filter.allow_a_grade_even_if_weak and (candidates["grade"] == "A").any(): return True
+    if candidates.empty:
+        return False
+    if market_regime.get("is_bullish", True):
+        return True
+    if (
+        CONFIG.market_filter.allow_a_grade_even_if_weak
+        and (candidates["grade"] == "A").any()
+    ):
+        return True
     return False
+
 
 def build_push_message(df_rank: pd.DataFrame, market_regime: dict) -> str:
     candidates = select_push_candidates(df_rank)
@@ -415,30 +598,69 @@ def build_push_message(df_rank: pd.DataFrame, market_regime: dict) -> str:
         lines.append("今天沒有符合條件的 20D 交易版強訊號。")
         return "\n".join(lines)
     for _, r in candidates.iterrows():
-        lines.extend([
-            f"{r['grade']}級 | #{int(r['rank'])} {r['name']} {r['ticker']} [{r['group']}]",
-            f"setup {r['setup_score']} / risk {r['risk_score']} / {r['signals']}",
-            f"5D {r['ret5_pct']}% | 10D {r['ret10_pct']}% | 20D {r['ret20_pct']}% | VolRatio {r['volume_ratio20']}",
-            f"排名變化 {int(r['rank_change']):+d} | setup變化 {int(r['setup_change']):+d}",
-            f"regime: {r['regime']}",
-            "",
-        ])
+        lines.extend(
+            [
+                f"{r['grade']}級 | #{int(r['rank'])} {r['name']} {r['ticker']} [{r['group']}]",
+                f"setup {r['setup_score']} / risk {r['risk_score']} / {r['signals']}",
+                f"5D {r['ret5_pct']}% | 10D {r['ret10_pct']}% | 20D {r['ret20_pct']}% | VolRatio {r['volume_ratio20']}",
+                f"排名變化 {int(r['rank_change']):+d} | setup變化 {int(r['setup_change']):+d}",
+                f"regime: {r['regime']}",
+                "",
+            ]
+        )
     return "\n".join(lines).strip()
+
 
 def dataframe_to_html(df: pd.DataFrame) -> str:
     return df.to_html(index=False, border=0, justify="center")
 
-def summarize_events(events_df: pd.DataFrame, horizons: List[int]) -> pd.DataFrame:
+
+def summarize_events(
+    events_df: pd.DataFrame, horizons: List[int]
+) -> pd.DataFrame:
     rows = []
     for horizon in horizons:
         col = f"ret_{horizon}d"
         s = events_df[col].dropna()
         if s.empty:
             continue
-        rows.append({"horizon": horizon, "trades": int(s.shape[0]), "win_rate_pct": round((s.gt(0).mean())*100, 2), "avg_return_pct": round(s.mean(), 2), "median_return_pct": round(s.median(), 2)})
+        rows.append(
+            {
+                "horizon": horizon,
+                "trades": int(s.shape[0]),
+                "win_rate_pct": round((s.gt(0).mean()) * 100, 2),
+                "avg_return_pct": round(s.mean(), 2),
+                "median_return_pct": round(s.median(), 2),
+            }
+        )
     return pd.DataFrame(rows)
 
-def run_backtest_dual() -> tuple[Optional[pd.DataFrame], Optional[pd.DataFrame]]:
+
+def run_watchlist() -> pd.DataFrame:
+    rows: List[dict] = []
+    prev_rank = load_previous_rank()
+
+    for item in WATCHLIST:
+        ticker, name, group = item["ticker"], item["name"], item["group"]
+        try:
+            df = yf_download_one(ticker, CONFIG.yf_period)
+            df = add_indicators(df)
+            row = detect_row(df, ticker, name, group)
+            rows.append(row)
+            append_stock_log(row)
+            logger.info("OK: %s %s", ticker, name)
+        except Exception as exc:
+            logger.exception("FAILED: %s %s -> %s", ticker, name, exc)
+
+    if not rows:
+        raise RuntimeError("No stock data available from watchlist.")
+
+    return save_daily_rank(rows, prev_rank)
+
+
+def run_backtest_dual() -> (
+    tuple[Optional[pd.DataFrame], Optional[pd.DataFrame]]
+):
     if not CONFIG.backtest.enabled:
         return None, None
     steady_events, attack_events = [], []
@@ -452,55 +674,141 @@ def run_backtest_dual() -> tuple[Optional[pd.DataFrame], Optional[pd.DataFrame]]
                 cut = df.iloc[: i + 1].copy()
                 row = detect_row(cut, ticker, name, group)
                 entry = float(df.iloc[i]["Close"])
-                event = {"ticker": ticker, "date": cut.index[-1].strftime("%Y-%m-%d"), "group": group, "setup_score": row["setup_score"], "risk_score": row["risk_score"], "signals": row["signals"], "ret5_pct": row["ret5_pct"], "ret20_pct": row["ret20_pct"], "volume_ratio20": row["volume_ratio20"]}
+                event = {
+                    "ticker": ticker,
+                    "date": cut.index[-1].strftime("%Y-%m-%d"),
+                    "group": group,
+                    "setup_score": row["setup_score"],
+                    "risk_score": row["risk_score"],
+                    "signals": row["signals"],
+                    "ret5_pct": row["ret5_pct"],
+                    "ret20_pct": row["ret20_pct"],
+                    "volume_ratio20": row["volume_ratio20"],
+                }
                 for horizon in CONFIG.backtest.lookahead_days:
                     future = float(df.iloc[i + horizon]["Close"])
-                    event[f"ret_{horizon}d"] = round((future / entry - 1.0) * 100, 2)
+                    event[f"ret_{horizon}d"] = round(
+                        (future / entry - 1.0) * 100, 2
+                    )
                 if row["setup_score"] >= 5 and row["risk_score"] <= 4:
                     steady_events.append(event.copy())
-                if row["ret5_pct"] > 8 or row["volume_ratio20"] > 1.5 or "ACCEL" in row["signals"]:
+                if (
+                    row["ret5_pct"] > 8
+                    or row["volume_ratio20"] > 1.5
+                    or "ACCEL" in row["signals"]
+                ):
                     attack_events.append(event.copy())
         except Exception as exc:
             logger.exception("BACKTEST FAILED: %s %s -> %s", ticker, name, exc)
     steady_df = pd.DataFrame(steady_events) if steady_events else None
     attack_df = pd.DataFrame(attack_events) if attack_events else None
-    steady_summary = summarize_events(steady_df, CONFIG.backtest.lookahead_days) if steady_df is not None else None
-    attack_summary = summarize_events(attack_df, CONFIG.backtest.lookahead_days) if attack_df is not None else None
-    if steady_df is not None: steady_df.to_csv(OUTDIR / "backtest_events_steady.csv", index=False, encoding="utf-8-sig")
-    if attack_df is not None: attack_df.to_csv(OUTDIR / "backtest_events_attack.csv", index=False, encoding="utf-8-sig")
-    if steady_summary is not None: steady_summary.to_csv(OUTDIR / "backtest_summary_steady.csv", index=False, encoding="utf-8-sig")
-    if attack_summary is not None: attack_summary.to_csv(OUTDIR / "backtest_summary_attack.csv", index=False, encoding="utf-8-sig")
+    steady_summary = (
+        summarize_events(steady_df, CONFIG.backtest.lookahead_days)
+        if steady_df is not None
+        else None
+    )
+    attack_summary = (
+        summarize_events(attack_df, CONFIG.backtest.lookahead_days)
+        if attack_df is not None
+        else None
+    )
+    if steady_df is not None:
+        steady_df.to_csv(
+            OUTDIR / "backtest_events_steady.csv",
+            index=False,
+            encoding="utf-8-sig",
+        )
+    if attack_df is not None:
+        attack_df.to_csv(
+            OUTDIR / "backtest_events_attack.csv",
+            index=False,
+            encoding="utf-8-sig",
+        )
+    if steady_summary is not None:
+        steady_summary.to_csv(
+            OUTDIR / "backtest_summary_steady.csv",
+            index=False,
+            encoding="utf-8-sig",
+        )
+    if attack_summary is not None:
+        attack_summary.to_csv(
+            OUTDIR / "backtest_summary_attack.csv",
+            index=False,
+            encoding="utf-8-sig",
+        )
     return steady_summary, attack_summary
 
-def build_daily_report_markdown(df_rank: pd.DataFrame, market_regime: dict, bt_steady: Optional[pd.DataFrame], bt_attack: Optional[pd.DataFrame]) -> str:
+
+def build_daily_report_markdown(
+    df_rank: pd.DataFrame,
+    market_regime: dict,
+    bt_steady: Optional[pd.DataFrame],
+    bt_attack: Optional[pd.DataFrame],
+) -> str:
     today = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    lines = ["# Daily 20D v2.1 Trading Report", f"- Generated: {today}", f"- Market Regime: {market_regime['comment']}", "", "## Top Ranking", "", "| Rank | Grade | Name | Ticker | Group | Setup | Risk | Signals | RankΔ | SetupΔ | 5D% | 10D% | 20D% | VolRatio | Regime |", "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
+    lines = [
+        "# Daily 20D v2.1 Trading Report",
+        f"- Generated: {today}",
+        f"- Market Regime: {market_regime['comment']}",
+        "",
+        "## Top Ranking",
+        "",
+        "| Rank | Grade | Name | Ticker | Group | Setup | Risk | Signals | RankΔ | SetupΔ | 5D% | 10D% | 20D% | VolRatio | Regime |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+    ]
     for _, r in df_rank.iterrows():
-        lines.append(f"| {int(r['rank'])} | {r['grade']} | {r['name']} | {r['ticker']} | {r['group']} | {int(r['setup_score'])} | {int(r['risk_score'])} | {r['signals']} | {int(r['rank_change']):+d} | {int(r['setup_change']):+d} | {r['ret5_pct']} | {r['ret10_pct']} | {r['ret20_pct']} | {r['volume_ratio20']} | {r['regime']} |")
+        lines.append(
+            f"| {int(r['rank'])} | {r['grade']} | {r['name']} | {r['ticker']} | {r['group']} | {int(r['setup_score'])} | {int(r['risk_score'])} | {r['signals']} | {int(r['rank_change']):+d} | {int(r['setup_change']):+d} | {r['ret5_pct']} | {r['ret10_pct']} | {r['ret20_pct']} | {r['volume_ratio20']} | {r['regime']} |"
+        )
     lines.extend(["", "## Notification Candidates", ""])
     candidates = select_push_candidates(df_rank)
     if candidates.empty:
         lines.append("- None")
     else:
         for _, r in candidates.iterrows():
-            lines.append(f"- {r['grade']} | #{int(r['rank'])} {r['name']} {r['ticker']} [{r['group']}] | setup {r['setup_score']} risk {r['risk_score']} | 5D {r['ret5_pct']}% 10D {r['ret10_pct']}% 20D {r['ret20_pct']}% | {r['signals']} | rankΔ {int(r['rank_change']):+d} setupΔ {int(r['setup_change']):+d}")
-    for title, bt in [("Steady Backtest", bt_steady), ("Attack Backtest", bt_attack)]:
+            lines.append(
+                f"- {r['grade']} | #{int(r['rank'])} {r['name']} {r['ticker']} [{r['group']}] | setup {r['setup_score']} risk {r['risk_score']} | 5D {r['ret5_pct']}% 10D {r['ret10_pct']}% 20D {r['ret20_pct']}% | {r['signals']} | rankΔ {int(r['rank_change']):+d} setupΔ {int(r['setup_change']):+d}"
+            )
+    for title, bt in [
+        ("Steady Backtest", bt_steady),
+        ("Attack Backtest", bt_attack),
+    ]:
         lines.extend(["", f"## {title}", ""])
         if bt is None or bt.empty:
             lines.append("- None")
         else:
-            lines.append("| Horizon | Trades | Win Rate | Avg Return | Median Return |")
+            lines.append(
+                "| Horizon | Trades | Win Rate | Avg Return | Median Return |"
+            )
             lines.append("| --- | --- | --- | --- | --- |")
             for _, r in bt.iterrows():
-                lines.append(f"| {int(r['horizon'])}D | {int(r['trades'])} | {r['win_rate_pct']}% | {r['avg_return_pct']}% | {r['median_return_pct']}% |")
+                lines.append(
+                    f"| {int(r['horizon'])}D | {int(r['trades'])} | {r['win_rate_pct']}% | {r['avg_return_pct']}% | {r['median_return_pct']}% |"
+                )
     return "\n".join(lines)
 
-def build_daily_report_html(df_rank: pd.DataFrame, market_regime: dict, bt_steady: Optional[pd.DataFrame], bt_attack: Optional[pd.DataFrame]) -> str:
-    steady_html = "<p>None</p>" if bt_steady is None or bt_steady.empty else dataframe_to_html(bt_steady)
-    attack_html = "<p>None</p>" if bt_attack is None or bt_attack.empty else dataframe_to_html(bt_attack)
+
+def build_daily_report_html(
+    df_rank: pd.DataFrame,
+    market_regime: dict,
+    bt_steady: Optional[pd.DataFrame],
+    bt_attack: Optional[pd.DataFrame],
+) -> str:
+    steady_html = (
+        "<p>None</p>"
+        if bt_steady is None or bt_steady.empty
+        else dataframe_to_html(bt_steady)
+    )
+    attack_html = (
+        "<p>None</p>"
+        if bt_attack is None or bt_attack.empty
+        else dataframe_to_html(bt_attack)
+    )
     candidates = select_push_candidates(df_rank)
-    candidate_html = "<p>None</p>" if candidates.empty else dataframe_to_html(candidates)
-    return f'''<!doctype html>
+    candidate_html = (
+        "<p>None</p>" if candidates.empty else dataframe_to_html(candidates)
+    )
+    return f"""<!doctype html>
 <html><head><meta charset="utf-8"><title>Daily 20D v2.1 Trading Report</title>
 <style>body {{ font-family: Arial, sans-serif; margin: 24px; }} table {{ border-collapse: collapse; width: 100%; margin-bottom: 24px; }} th, td {{ border: 1px solid #ddd; padding: 8px; font-size: 14px; }} th {{ background: #f4f4f4; }}</style>
 </head><body>
@@ -510,14 +818,30 @@ def build_daily_report_html(df_rank: pd.DataFrame, market_regime: dict, bt_stead
 <h2>Notification Candidates</h2>{candidate_html}
 <h2>Steady Backtest</h2>{steady_html}
 <h2>Attack Backtest</h2>{attack_html}
-</body></html>'''
+</body></html>"""
 
-def save_reports(df_rank: pd.DataFrame, market_regime: dict, bt_steady: Optional[pd.DataFrame], bt_attack: Optional[pd.DataFrame]) -> None:
-    REPORT_MD.write_text(build_daily_report_markdown(df_rank, market_regime, bt_steady, bt_attack), encoding="utf-8")
-    REPORT_HTML.write_text(build_daily_report_html(df_rank, market_regime, bt_steady, bt_attack), encoding="utf-8")
+
+def save_reports(
+    df_rank: pd.DataFrame,
+    market_regime: dict,
+    bt_steady: Optional[pd.DataFrame],
+    bt_attack: Optional[pd.DataFrame],
+) -> None:
+    REPORT_MD.write_text(
+        build_daily_report_markdown(
+            df_rank, market_regime, bt_steady, bt_attack
+        ),
+        encoding="utf-8",
+    )
+    REPORT_HTML.write_text(
+        build_daily_report_html(df_rank, market_regime, bt_steady, bt_attack),
+        encoding="utf-8",
+    )
+
 
 def split_message(text: str, limit: int) -> List[str]:
-    if len(text) <= limit: return [text]
+    if len(text) <= limit:
+        return [text]
     chunks, current = [], []
     for line in text.splitlines():
         candidate = "\n".join(current + [line]).strip()
@@ -526,8 +850,10 @@ def split_message(text: str, limit: int) -> List[str]:
             current = [line]
         else:
             current.append(line)
-    if current: chunks.append("\n".join(current).strip())
+    if current:
+        chunks.append("\n".join(current).strip())
     return chunks
+
 
 def send_telegram_message(message: str) -> None:
     if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_IDS:
@@ -537,11 +863,23 @@ def send_telegram_message(message: str) -> None:
     for part in split_message(message, CONFIG.max_message_length):
         for chat_id in TELEGRAM_CHAT_IDS:
             try:
-                resp = HTTP.post(url, json={"chat_id": chat_id, "text": part}, timeout=HTTP_TIMEOUT)
+                resp = HTTP.post(
+                    url,
+                    json={"chat_id": chat_id, "text": part},
+                    timeout=HTTP_TIMEOUT,
+                )
                 if not resp.ok:
-                    logger.error("Telegram send failed. chat_id=%s status=%s body=%s", chat_id, resp.status_code, resp.text[:500])
+                    logger.error(
+                        "Telegram send failed. chat_id=%s status=%s body=%s",
+                        chat_id,
+                        resp.status_code,
+                        resp.text[:500],
+                    )
             except Exception as exc:
-                logger.exception("Telegram send exception for chat_id=%s: %s", chat_id, exc)
+                logger.exception(
+                    "Telegram send exception for chat_id=%s: %s", chat_id, exc
+                )
+
 
 def main() -> int:
     try:
@@ -565,6 +903,7 @@ def main() -> int:
         logger.exception(err_msg)
         send_telegram_message(err_msg)
         return 1
+
 
 if __name__ == "__main__":
     sys.exit(main())
