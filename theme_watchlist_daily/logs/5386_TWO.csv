@@ -1,2 +1,2 @@
 ﻿date,ticker,name,close,ret5_pct,ret20_pct,volume,avg_vol20,ma20,ma60,ma120,drawdown120_pct,bias20_pct,setup_score,risk_score,signals,score_band,regime,group,grade,ret1_pct,ret3_pct,ret10_pct,volume_ratio20,ma5,ma10,drawdown20_pct,drawdown60_pct,bias5_pct
-2026-04-10,5386.TWO,青雲,339.0,18.12,6.27,233973,591779,327.15,201.38,,,,9,6,NONE,短線強勢區,反彈修復中,theme,X,6.1,11.7,5.61,0.4,314.3,295.7,-23.13,-23.13,7.86
+2026-04-10,5386.TWO,青雲,339.0,18.12,6.27,233973,591779,327.15,201.38,137.21,-23.13,3.62,5,2,PULLBACK,可能啟動前,高檔回落整理,theme,X,6.1,,5.61,0.4,,,,,
