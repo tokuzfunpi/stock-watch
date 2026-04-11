@@ -1,0 +1,2 @@
+﻿date,ticker,name,group,close,ret5_pct,ret20_pct,volume,avg_vol20,ma20,ma60,ma120,drawdown120_pct,bias20_pct,setup_score,risk_score,signals,score_band,regime,grade
+2026-04-10,2317.TW,鴻海,core,200.5,1.78,-8.45,55780853,55642473,201.6,217.72,224.98,-23.47,-0.55,0,0,PULLBACK,一般觀察,高檔回落整理,X

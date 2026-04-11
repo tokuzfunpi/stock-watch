@@ -1,0 +1,2 @@
+﻿date,ticker,name,group,close,ret5_pct,ret20_pct,volume,avg_vol20,ma20,ma60,ma120,drawdown120_pct,bias20_pct,setup_score,risk_score,signals,score_band,regime,grade
+2026-04-10,0050.TW,元大台灣50,etf,80.75,7.02,3.26,115520077,117819512,76.01,74.36,68.11,-0.49,6.24,5,1,NONE,可能啟動前,一般觀察,B

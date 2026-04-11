@@ -1,0 +1,2 @@
+﻿date,ticker,name,group,close,ret5_pct,ret20_pct,volume,avg_vol20,ma20,ma60,ma120,drawdown120_pct,bias20_pct,setup_score,risk_score,signals,score_band,regime,grade
+2026-04-10,2330.TW,台積電,core,2000.0,7.82,3.43,28637625,32413031,1856.84,1819.03,1636.21,-0.42,7.71,5,1,NONE,可能啟動前,一般觀察,B
