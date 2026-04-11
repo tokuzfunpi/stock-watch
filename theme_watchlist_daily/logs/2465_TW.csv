@@ -1,2 +1,2 @@
 ﻿date,ticker,name,close,ret5_pct,ret20_pct,volume,avg_vol20,ma20,ma60,ma120,drawdown120_pct,bias20_pct,setup_score,risk_score,signals,score_band,regime,group,grade,ret1_pct,ret3_pct,ret10_pct,volume_ratio20,ma5,ma10,drawdown20_pct,drawdown60_pct,bias5_pct
-2026-04-10,2465.TW,麗臺,59.8,14.34,8.73,1511609,903825,56.84,55.52,58.62,-22.41,5.22,6,0,PULLBACK,可能啟動前,高檔回落整理,theme,B,1.53,,7.55,1.67,,,,,
+2026-04-10,2465.TW,麗臺,59.8,14.34,8.73,1511609,903825,56.84,55.52,58.62,-22.41,5.22,10,0,"TREND,ACCEL,PULLBACK",高關注啟動區,轉強加速,theme,,1.53,,7.55,1.67,,,,,
