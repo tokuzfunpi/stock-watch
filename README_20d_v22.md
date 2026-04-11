@@ -19,3 +19,8 @@
 
 
 補充：daily_report.md 現在會包含 Signals 對照表與 Regime 解釋，方便直接看報表判讀。
+
+新增：
+- daily_report.md 內含 Grade 對照表
+- Telegram 推播前面會先給你一段盤面總結
+- theme_watchlist_daily/alert_tracking.csv 會追蹤提醒後 1D / 5D / 20D 表現

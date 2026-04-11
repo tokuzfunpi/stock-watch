@@ -18,9 +18,7 @@ from urllib3.util.retry import Retry
 
 BASE_DIR = Path(__file__).resolve().parent
 CONFIG_PATH = Path(os.getenv("CONFIG_PATH", BASE_DIR / "config_20d_v22.json"))
-WATCHLIST_CSV = Path(
-    os.getenv("WATCHLIST_CSV", BASE_DIR / "watchlist_20d_v22.csv")
-)
+WATCHLIST_CSV = Path(os.getenv("WATCHLIST_CSV", BASE_DIR / "watchlist_20d_v22.csv"))
 OUTDIR = Path(os.getenv("OUTDIR", BASE_DIR / "theme_watchlist_daily"))
 OUTDIR.mkdir(parents=True, exist_ok=True)
 
@@ -29,15 +27,12 @@ STATE_FILE = OUTDIR / "last_rank_state.txt"
 PREV_RANK_CSV = OUTDIR / "prev_daily_rank.csv"
 REPORT_MD = OUTDIR / "daily_report.md"
 REPORT_HTML = OUTDIR / "daily_report.html"
+ALERT_TRACK_CSV = OUTDIR / "alert_tracking.csv"
 LOG_DIR = OUTDIR / "logs"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "").strip()
-TELEGRAM_CHAT_IDS = [
-    int(x.strip())
-    for x in os.getenv("TELEGRAM_CHAT_IDS", "").split(",")
-    if x.strip()
-]
+TELEGRAM_CHAT_IDS = [int(x.strip()) for x in os.getenv("TELEGRAM_CHAT_IDS", "").split(",") if x.strip()]
 HTTP_TIMEOUT = int(os.getenv("HTTP_TIMEOUT", "20"))
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 
@@ -117,10 +112,7 @@ logger = logging.getLogger("theme_watchlist_20d_v22")
 
 def build_session() -> requests.Session:
     retry = Retry(
-        total=3,
-        connect=3,
-        read=3,
-        backoff_factor=1.0,
+        total=3, connect=3, read=3, backoff_factor=1.0,
         status_forcelist=(429, 500, 502, 503, 504),
         allowed_methods=frozenset(["GET", "POST"]),
         raise_on_status=False,
@@ -159,12 +151,8 @@ WATCHLIST = load_watchlist(WATCHLIST_CSV)
 
 def yf_download_one(ticker: str, period: str) -> pd.DataFrame:
     df = yf.download(
-        ticker,
-        period=period,
-        interval="1d",
-        auto_adjust=True,
-        progress=False,
-        threads=False,
+        ticker, period=period, interval="1d",
+        auto_adjust=True, progress=False, threads=False,
     )
     if df.empty:
         raise ValueError(f"No data returned for {ticker}")
@@ -234,9 +222,7 @@ def detect_row(df: pd.DataFrame, ticker: str, name: str, group: str) -> dict:
     close_ = float(x["Close"])
     volume = float(x["Volume"])
     avg_vol20 = float(x["AvgVol20"]) if pd.notna(x["AvgVol20"]) else 0.0
-    vol_ratio20 = (
-        float(x["VolumeRatio20"]) if pd.notna(x["VolumeRatio20"]) else 0.0
-    )
+    vol_ratio20 = float(x["VolumeRatio20"]) if pd.notna(x["VolumeRatio20"]) else 0.0
 
     ma20 = float(x["MA20"]) if pd.notna(x["MA20"]) else None
     ma60 = float(x["MA60"]) if pd.notna(x["MA60"]) else None
@@ -248,13 +234,9 @@ def detect_row(df: pd.DataFrame, ticker: str, name: str, group: str) -> dict:
     ret10 = float(x["Ret10D"]) if pd.notna(x["Ret10D"]) else 0.0
     ret20 = float(x["Ret20D"]) if pd.notna(x["Ret20D"]) else 0.0
 
-    drawdown120 = (
-        float(x["Drawdown120D"]) if pd.notna(x["Drawdown120D"]) else 0.0
-    )
+    drawdown120 = float(x["Drawdown120D"]) if pd.notna(x["Drawdown120D"]) else 0.0
     range20 = float(x["Range20"]) if pd.notna(x["Range20"]) else 999.0
-    dist_low250 = (
-        float(x["DistToLow250"]) if pd.notna(x["DistToLow250"]) else 999.0
-    )
+    dist_low250 = float(x["DistToLow250"]) if pd.notna(x["DistToLow250"]) else 999.0
 
     base_signal = bool(
         low250 is not None
@@ -264,22 +246,16 @@ def detect_row(df: pd.DataFrame, ticker: str, name: str, group: str) -> dict:
         and range20 < 0.15
     )
     rebreak_signal = bool(
-        ma20 is not None
-        and ma60 is not None
-        and avg_vol20 > 0
-        and close_ > ma20
-        and close_ > ma60
+        ma20 is not None and ma60 is not None and avg_vol20 > 0
+        and close_ > ma20 and close_ > ma60
         and vol_ratio20 > 1.35
         and pd.notna(prev.get("MA20"))
         and float(prev["Close"]) <= float(prev["MA20"])
     )
     surge_signal = bool(ret20 > 0.22 and vol_ratio20 > 1.55)
     trend_signal = bool(
-        ma20 is not None
-        and ma60 is not None
-        and close_ > ma20
-        and ma20 > ma60
-        and ret20 > 0.08
+        ma20 is not None and ma60 is not None
+        and close_ > ma20 and ma20 > ma60 and ret20 > 0.08
     )
     accel_signal = bool(
         (ret5 > 0.08 and vol_ratio20 > 1.3 and ret20 > 0)
@@ -424,16 +400,7 @@ def grade_signal(row: dict) -> str:
     vol_ratio20 = row["volume_ratio20"]
     ret20 = row["ret20_pct"]
 
-    if (
-        setup >= 7
-        and risk <= 4
-        and (
-            ("ACCEL" in signals)
-            or ("REBREAK" in signals)
-            or ("SURGE" in signals)
-        )
-        and ret20 > 0
-    ):
+    if setup >= 7 and risk <= 4 and (("ACCEL" in signals) or ("REBREAK" in signals) or ("SURGE" in signals)) and ret20 > 0:
         return "A"
     if setup >= 5 and risk <= 4 and (ret5 >= 5 or vol_ratio20 >= 1.3):
         return "B"
@@ -464,9 +431,7 @@ def load_previous_rank() -> Optional[pd.DataFrame]:
         return None
 
 
-def enrich_rank_changes(
-    df_rank: pd.DataFrame, prev_rank: Optional[pd.DataFrame]
-) -> pd.DataFrame:
+def enrich_rank_changes(df_rank: pd.DataFrame, prev_rank: Optional[pd.DataFrame]) -> pd.DataFrame:
     df = df_rank.copy()
     df["rank_change"] = 0
     df["setup_change"] = 0
@@ -485,12 +450,8 @@ def enrich_rank_changes(
         if ticker in prev.index:
             old = prev.loc[ticker]
             old_rank = int(old["rank"]) if pd.notna(old["rank"]) else 0
-            old_setup = (
-                int(old["setup_score"]) if pd.notna(old["setup_score"]) else 0
-            )
-            old_risk = (
-                int(old["risk_score"]) if pd.notna(old["risk_score"]) else 0
-            )
+            old_setup = int(old["setup_score"]) if pd.notna(old["setup_score"]) else 0
+            old_risk = int(old["risk_score"]) if pd.notna(old["risk_score"]) else 0
             df.at[i, "rank_change"] = old_rank - int(row["rank"])
             df.at[i, "setup_change"] = int(row["setup_score"]) - old_setup
             df.at[i, "risk_change"] = int(row["risk_score"]) - old_risk
@@ -503,20 +464,12 @@ def enrich_rank_changes(
     return df
 
 
-def save_daily_rank(
-    rows: List[dict], prev_rank: Optional[pd.DataFrame]
-) -> pd.DataFrame:
+def save_daily_rank(rows: List[dict], prev_rank: Optional[pd.DataFrame]) -> pd.DataFrame:
     df = pd.DataFrame(rows)
     df["grade"] = df.apply(lambda r: grade_signal(r.to_dict()), axis=1)
     # v2.2 排名更偏動能
     df = df.sort_values(
-        by=[
-            "setup_score",
-            "ret5_pct",
-            "volume_ratio20",
-            "ret20_pct",
-            "risk_score",
-        ],
+        by=["setup_score", "ret5_pct", "volume_ratio20", "ret20_pct", "risk_score"],
         ascending=[False, False, False, False, True],
     ).reset_index(drop=True)
     df.insert(0, "rank", range(1, len(df) + 1))
@@ -548,9 +501,7 @@ def get_market_regime() -> dict:
     close_ = float(x["Close"])
     ma = float(x[f"MA{CONFIG.market_filter.ma_period}"])
     ret20 = float(x["Ret20D"]) if pd.notna(x["Ret20D"]) else 0.0
-    vol_ratio = (
-        float(x["VolumeRatio20"]) if pd.notna(x["VolumeRatio20"]) else 1.0
-    )
+    vol_ratio = float(x["VolumeRatio20"]) if pd.notna(x["VolumeRatio20"]) else 1.0
 
     is_bullish = (
         close_ >= ma
@@ -590,10 +541,7 @@ def select_push_candidates(df_rank: pd.DataFrame) -> pd.DataFrame:
         & (df["risk_score"] <= rule.max_risk_score)
         & (
             (df["ret20_pct"] >= rule.min_ret20_pct)
-            & (
-                (df["ret5_pct"] >= rule.min_ret5_pct)
-                | (df["volume_ratio20"] >= rule.min_volume_ratio)
-            )
+            & ((df["ret5_pct"] >= rule.min_ret5_pct) | (df["volume_ratio20"] >= rule.min_volume_ratio))
         )
     )
 
@@ -609,11 +557,7 @@ def select_push_candidates(df_rank: pd.DataFrame) -> pd.DataFrame:
     cond_c = attack_filter
     cond_d = (df["setup_change"] > 0) | (df["rank_change"] > 0)
 
-    return (
-        df[base_mask & (cond_a | cond_b | cond_c | cond_d)]
-        .head(rule.top_n)
-        .copy()
-    )
+    return df[base_mask & (cond_a | cond_b | cond_c | cond_d)].head(rule.top_n).copy()
 
 
 def build_state(df_rank: pd.DataFrame, market_regime: dict) -> str:
@@ -624,12 +568,7 @@ def build_state(df_rank: pd.DataFrame, market_regime: dict) -> str:
     return f"market={market_regime.get('is_bullish', True)}||{base_state}"
 
 
-def should_alert(
-    df_rank: pd.DataFrame,
-    current_state: str,
-    last_state: str,
-    market_regime: dict,
-) -> bool:
+def should_alert(df_rank: pd.DataFrame, current_state: str, last_state: str, market_regime: dict) -> bool:
     if CONFIG.always_notify:
         return True
     if current_state == last_state:
@@ -639,36 +578,46 @@ def should_alert(
         return False
     if market_regime.get("is_bullish", True):
         return True
-    if (
-        CONFIG.market_filter.allow_a_grade_even_if_weak
-        and (candidates["grade"] == "A").any()
-    ):
+    if CONFIG.market_filter.allow_a_grade_even_if_weak and (candidates["grade"] == "A").any():
         return True
     return False
 
 
 def build_push_message(df_rank: pd.DataFrame, market_regime: dict) -> str:
     candidates = select_push_candidates(df_rank)
-    lines = ["📣 今天幫你挑到幾檔比較像樣的", market_regime["comment"], ""]
+    total_a = int((df_rank["grade"] == "A").sum()) if not df_rank.empty else 0
+    total_b = int((df_rank["grade"] == "B").sum()) if not df_rank.empty else 0
+    total_up = int((df_rank["status_change"] == "UP").sum()) if "status_change" in df_rank.columns else 0
+
+    lines = [
+        "📣 今天的盤面小結",
+        market_regime["comment"],
+        f"今天我看到 A 級 {total_a} 檔、B 級 {total_b} 檔，轉強中的有 {total_up} 檔。",
+        "",
+    ]
+
     if candidates.empty:
-        lines.append("今天先不用急，名單裡還沒有我覺得夠漂亮的進攻點。")
+        lines.append("今天先不用急，我暫時沒有看到夠乾淨、夠值得追的進攻點。")
         return "\n".join(lines)
+
+    if len(candidates) == 1:
+        lines.append("今天比較像是單點機會，重點盯這一檔就好。")
+    else:
+        lines.append(f"今天我挑了 {len(candidates)} 檔比較像樣的，先盯強的，不用全部都追。")
+    lines.append("")
 
     for _, r in candidates.iterrows():
         tone = "這檔可以多看一眼" if r["grade"] == "A" else "這檔有在動了"
-        lines.extend(
-            [
-                f"{tone}：{r['name']} {r['ticker']} [{r['group']}]",
-                f"現在排名第 {int(r['rank'])}，setup {r['setup_score']}、risk {r['risk_score']}。",
-                f"最近 5 天 {r['ret5_pct']}%，10 天 {r['ret10_pct']}%，20 天 {r['ret20_pct']}%，量比 {r['volume_ratio20']}。",
-                f"目前看起來是「{r['regime']}」，訊號有 {r['signals']}。",
-                f"跟上次比，排名 {int(r['rank_change']):+d}、setup {int(r['setup_change']):+d}。",
-                "",
-            ]
-        )
-    lines.append(
-        "整體來看，這幾檔比較像是有題材、有量，值得追蹤，但還是別一次全上。"
-    )
+        action = "偏進攻觀察" if r["grade"] == "A" else "先放口袋名單"
+        lines.extend([
+            f"{tone}：{r['name']} {r['ticker']} [{r['group']}]",
+            f"現在排名第 {int(r['rank'])}，setup {r['setup_score']}、risk {r['risk_score']}。",
+            f"最近 5 天 {r['ret5_pct']}%，10 天 {r['ret10_pct']}%，20 天 {r['ret20_pct']}%，量比 {r['volume_ratio20']}。",
+            f"目前看起來是「{r['regime']}」，訊號有 {r['signals']}。",
+            f"跟上次比，排名 {int(r['rank_change']):+d}、setup {int(r['setup_change']):+d}。我的感覺是：{action}。",
+            "",
+        ])
+    lines.append("整體來看，這幾檔比較像是有題材、有量，值得追蹤，但還是別一次全上。")
     return "\n".join(lines).strip()
 
 
@@ -676,25 +625,92 @@ def dataframe_to_html(df: pd.DataFrame) -> str:
     return df.to_html(index=False, border=0, justify="center")
 
 
-def summarize_events(
-    events_df: pd.DataFrame, horizons: List[int]
-) -> pd.DataFrame:
+def summarize_events(events_df: pd.DataFrame, horizons: List[int]) -> pd.DataFrame:
     rows = []
     for horizon in horizons:
         col = f"ret_{horizon}d"
         s = events_df[col].dropna()
         if s.empty:
             continue
-        rows.append(
-            {
-                "horizon": horizon,
-                "trades": int(s.shape[0]),
-                "win_rate_pct": round((s.gt(0).mean()) * 100, 2),
-                "avg_return_pct": round(s.mean(), 2),
-                "median_return_pct": round(s.median(), 2),
-            }
-        )
+        rows.append({
+            "horizon": horizon,
+            "trades": int(s.shape[0]),
+            "win_rate_pct": round((s.gt(0).mean()) * 100, 2),
+            "avg_return_pct": round(s.mean(), 2),
+            "median_return_pct": round(s.median(), 2),
+        })
     return pd.DataFrame(rows)
+
+
+
+def upsert_alert_tracking(df_rank: pd.DataFrame, candidates: pd.DataFrame) -> None:
+    today = pd.Timestamp.today().strftime("%Y-%m-%d")
+    cols = [
+        "alert_date", "ticker", "name", "group", "grade", "rank", "setup_score", "risk_score",
+        "signals", "regime", "alert_close", "ret1_future_pct", "ret5_future_pct", "ret20_future_pct",
+        "status"
+    ]
+
+    if ALERT_TRACK_CSV.exists():
+        try:
+            hist = pd.read_csv(ALERT_TRACK_CSV)
+        except Exception:
+            hist = pd.DataFrame(columns=cols)
+    else:
+        hist = pd.DataFrame(columns=cols)
+
+    if candidates is not None and not candidates.empty:
+        for _, r in candidates.iterrows():
+            mask = (hist.get("alert_date", pd.Series(dtype=str)).astype(str) == today) & (hist.get("ticker", pd.Series(dtype=str)).astype(str) == str(r["ticker"]))
+            row = {
+                "alert_date": today,
+                "ticker": r["ticker"],
+                "name": r["name"],
+                "group": r["group"],
+                "grade": r["grade"],
+                "rank": int(r["rank"]),
+                "setup_score": int(r["setup_score"]),
+                "risk_score": int(r["risk_score"]),
+                "signals": r["signals"],
+                "regime": r["regime"],
+                "alert_close": float(r["close"]),
+                "ret1_future_pct": None,
+                "ret5_future_pct": None,
+                "ret20_future_pct": None,
+                "status": "OPEN",
+            }
+            if mask.any():
+                hist.loc[mask, list(row.keys())] = list(row.values())
+            else:
+                hist = pd.concat([hist, pd.DataFrame([row])], ignore_index=True)
+
+    if not hist.empty:
+        for i, row in hist.iterrows():
+            if row.get("status") == "CLOSED":
+                continue
+            try:
+                df = yf_download_one(str(row["ticker"]), CONFIG.yf_period)
+            except Exception:
+                continue
+            if df.empty:
+                continue
+            closes = df["Close"].reset_index(drop=True)
+            # find alert date row by matching date index string
+            idx_matches = [j for j, dt in enumerate(df.index.strftime("%Y-%m-%d")) if dt == str(row["alert_date"])]
+            if not idx_matches:
+                continue
+            idx = idx_matches[-1]
+            entry = float(closes.iloc[idx])
+
+            if pd.isna(row.get("ret1_future_pct")) and idx + 1 < len(closes):
+                hist.at[i, "ret1_future_pct"] = round((float(closes.iloc[idx + 1]) / entry - 1.0) * 100, 2)
+            if pd.isna(row.get("ret5_future_pct")) and idx + 5 < len(closes):
+                hist.at[i, "ret5_future_pct"] = round((float(closes.iloc[idx + 5]) / entry - 1.0) * 100, 2)
+            if pd.isna(row.get("ret20_future_pct")) and idx + 20 < len(closes):
+                hist.at[i, "ret20_future_pct"] = round((float(closes.iloc[idx + 20]) / entry - 1.0) * 100, 2)
+                hist.at[i, "status"] = "CLOSED"
+
+    hist.to_csv(ALERT_TRACK_CSV, index=False, encoding="utf-8-sig")
 
 
 def run_watchlist() -> pd.DataFrame:
@@ -716,9 +732,7 @@ def run_watchlist() -> pd.DataFrame:
     return save_daily_rank(rows, prev_rank)
 
 
-def run_backtest_dual() -> (
-    tuple[Optional[pd.DataFrame], Optional[pd.DataFrame]]
-):
+def run_backtest_dual() -> tuple[Optional[pd.DataFrame], Optional[pd.DataFrame]]:
     if not CONFIG.backtest.enabled:
         return None, None
 
@@ -749,9 +763,7 @@ def run_backtest_dual() -> (
                 }
                 for horizon in CONFIG.backtest.lookahead_days:
                     future = float(df.iloc[i + horizon]["Close"])
-                    event[f"ret_{horizon}d"] = round(
-                        (future / entry - 1.0) * 100, 2
-                    )
+                    event[f"ret_{horizon}d"] = round((future / entry - 1.0) * 100, 2)
 
                 if row["setup_score"] >= 5 and row["risk_score"] <= 4:
                     steady_events.append(event.copy())
@@ -769,51 +781,22 @@ def run_backtest_dual() -> (
     steady_df = pd.DataFrame(steady_events) if steady_events else None
     attack_df = pd.DataFrame(attack_events) if attack_events else None
 
-    steady_summary = (
-        summarize_events(steady_df, CONFIG.backtest.lookahead_days)
-        if steady_df is not None
-        else None
-    )
-    attack_summary = (
-        summarize_events(attack_df, CONFIG.backtest.lookahead_days)
-        if attack_df is not None
-        else None
-    )
+    steady_summary = summarize_events(steady_df, CONFIG.backtest.lookahead_days) if steady_df is not None else None
+    attack_summary = summarize_events(attack_df, CONFIG.backtest.lookahead_days) if attack_df is not None else None
 
     if steady_df is not None:
-        steady_df.to_csv(
-            OUTDIR / "backtest_events_steady.csv",
-            index=False,
-            encoding="utf-8-sig",
-        )
+        steady_df.to_csv(OUTDIR / "backtest_events_steady.csv", index=False, encoding="utf-8-sig")
     if attack_df is not None:
-        attack_df.to_csv(
-            OUTDIR / "backtest_events_attack.csv",
-            index=False,
-            encoding="utf-8-sig",
-        )
+        attack_df.to_csv(OUTDIR / "backtest_events_attack.csv", index=False, encoding="utf-8-sig")
     if steady_summary is not None:
-        steady_summary.to_csv(
-            OUTDIR / "backtest_summary_steady.csv",
-            index=False,
-            encoding="utf-8-sig",
-        )
+        steady_summary.to_csv(OUTDIR / "backtest_summary_steady.csv", index=False, encoding="utf-8-sig")
     if attack_summary is not None:
-        attack_summary.to_csv(
-            OUTDIR / "backtest_summary_attack.csv",
-            index=False,
-            encoding="utf-8-sig",
-        )
+        attack_summary.to_csv(OUTDIR / "backtest_summary_attack.csv", index=False, encoding="utf-8-sig")
 
     return steady_summary, attack_summary
 
 
-def build_daily_report_markdown(
-    df_rank: pd.DataFrame,
-    market_regime: dict,
-    bt_steady: Optional[pd.DataFrame],
-    bt_attack: Optional[pd.DataFrame],
-) -> str:
+def build_daily_report_markdown(df_rank: pd.DataFrame, market_regime: dict, bt_steady: Optional[pd.DataFrame], bt_attack: Optional[pd.DataFrame]) -> str:
     today = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     lines = [
         "# Daily 20D v2.2 Attack Report",
@@ -846,42 +829,42 @@ def build_daily_report_markdown(
                 f"{r['signals']} | rankΔ {int(r['rank_change']):+d} setupΔ {int(r['setup_change']):+d}"
             )
 
-    lines.extend(
-        [
-            "",
-            "## Signals 對照表",
-            "",
-            "- `BASE`：低檔整理後，股價還沒真正噴出，但看起來有在慢慢打底。",
-            "- `REBREAK`：前面壓著的均線重新站上去，而且量也開始放大，常見在第二波重新轉強。",
-            "- `SURGE`：這段時間漲幅已經很明顯，量也大，代表市場資金真的有在追。",
-            "- `TREND`：不是突然暴衝，而是沿著趨勢穩穩往上走，比較像中段延續。",
-            "- `ACCEL`：最近 5 天或 10 天速度變快，通常是剛開始被市場注意到的加速段。",
-            "- `PULLBACK`：前面漲過一段後，現在在拉回整理，不一定壞，但短線不是最舒服的位置。",
-            "",
-            "## Regime 解釋",
-            "",
-            "- `有點過熱，別硬追`：漲太快、乖離太大，容易追在短線高點。",
-            "- `題材正在發酵`：市場開始聚焦這檔，量價有一起上來，屬於比較有熱度的階段。",
-            "- `重新站上來了`：整理過後再次轉強，這種型態常常是比較漂亮的重新發動。",
-            "- `轉強速度有出來`：還不一定是最強主升段，但動能有在加速，值得盯。",
-            "- `中段延續中`：這檔不是剛起漲，而是已經走在趨勢裡，偏中波段續強。",
-            "- `低檔慢慢墊高`：還在打底或剛離開底部，適合先放觀察名單，不一定要急著追。",
-            "- `高檔拉回整理`：先前強過，但現在進入整理區，重點是看能不能整理完再上。",
-            "- `還在觀察`：目前沒有特別明確的訊號，先不用太急。",
-        ]
-    )
+    lines.extend([
+        "",
+        "## Grade 對照表",
+        "",
+        "- `A`：這檔現在最值得看，通常代表結構、量能、動能都有對上。",
+        "- `B`：有在轉強，但還沒有強到非看不可，適合放進追蹤名單。",
+        "- `C`：不是不能漲，而是現在風險偏高，容易追在不舒服的位置。",
+        "- `X`：目前沒有足夠清楚的優勢，先觀察就好。",
+        "",
+        "## Signals 對照表",
+        "",
+        "- `BASE`：低檔整理後，股價還沒真正噴出，但看起來有在慢慢打底。",
+        "- `REBREAK`：前面壓著的均線重新站上去，而且量也開始放大，常見在第二波重新轉強。",
+        "- `SURGE`：這段時間漲幅已經很明顯，量也大，代表市場資金真的有在追。",
+        "- `TREND`：不是突然暴衝，而是沿著趨勢穩穩往上走，比較像中段延續。",
+        "- `ACCEL`：最近 5 天或 10 天速度變快，通常是剛開始被市場注意到的加速段。",
+        "- `PULLBACK`：前面漲過一段後，現在在拉回整理，不一定壞，但短線不是最舒服的位置。",
+        "",
+        "## Regime 解釋",
+        "",
+        "- `有點過熱，別硬追`：漲太快、乖離太大，容易追在短線高點。",
+        "- `題材正在發酵`：市場開始聚焦這檔，量價有一起上來，屬於比較有熱度的階段。",
+        "- `重新站上來了`：整理過後再次轉強，這種型態常常是比較漂亮的重新發動。",
+        "- `轉強速度有出來`：還不一定是最強主升段，但動能有在加速，值得盯。",
+        "- `中段延續中`：這檔不是剛起漲，而是已經走在趨勢裡，偏中波段續強。",
+        "- `低檔慢慢墊高`：還在打底或剛離開底部，適合先放觀察名單，不一定要急著追。",
+        "- `高檔拉回整理`：先前強過，但現在進入整理區，重點是看能不能整理完再上。",
+        "- `還在觀察`：目前沒有特別明確的訊號，先不用太急。",
+    ])
 
-    for title, bt in [
-        ("Steady Backtest", bt_steady),
-        ("Attack Backtest", bt_attack),
-    ]:
+    for title, bt in [("Steady Backtest", bt_steady), ("Attack Backtest", bt_attack)]:
         lines.extend(["", f"## {title}", ""])
         if bt is None or bt.empty:
             lines.append("- None")
         else:
-            lines.append(
-                "| Horizon | Trades | Win Rate | Avg Return | Median Return |"
-            )
+            lines.append("| Horizon | Trades | Win Rate | Avg Return | Median Return |")
             lines.append("| --- | --- | --- | --- | --- |")
             for _, r in bt.iterrows():
                 lines.append(
@@ -889,29 +872,30 @@ def build_daily_report_markdown(
                     f"{r['avg_return_pct']}% | {r['median_return_pct']}% |"
                 )
 
+    if ALERT_TRACK_CSV.exists():
+        try:
+            alert_df = pd.read_csv(ALERT_TRACK_CSV)
+            if not alert_df.empty:
+                recent = alert_df.tail(10)
+                lines.extend(["", "## Recent Alert Tracking", ""])
+                lines.append("| Alert Date | Ticker | Name | Grade | 1D% | 5D% | 20D% | Status |")
+                lines.append("| --- | --- | --- | --- | --- | --- | --- | --- |")
+                for _, r in recent.iterrows():
+                    lines.append(
+                        f"| {r.get('alert_date','')} | {r.get('ticker','')} | {r.get('name','')} | {r.get('grade','')} | "
+                        f"{r.get('ret1_future_pct','')} | {r.get('ret5_future_pct','')} | {r.get('ret20_future_pct','')} | {r.get('status','')} |"
+                    )
+        except Exception:
+            pass
+
     return "\n".join(lines)
 
 
-def build_daily_report_html(
-    df_rank: pd.DataFrame,
-    market_regime: dict,
-    bt_steady: Optional[pd.DataFrame],
-    bt_attack: Optional[pd.DataFrame],
-) -> str:
-    steady_html = (
-        "<p>None</p>"
-        if bt_steady is None or bt_steady.empty
-        else dataframe_to_html(bt_steady)
-    )
-    attack_html = (
-        "<p>None</p>"
-        if bt_attack is None or bt_attack.empty
-        else dataframe_to_html(bt_attack)
-    )
+def build_daily_report_html(df_rank: pd.DataFrame, market_regime: dict, bt_steady: Optional[pd.DataFrame], bt_attack: Optional[pd.DataFrame]) -> str:
+    steady_html = "<p>None</p>" if bt_steady is None or bt_steady.empty else dataframe_to_html(bt_steady)
+    attack_html = "<p>None</p>" if bt_attack is None or bt_attack.empty else dataframe_to_html(bt_attack)
     candidates = select_push_candidates(df_rank)
-    candidate_html = (
-        "<p>None</p>" if candidates.empty else dataframe_to_html(candidates)
-    )
+    candidate_html = "<p>None</p>" if candidates.empty else dataframe_to_html(candidates)
     return f"""<!doctype html>
 <html><head><meta charset="utf-8"><title>Daily 20D v2.2 Attack Report</title>
 <style>
@@ -929,22 +913,9 @@ th {{ background: #f4f4f4; }}
 </body></html>"""
 
 
-def save_reports(
-    df_rank: pd.DataFrame,
-    market_regime: dict,
-    bt_steady: Optional[pd.DataFrame],
-    bt_attack: Optional[pd.DataFrame],
-) -> None:
-    REPORT_MD.write_text(
-        build_daily_report_markdown(
-            df_rank, market_regime, bt_steady, bt_attack
-        ),
-        encoding="utf-8",
-    )
-    REPORT_HTML.write_text(
-        build_daily_report_html(df_rank, market_regime, bt_steady, bt_attack),
-        encoding="utf-8",
-    )
+def save_reports(df_rank: pd.DataFrame, market_regime: dict, bt_steady: Optional[pd.DataFrame], bt_attack: Optional[pd.DataFrame]) -> None:
+    REPORT_MD.write_text(build_daily_report_markdown(df_rank, market_regime, bt_steady, bt_attack), encoding="utf-8")
+    REPORT_HTML.write_text(build_daily_report_html(df_rank, market_regime, bt_steady, bt_attack), encoding="utf-8")
 
 
 def split_message(text: str, limit: int) -> List[str]:
@@ -971,22 +942,11 @@ def send_telegram_message(message: str) -> None:
     for part in split_message(message, CONFIG.max_message_length):
         for chat_id in TELEGRAM_CHAT_IDS:
             try:
-                resp = HTTP.post(
-                    url,
-                    json={"chat_id": chat_id, "text": part},
-                    timeout=HTTP_TIMEOUT,
-                )
+                resp = HTTP.post(url, json={"chat_id": chat_id, "text": part}, timeout=HTTP_TIMEOUT)
                 if not resp.ok:
-                    logger.error(
-                        "Telegram send failed. chat_id=%s status=%s body=%s",
-                        chat_id,
-                        resp.status_code,
-                        resp.text[:500],
-                    )
+                    logger.error("Telegram send failed. chat_id=%s status=%s body=%s", chat_id, resp.status_code, resp.text[:500])
             except Exception as exc:
-                logger.exception(
-                    "Telegram send exception for chat_id=%s: %s", chat_id, exc
-                )
+                logger.exception("Telegram send exception for chat_id=%s: %s", chat_id, exc)
 
 
 def main() -> int:
@@ -998,6 +958,8 @@ def main() -> int:
         logger.info("=== 今日排行榜 ===\n%s", df_rank.to_string(index=False))
         logger.info("Market regime: %s", market_regime["comment"])
 
+        candidates = select_push_candidates(df_rank)
+        upsert_alert_tracking(df_rank, candidates)
         save_reports(df_rank, market_regime, bt_steady, bt_attack)
 
         current_state = build_state(df_rank, market_regime)
