@@ -9,7 +9,7 @@ ticker,name,group,enabled
 3019.TW,亞光,theme,true
 2388.TW,威盛,theme,true
 8111.TWO,立碁,theme,true
-3450.TWO,聯鈞,theme,true
+3450.TW,聯鈞,theme,true
 3324.TWO,雙鴻,theme,true
 3017.TW,奇鋐,theme,true
 6669.TW,緯穎,theme,true
@@ -32,6 +32,6 @@ ticker,name,group,enabled
 3014.TW,聯陽,satellite,true
 3661.TW,世芯-KY,satellite,true
 3443.TW,創意,satellite,true
-5274.TW,信驊,satellite,true
 6147.TWO,頎邦,satellite,true
 3035.TW,智原,satellite,true
+5274.TWO,信驊,satellite,true
