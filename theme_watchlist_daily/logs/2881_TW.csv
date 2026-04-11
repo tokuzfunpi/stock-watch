@@ -1,0 +1,2 @@
+﻿date,ticker,name,group,close,ret1_pct,ret5_pct,ret10_pct,ret20_pct,volume,avg_vol20,volume_ratio20,ma20,ma60,ma120,drawdown120_pct,bias20_pct,setup_score,risk_score,signals,score_band,regime
+2026-04-10,2881.TW,富邦金,core,87.6,-1.02,-0.23,-1.35,-1.79,20351718,18099919,1.12,88.12,91.46,92.13,-10.79,-0.59,3,0,NONE,一般觀察,還在觀察

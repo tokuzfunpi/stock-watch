@@ -1,0 +1,2 @@
+﻿date,ticker,name,group,close,ret1_pct,ret5_pct,ret10_pct,ret20_pct,volume,avg_vol20,volume_ratio20,ma20,ma60,ma120,drawdown120_pct,bias20_pct,setup_score,risk_score,signals,score_band,regime
+2026-04-10,2308.TW,台達電,core,1735.0,5.47,17.63,11.94,23.93,10973678,11335767,0.97,1484.0,1298.5,1133.35,0.0,16.91,8,3,TREND,進攻優勢區,中段延續中

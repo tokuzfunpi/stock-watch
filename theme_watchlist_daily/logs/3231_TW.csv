@@ -1,0 +1,2 @@
+﻿date,ticker,name,group,close,ret1_pct,ret5_pct,ret10_pct,ret20_pct,volume,avg_vol20,volume_ratio20,ma20,ma60,ma120,drawdown120_pct,bias20_pct,setup_score,risk_score,signals,score_band,regime
+2026-04-10,3231.TW,緯創,theme,135.0,1.89,6.3,5.47,1.5,41318353,32499764,1.27,129.1,133.85,138.87,-14.83,4.57,10,0,NONE,進攻優勢區,還在觀察
