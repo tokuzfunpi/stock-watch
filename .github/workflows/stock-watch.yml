@@ -2,8 +2,11 @@ name: stock-watch
 
 on:
   schedule:
-    - cron: "10 5 * * 1-5"   # 週一到週五 13:10 UTC = 台灣 21:10
+    - cron: "10 6 * * 1-5"   # 台灣時間 14:10，週一到週五
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   run-watchlist:
@@ -13,6 +16,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -29,8 +34,16 @@ jobs:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_IDS: ${{ secrets.TELEGRAM_CHAT_IDS }}
           LOG_LEVEL: INFO
-          ALWAYS_NOTIFY: "true"
-          ENABLE_STATE: "false"
+          ALWAYS_NOTIFY: "false"
+          ENABLE_STATE: "true"
           YF_PERIOD: "3y"
         run: |
-          python daily_theme_watchlist_production.py
+          python daily_theme_watchlist_production_v2.py
+
+      - name: Commit updated state and logs
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add watchlist.csv theme_watchlist_daily/
+          git diff --cached --quiet || git commit -m "Update watchlist state [skip ci]"
+          git push
