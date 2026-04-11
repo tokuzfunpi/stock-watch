@@ -1,2 +1,2 @@
 ﻿date,ticker,name,close,ret5_pct,ret20_pct,volume,avg_vol20,ma20,ma60,ma120,drawdown120_pct,bias20_pct,setup_score,risk_score,signals,score_band,regime,group,grade,ret1_pct,ret3_pct,ret10_pct,volume_ratio20,ma5,ma10,drawdown20_pct,drawdown60_pct,bias5_pct
-2026-04-10,3057.TW,喬鼎,17.35,10.16,11.94,257228,295326,16.23,17.32,16.18,-27.41,6.88,5,0,PULLBACK,可能啟動前,高檔回落整理,theme,B,9.81,,4.83,0.87,,,,,
+2026-04-10,3057.TW,喬鼎,17.35,10.16,11.94,257228,295326,16.23,17.32,16.18,-27.41,6.88,7,0,PULLBACK,高關注啟動區,高檔回落整理,theme,,9.81,,4.83,0.87,,,,,
