@@ -1,0 +1,4 @@
+﻿alert_date,ticker,name,group,grade,rank,setup_score,risk_score,signals,regime,alert_close,ret1_future_pct,ret5_future_pct,ret20_future_pct,status
+2026-04-11,3450.TW,聯鈞,theme,A,1,14,4,"TREND,ACCEL",轉強速度有出來,306.5,,,,OPEN
+2026-04-11,2465.TW,麗臺,theme,A,2,13,0,"TREND,ACCEL,PULLBACK",轉強速度有出來,59.8,,,,OPEN
+2026-04-11,2382.TW,廣達,theme,A,3,13,3,"TREND,ACCEL",轉強速度有出來,321.5,,,,OPEN
