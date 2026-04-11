@@ -2,7 +2,7 @@ name: stock-watch
 
 on:
   schedule:
-    - cron: "10 6 * * 1-5"   # 台灣時間 14:10，週一到週五
+    - cron: "10 6 * * 1-5"
   workflow_dispatch:
 
 permissions:
@@ -29,20 +29,20 @@ jobs:
           python -m pip install --upgrade pip
           pip install pandas requests yfinance
 
-      - name: Run 20D refined watchlist
+      - name: Run 20D v2.1 watchlist
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_IDS: ${{ secrets.TELEGRAM_CHAT_IDS }}
           LOG_LEVEL: INFO
-          CONFIG_PATH: config_20d_refined.json
-          WATCHLIST_CSV: watchlist_20d_refined.csv
+          CONFIG_PATH: config_20d_v21.json
+          WATCHLIST_CSV: watchlist_20d_v21.csv
         run: |
-          python daily_theme_watchlist_20d_refined.py
+          python daily_theme_watchlist_20d_v21.py
 
       - name: Commit updated artifacts
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add config_20d_refined.json watchlist_20d_refined.csv theme_watchlist_daily/
-          git diff --cached --quiet || git commit -m "Update 20D refined stock watch artifacts [skip ci]"
+          git add config_20d_v21.json watchlist_20d_v21.csv theme_watchlist_daily/
+          git diff --cached --quiet || git commit -m "Update 20D v2.1 stock watch artifacts [skip ci]"
           git push
