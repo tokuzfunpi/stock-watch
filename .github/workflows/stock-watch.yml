@@ -1,0 +1,36 @@
+name: stock-watch
+
+on:
+  schedule:
+    - cron: "10 5 * * 1-5"   # 週一到週五 13:10 UTC = 台灣 21:10
+  workflow_dispatch:
+
+jobs:
+  run-watchlist:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas requests yfinance
+
+      - name: Run watchlist
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_IDS: ${{ secrets.TELEGRAM_CHAT_IDS }}
+          LOG_LEVEL: INFO
+          ALWAYS_NOTIFY: "true"
+          ENABLE_STATE: "false"
+          YF_PERIOD: "3y"
+        run: |
+          python daily_theme_watchlist_production.py
