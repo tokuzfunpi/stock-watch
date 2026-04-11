@@ -11,7 +11,7 @@ permissions:
 jobs:
   run-watchlist:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
 
     steps:
       - name: Checkout
@@ -34,16 +34,15 @@ jobs:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_IDS: ${{ secrets.TELEGRAM_CHAT_IDS }}
           LOG_LEVEL: INFO
-          ALWAYS_NOTIFY: "false"
-          ENABLE_STATE: "true"
-          YF_PERIOD: "3y"
+          CONFIG_PATH: config.json
+          WATCHLIST_CSV: watchlist.csv
         run: |
-          python daily_theme_watchlist_production_v2.py
+          python daily_theme_watchlist_pro_max.py
 
-      - name: Commit updated state and logs
+      - name: Commit updated artifacts
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add watchlist.csv theme_watchlist_daily/
-          git diff --cached --quiet || git commit -m "Update watchlist state [skip ci]"
+          git add watchlist.csv config.json theme_watchlist_daily/
+          git diff --cached --quiet || git commit -m "Update stock watch artifacts [skip ci]"
           git push
