@@ -1,7 +1,7 @@
 {
   "yf_period": "3y",
   "state_enabled": true,
-  "always_notify": false,
+  "always_notify": true,
   "max_message_length": 3500,
   "watchlist_default_group": "theme",
   "market_filter": {

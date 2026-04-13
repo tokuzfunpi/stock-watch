@@ -1,21 +1,24 @@
 from __future__ import annotations
 
-from pathlib import Path
-import json
-import os
-
-import pandas as pd
-
-from daily_theme_watchlist_pro_max import (
-    CONFIG_PATH,
-    OUTDIR,
-    run_backtest_snapshot,
-)
+from daily_theme_watchlist_20d_v22 import OUTDIR, run_backtest_dual
 
 if __name__ == "__main__":
-    result = run_backtest_snapshot()
-    if result is None or result.empty:
+    steady_result, attack_result = run_backtest_dual()
+    if (steady_result is None or steady_result.empty) and (attack_result is None or attack_result.empty):
         print("No backtest results.")
     else:
-        print(result.to_string(index=False))
-        print(f"Saved to: {OUTDIR / 'backtest_summary.csv'}")
+        if steady_result is not None and not steady_result.empty:
+            print("Steady backtest summary:")
+            print(steady_result.to_string(index=False))
+            print(f"Saved to: {OUTDIR / 'backtest_summary_steady.csv'}")
+        else:
+            print("Steady backtest summary: none")
+
+        print()
+
+        if attack_result is not None and not attack_result.empty:
+            print("Attack backtest summary:")
+            print(attack_result.to_string(index=False))
+            print(f"Saved to: {OUTDIR / 'backtest_summary_attack.csv'}")
+        else:
+            print("Attack backtest summary: none")

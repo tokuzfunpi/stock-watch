@@ -554,7 +554,7 @@ def select_push_candidates(df_rank: pd.DataFrame) -> pd.DataFrame:
 
     cond_a = df["grade"] == "A"
     cond_b = (df["setup_score"] >= 5) & (df["rank"] <= 3)
-    cond_c = attack_filter
+    cond_c = attack_filter | df["signals"].fillna("").str.contains("ACCEL")
     cond_d = (df["setup_change"] > 0) | (df["rank_change"] > 0)
 
     return df[base_mask & (cond_a | cond_b | cond_c | cond_d)].head(rule.top_n).copy()
@@ -644,7 +644,6 @@ def summarize_events(events_df: pd.DataFrame, horizons: List[int]) -> pd.DataFra
 
 
 def upsert_alert_tracking(df_rank: pd.DataFrame, candidates: pd.DataFrame) -> None:
-    today = pd.Timestamp.today().strftime("%Y-%m-%d")
     cols = [
         "alert_date", "ticker", "name", "group", "grade", "rank", "setup_score", "risk_score",
         "signals", "regime", "alert_close", "ret1_future_pct", "ret5_future_pct", "ret20_future_pct",
@@ -661,9 +660,10 @@ def upsert_alert_tracking(df_rank: pd.DataFrame, candidates: pd.DataFrame) -> No
 
     if candidates is not None and not candidates.empty:
         for _, r in candidates.iterrows():
-            mask = (hist.get("alert_date", pd.Series(dtype=str)).astype(str) == today) & (hist.get("ticker", pd.Series(dtype=str)).astype(str) == str(r["ticker"]))
+            alert_date = str(r["date"])
+            mask = (hist.get("alert_date", pd.Series(dtype=str)).astype(str) == alert_date) & (hist.get("ticker", pd.Series(dtype=str)).astype(str) == str(r["ticker"]))
             row = {
-                "alert_date": today,
+                "alert_date": alert_date,
                 "ticker": r["ticker"],
                 "name": r["name"],
                 "group": r["group"],
