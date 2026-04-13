@@ -1,2 +1,3 @@
 ﻿date,ticker,name,group,close,ret1_pct,ret3_pct,ret5_pct,ret10_pct,ret20_pct,volume,avg_vol20,volume_ratio20,ma5,ma10,ma20,ma60,drawdown20_pct,drawdown60_pct,bias5_pct,setup_score,risk_score,signals,score_band,regime,grade,ma120,drawdown120_pct,bias20_pct
 2026-04-10,2454.TW,聯發科,core,1575.0,0.0,,7.51,-2.78,-10.76,5381936,7189472,0.75,,,1611.25,1654.27,,,,2,0,NONE,一般觀察,還在觀察,,1481.45,-19.02,-2.25
+2026-04-13,2454.TW,聯發科,core,1630.0,3.49,,11.26,2.52,-8.68,6148877,7179174,0.86,,,1603.5,1656.5,,,,4,0,NONE,開始轉強,還在觀察,,1484.2,-16.2,1.65

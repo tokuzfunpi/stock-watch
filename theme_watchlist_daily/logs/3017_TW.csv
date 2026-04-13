@@ -1,2 +1,3 @@
 ﻿date,ticker,name,group,close,ret1_pct,ret5_pct,ret10_pct,ret20_pct,volume,avg_vol20,volume_ratio20,ma20,ma60,ma120,drawdown120_pct,bias20_pct,setup_score,risk_score,signals,score_band,regime
 2026-04-10,3017.TW,奇鋐,theme,2265.0,1.34,7.35,7.86,21.77,3063334,5178300,0.59,2048.25,1702.58,1531.46,-0.44,10.58,11,2,TREND,進攻優勢區,中段延續中
+2026-04-13,3017.TW,奇鋐,theme,2200.0,-2.87,6.28,-3.3,17.33,1895501,4950323,0.38,2064.5,1715.08,1540.21,-3.3,6.56,11,1,TREND,進攻優勢區,中段延續中

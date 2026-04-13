@@ -1,2 +1,3 @@
 ﻿date,ticker,name,group,close,ret1_pct,ret5_pct,ret10_pct,ret20_pct,volume,avg_vol20,volume_ratio20,ma20,ma60,ma120,drawdown120_pct,bias20_pct,setup_score,risk_score,signals,score_band,regime
 2026-04-10,3450.TW,聯鈞,theme,306.5,5.87,23.84,10.25,12.48,31518474,16954480,1.86,271.52,265.94,261.49,-8.23,12.88,14,4,"TREND,ACCEL",進攻優勢區,轉強速度有出來
+2026-04-13,3450.TW,聯鈞,theme,313.5,2.28,30.08,12.37,14.21,17045212,16488807,1.03,273.48,266.71,261.72,-6.14,14.64,11,3,TREND,進攻優勢區,中段延續中
