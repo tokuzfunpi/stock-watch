@@ -25,6 +25,11 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Print runtime clocks
+        run: |
+          echo "UTC now: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+          echo "Taipei now: $(TZ=Asia/Taipei date '+%Y-%m-%d %H:%M:%S %Z')"
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
