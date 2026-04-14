@@ -2,8 +2,8 @@ name: stock-watch
 
 on:
   schedule:
-    # GitHub Actions cron uses UTC. 08:30 Asia/Taipei on weekdays is 00:30 UTC on Mon-Fri.
-    - cron: "30 0 * * 1-5"
+    # GitHub Actions cron uses UTC. 08:37 Asia/Taipei on weekdays is 00:37 UTC on Mon-Fri.
+    - cron: "37 0 * * 1-5"
   workflow_dispatch:
 
 permissions:
