@@ -129,7 +129,7 @@ class SelectPushCandidatesTests(unittest.TestCase):
         self.assertEqual(len(out), 1)
         self.assertEqual(out.iloc[0]["ticker"], "MID1.TW")
 
-    def test_combined_candidates_deduplicate_midlong_when_short_selected(self) -> None:
+    def test_combined_candidates_allow_overlap_between_short_and_midlong(self) -> None:
         df = pd.DataFrame(
             [
                 {
@@ -156,8 +156,38 @@ class SelectPushCandidatesTests(unittest.TestCase):
 
         out = select_push_candidates(df)
 
+        self.assertEqual(len(out), 2)
+        self.assertEqual(list(out["ticker"]), ["BOTH1.TW", "BOTH1.TW"])
+
+    def test_midlong_candidates_allow_lower_volume_ratio_when_trend_is_valid(self) -> None:
+        df = pd.DataFrame(
+            [
+                {
+                    "rank": 2,
+                    "ticker": "LOWVOL.TW",
+                    "name": "Low Vol Trend",
+                    "group": "theme",
+                    "grade": "B",
+                    "setup_score": 7,
+                    "risk_score": 3,
+                    "ret5_pct": 4.0,
+                    "ret10_pct": 7.0,
+                    "ret20_pct": 12.0,
+                    "volume_ratio20": 0.35,
+                    "signals": "TREND",
+                    "rank_change": 1,
+                    "setup_change": 1,
+                    "regime": "中段延續中",
+                    "date": "2026-04-14",
+                    "close": 88.0,
+                }
+            ]
+        )
+
+        out = select_midlong_candidates(df)
+
         self.assertEqual(len(out), 1)
-        self.assertEqual(out.iloc[0]["ticker"], "BOTH1.TW")
+        self.assertEqual(out.iloc[0]["ticker"], "LOWVOL.TW")
 
 
 class PushMessageTests(unittest.TestCase):

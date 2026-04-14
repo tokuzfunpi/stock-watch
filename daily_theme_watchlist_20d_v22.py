@@ -579,14 +579,12 @@ def select_short_term_candidates(df_rank: pd.DataFrame) -> pd.DataFrame:
 def select_midlong_candidates(df_rank: pd.DataFrame, exclude_tickers: Optional[set[str]] = None) -> pd.DataFrame:
     rule = CONFIG.notify
     df = reorder_priority_groups(df_rank)
-    if exclude_tickers:
-        df = df[~df["ticker"].astype(str).isin(exclude_tickers)].copy()
 
     base_mask = (
         (df["setup_score"] >= max(rule.min_setup_score + 1, 5))
         & (df["risk_score"] <= rule.max_risk_score + 1)
         & (df["ret20_pct"] >= 0)
-        & (df["volume_ratio20"] >= 0.9)
+        & (df["volume_ratio20"] >= 0.3)
     )
 
     trend_signal = df["signals"].fillna("").str.contains("TREND|REBREAK|BASE")
@@ -605,19 +603,13 @@ def select_midlong_candidates(df_rank: pd.DataFrame, exclude_tickers: Optional[s
 
 def select_push_candidates(df_rank: pd.DataFrame) -> pd.DataFrame:
     short_candidates = select_short_term_candidates(df_rank)
-    midlong_candidates = select_midlong_candidates(
-        df_rank,
-        exclude_tickers=set(short_candidates["ticker"].astype(str)),
-    )
+    midlong_candidates = select_midlong_candidates(df_rank)
     return pd.concat([short_candidates, midlong_candidates], ignore_index=True)
 
 
 def build_candidate_sets(df_rank: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     short_candidates = select_short_term_candidates(df_rank)
-    midlong_candidates = select_midlong_candidates(
-        df_rank,
-        exclude_tickers=set(short_candidates["ticker"].astype(str)),
-    )
+    midlong_candidates = select_midlong_candidates(df_rank)
     return short_candidates, midlong_candidates
 
 
