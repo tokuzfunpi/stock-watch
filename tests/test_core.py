@@ -6,8 +6,11 @@ import pandas as pd
 
 from daily_theme_watchlist_20d_v22 import (
     add_indicators,
+    build_push_message,
     detect_row,
     grade_signal,
+    select_midlong_candidates,
+    select_short_term_candidates,
     select_push_candidates,
     split_message,
 )
@@ -66,7 +69,7 @@ class GradeSignalTests(unittest.TestCase):
 
 
 class SelectPushCandidatesTests(unittest.TestCase):
-    def test_accel_signal_is_included_in_candidates(self) -> None:
+    def test_accel_signal_is_included_in_short_term_candidates(self) -> None:
         df = pd.DataFrame(
             [
                 {
@@ -91,10 +94,124 @@ class SelectPushCandidatesTests(unittest.TestCase):
             ]
         )
 
-        out = select_push_candidates(df)
+        out = select_short_term_candidates(df)
 
         self.assertEqual(len(out), 1)
         self.assertEqual(out.iloc[0]["ticker"], "TEST1.TW")
+
+    def test_midlong_candidates_pick_trend_name(self) -> None:
+        df = pd.DataFrame(
+            [
+                {
+                    "rank": 2,
+                    "ticker": "MID1.TW",
+                    "name": "Trend Name",
+                    "group": "theme",
+                    "grade": "B",
+                    "setup_score": 7,
+                    "risk_score": 3,
+                    "ret5_pct": 3.0,
+                    "ret10_pct": 8.0,
+                    "ret20_pct": 14.0,
+                    "volume_ratio20": 1.1,
+                    "signals": "TREND",
+                    "rank_change": 1,
+                    "setup_change": 1,
+                    "regime": "中段延續中",
+                    "date": "2026-04-14",
+                    "close": 120.0,
+                }
+            ]
+        )
+
+        out = select_midlong_candidates(df)
+
+        self.assertEqual(len(out), 1)
+        self.assertEqual(out.iloc[0]["ticker"], "MID1.TW")
+
+    def test_combined_candidates_deduplicate_midlong_when_short_selected(self) -> None:
+        df = pd.DataFrame(
+            [
+                {
+                    "rank": 1,
+                    "ticker": "BOTH1.TW",
+                    "name": "Both Name",
+                    "group": "theme",
+                    "grade": "A",
+                    "setup_score": 8,
+                    "risk_score": 3,
+                    "ret5_pct": 9.0,
+                    "ret10_pct": 12.0,
+                    "ret20_pct": 15.0,
+                    "volume_ratio20": 1.5,
+                    "signals": "ACCEL,TREND",
+                    "rank_change": 1,
+                    "setup_change": 1,
+                    "regime": "轉強速度有出來",
+                    "date": "2026-04-14",
+                    "close": 100.0,
+                }
+            ]
+        )
+
+        out = select_push_candidates(df)
+
+        self.assertEqual(len(out), 1)
+        self.assertEqual(out.iloc[0]["ticker"], "BOTH1.TW")
+
+
+class PushMessageTests(unittest.TestCase):
+    def test_push_message_contains_short_and_midlong_sections(self) -> None:
+        df = pd.DataFrame(
+            [
+                {
+                    "rank": 1,
+                    "ticker": "SHORT1.TW",
+                    "name": "Short Name",
+                    "group": "theme",
+                    "grade": "A",
+                    "setup_score": 8,
+                    "risk_score": 3,
+                    "ret5_pct": 9.0,
+                    "ret10_pct": 12.0,
+                    "ret20_pct": 15.0,
+                    "volume_ratio20": 1.6,
+                    "signals": "ACCEL",
+                    "rank_change": 1,
+                    "setup_change": 1,
+                    "status_change": "UP",
+                    "regime": "轉強速度有出來",
+                    "date": "2026-04-14",
+                    "close": 100.0,
+                },
+                {
+                    "rank": 2,
+                    "ticker": "MID1.TW",
+                    "name": "Mid Name",
+                    "group": "theme",
+                    "grade": "B",
+                    "setup_score": 7,
+                    "risk_score": 3,
+                    "ret5_pct": 3.0,
+                    "ret10_pct": 8.0,
+                    "ret20_pct": 14.0,
+                    "volume_ratio20": 1.1,
+                    "signals": "TREND",
+                    "rank_change": 1,
+                    "setup_change": 1,
+                    "status_change": "UP",
+                    "regime": "中段延續中",
+                    "date": "2026-04-14",
+                    "close": 120.0,
+                },
+            ]
+        )
+
+        market_regime = {"comment": "加權指數目前偏多"}
+        message = build_push_message(df, market_regime)
+
+        self.assertIn("短線推薦", message)
+        self.assertIn("中長線推薦", message)
 
 
 class SplitMessageTests(unittest.TestCase):

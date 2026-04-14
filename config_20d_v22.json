@@ -14,7 +14,8 @@
     "allow_a_grade_even_if_weak": true
   },
   "notify": {
-    "top_n": 10,
+    "top_n_short": 5,
+    "top_n_midlong": 5,
     "min_setup_score": 4,
     "max_risk_score": 4,
     "min_ret20_pct": 3.0,
