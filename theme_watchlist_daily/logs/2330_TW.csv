@@ -1,3 +1,3 @@
 ﻿date,ticker,name,group,close,ret5_pct,ret20_pct,volume,avg_vol20,ma20,ma60,ma120,drawdown120_pct,bias20_pct,setup_score,risk_score,signals,score_band,regime,grade,ret1_pct,ret3_pct,ret10_pct,volume_ratio20,ma5,ma10,drawdown20_pct,drawdown60_pct,bias5_pct
 2026-04-10,2330.TW,台積電,core,2000.0,7.82,3.43,28637625,32413031,1856.84,1819.03,1636.21,-0.42,7.71,6,1,NONE,偏強可追蹤,還在觀察,,2.3,,8.4,0.88,,,,,
-2026-04-13,2330.TW,台積電,core,1990.0,9.94,5.91,14499839,31435993,1862.4,1824.46,1640.91,-0.92,6.85,7,1,NONE,偏強可追蹤,還在觀察,,-0.5,,8.15,0.46,,,,,
+2026-04-13,2330.TW,台積電,core,1990.0,9.94,5.91,28968757,32159439,1862.4,1824.46,1640.91,-0.92,6.85,7,1,NONE,偏強可追蹤,還在觀察,,-0.5,,8.15,0.9,,,,,
