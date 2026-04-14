@@ -1,0 +1,2 @@
+﻿date,ticker,name,group,layer,close,ret1_pct,ret5_pct,ret10_pct,ret20_pct,volume,avg_vol20,volume_ratio20,ma20,ma60,ma120,drawdown120_pct,bias20_pct,setup_score,risk_score,signals,score_band,regime
+2026-04-14,2886.TW,兆豐金,core,midlong_core,39.4,0.25,0.0,0.77,1.68,3765839,22717424,0.17,39.11,39.58,40.1,-6.41,0.74,6,0,BASE,偏強可追蹤,低檔慢慢墊高

@@ -1,4 +1,4 @@
-﻿date,ticker,name,group,close,ret1_pct,ret5_pct,ret10_pct,ret20_pct,volume,avg_vol20,volume_ratio20,ma20,ma60,ma120,drawdown120_pct,bias20_pct,setup_score,risk_score,signals,score_band,regime
-2026-04-10,6669.TW,緯穎,theme,3630.0,1.4,6.14,-3.46,-13.37,1199187,1527029,0.79,3659.25,3839.58,4028.71,-23.09,-0.8,6,0,PULLBACK,偏強可追蹤,高檔拉回整理
-2026-04-13,6669.TW,緯穎,theme,3645.0,0.41,6.89,5.19,-10.77,1279296,1513403,0.85,3637.25,3824.67,4029.83,-22.78,0.21,7,0,PULLBACK,偏強可追蹤,高檔拉回整理
-2026-04-14,6669.TW,緯穎,theme,3770.0,3.43,11.05,11.05,-7.37,811722,1497794,0.54,3622.25,3810.58,4032.62,-20.13,4.08,8,0,PULLBACK,進攻優勢區,高檔拉回整理
+﻿date,ticker,name,group,close,ret1_pct,ret5_pct,ret10_pct,ret20_pct,volume,avg_vol20,volume_ratio20,ma20,ma60,ma120,drawdown120_pct,bias20_pct,setup_score,risk_score,signals,score_band,regime,layer
+2026-04-10,6669.TW,緯穎,theme,3630.0,1.4,6.14,-3.46,-13.37,1199187,1527029,0.79,3659.25,3839.58,4028.71,-23.09,-0.8,6,0,PULLBACK,偏強可追蹤,高檔拉回整理,
+2026-04-13,6669.TW,緯穎,theme,3645.0,0.41,6.89,5.19,-10.77,1279296,1513403,0.85,3637.25,3824.67,4029.83,-22.78,0.21,7,0,PULLBACK,偏強可追蹤,高檔拉回整理,
+2026-04-14,6669.TW,緯穎,theme,3765.0,3.29,10.9,10.9,-7.49,878371,1501126,0.59,3622.0,3810.5,4032.58,-20.23,3.95,8,0,PULLBACK,進攻優勢區,高檔拉回整理,short_attack

@@ -1,4 +1,4 @@
-﻿date,ticker,name,close,ret5_pct,ret20_pct,volume,avg_vol20,ma20,ma60,ma120,drawdown120_pct,bias20_pct,setup_score,risk_score,signals,score_band,regime,group,grade,ret1_pct,ret3_pct,ret10_pct,volume_ratio20,ma5,ma10,drawdown20_pct,drawdown60_pct,bias5_pct
-2026-04-10,2495.TW,普安,36.85,7.75,22.43,10383559,11646889,34.71,33.02,29.73,-6.71,6.16,11,0,TREND,進攻優勢區,中段延續中,theme,,1.94,,0.55,0.89,,,,,
-2026-04-13,2495.TW,普安,39.4,23.13,29.61,14550197,12249732,35.16,33.16,29.87,-0.25,12.05,11,4,TREND,進攻優勢區,中段延續中,theme,,6.92,,13.54,1.19,,,,,
-2026-04-14,2495.TW,普安,40.3,25.55,21.75,7319543,11973098,35.52,33.33,30.02,0.0,13.45,12,4,TREND,進攻優勢區,中段延續中,theme,,2.28,,15.64,0.61,,,,,
+﻿date,ticker,name,close,ret5_pct,ret20_pct,volume,avg_vol20,ma20,ma60,ma120,drawdown120_pct,bias20_pct,setup_score,risk_score,signals,score_band,regime,group,grade,ret1_pct,ret3_pct,ret10_pct,volume_ratio20,ma5,ma10,drawdown20_pct,drawdown60_pct,bias5_pct,layer
+2026-04-10,2495.TW,普安,36.85,7.75,22.43,10383559,11646889,34.71,33.02,29.73,-6.71,6.16,11,0,TREND,進攻優勢區,中段延續中,theme,,1.94,,0.55,0.89,,,,,,
+2026-04-13,2495.TW,普安,39.4,23.13,29.61,14550197,12249732,35.16,33.16,29.87,-0.25,12.05,11,4,TREND,進攻優勢區,中段延續中,theme,,6.92,,13.54,1.19,,,,,,
+2026-04-14,2495.TW,普安,40.6,26.48,22.66,9005680,12057405,35.54,33.33,30.03,0.0,14.25,12,4,TREND,進攻優勢區,中段延續中,theme,,3.05,,16.5,0.75,,,,,,short_attack

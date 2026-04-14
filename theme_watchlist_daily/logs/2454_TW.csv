@@ -1,4 +1,4 @@
-﻿date,ticker,name,group,close,ret1_pct,ret3_pct,ret5_pct,ret10_pct,ret20_pct,volume,avg_vol20,volume_ratio20,ma5,ma10,ma20,ma60,drawdown20_pct,drawdown60_pct,bias5_pct,setup_score,risk_score,signals,score_band,regime,grade,ma120,drawdown120_pct,bias20_pct
-2026-04-10,2454.TW,聯發科,core,1575.0,0.0,,7.51,-2.78,-10.76,5381936,7189472,0.75,,,1611.25,1654.27,,,,2,0,NONE,一般觀察,還在觀察,,1481.45,-19.02,-2.25
-2026-04-13,2454.TW,聯發科,core,1620.0,2.86,,10.58,1.89,-9.24,8802674,7311863,1.2,,,1603.0,1656.33,,,,4,0,NONE,開始轉強,還在觀察,,1484.12,-16.71,1.06
-2026-04-14,2454.TW,聯發科,core,1685.0,4.01,,14.63,6.31,-2.03,3305857,7153775,0.46,,,1601.25,1659.67,,,,6,0,NONE,偏強可追蹤,還在觀察,,1487.25,-13.37,5.23
+﻿date,ticker,name,group,close,ret1_pct,ret3_pct,ret5_pct,ret10_pct,ret20_pct,volume,avg_vol20,volume_ratio20,ma5,ma10,ma20,ma60,drawdown20_pct,drawdown60_pct,bias5_pct,setup_score,risk_score,signals,score_band,regime,grade,ma120,drawdown120_pct,bias20_pct,layer
+2026-04-10,2454.TW,聯發科,core,1575.0,0.0,,7.51,-2.78,-10.76,5381936,7189472,0.75,,,1611.25,1654.27,,,,2,0,NONE,一般觀察,還在觀察,,1481.45,-19.02,-2.25,
+2026-04-13,2454.TW,聯發科,core,1620.0,2.86,,10.58,1.89,-9.24,8802674,7311863,1.2,,,1603.0,1656.33,,,,4,0,NONE,開始轉強,還在觀察,,1484.12,-16.71,1.06,
+2026-04-14,2454.TW,聯發科,core,1680.0,3.7,,14.29,5.99,-2.33,3462338,7161599,0.48,,,1601.0,1659.58,,,,6,0,NONE,偏強可追蹤,還在觀察,,1487.2,-13.62,4.93,midlong_core
