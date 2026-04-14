@@ -590,34 +590,29 @@ def build_push_message(df_rank: pd.DataFrame, market_regime: dict) -> str:
     total_up = int((df_rank["status_change"] == "UP").sum()) if "status_change" in df_rank.columns else 0
 
     lines = [
-        "📣 今天的盤面小結",
+        "📣 今日重點",
         market_regime["comment"],
-        f"今天我看到 A 級 {total_a} 檔、B 級 {total_b} 檔，轉強中的有 {total_up} 檔。",
-        "",
+        f"A級 {total_a} 檔，B級 {total_b} 檔，轉強 {total_up} 檔。",
     ]
 
     if candidates.empty:
-        lines.append("今天先不用急，我暫時沒有看到夠乾淨、夠值得追的進攻點。")
+        lines.append("今天沒有夠乾淨的進攻點，先等。")
         return "\n".join(lines)
 
-    if len(candidates) == 1:
-        lines.append("今天比較像是單點機會，重點盯這一檔就好。")
-    else:
-        lines.append(f"今天我挑了 {len(candidates)} 檔比較像樣的，先盯強的，不用全部都追。")
-    lines.append("")
-
     for _, r in candidates.iterrows():
-        tone = "這檔可以多看一眼" if r["grade"] == "A" else "這檔有在動了"
-        action = "偏進攻觀察" if r["grade"] == "A" else "先放口袋名單"
-        lines.extend([
-            f"{tone}：{r['name']} {r['ticker']} [{r['group']}]",
-            f"現在排名第 {int(r['rank'])}，setup {r['setup_score']}、risk {r['risk_score']}。",
-            f"最近 5 天 {r['ret5_pct']}%，10 天 {r['ret10_pct']}%，20 天 {r['ret20_pct']}%，量比 {r['volume_ratio20']}。",
-            f"目前看起來是「{r['regime']}」，訊號有 {r['signals']}。",
-            f"跟上次比，排名 {int(r['rank_change']):+d}、setup {int(r['setup_change']):+d}。我的感覺是：{action}。",
-            "",
-        ])
-    lines.append("整體來看，這幾檔比較像是有題材、有量，值得追蹤，但還是別一次全上。")
+        if r["grade"] == "A":
+            action = "可優先看"
+        elif r["setup_change"] > 0 or r["rank_change"] > 0:
+            action = "轉強中"
+        else:
+            action = "續追蹤"
+
+        lines.append(
+            f"{int(r['rank'])}. {r['name']} {r['ticker']} {action} | "
+            f"G{r['grade']} S{int(r['setup_score'])}/R{int(r['risk_score'])} | "
+            f"5D {r['ret5_pct']}% 20D {r['ret20_pct']}% 量比 {r['volume_ratio20']} | "
+            f"{r['signals']}"
+        )
     return "\n".join(lines).strip()
 
 
