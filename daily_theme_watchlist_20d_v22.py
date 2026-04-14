@@ -146,12 +146,20 @@ def load_watchlist(csv_path: Path) -> List[dict]:
             ticker = (row.get("ticker") or "").strip()
             name = (row.get("name") or "").strip()
             group = (row.get("group") or CONFIG.watchlist_default_group).strip()
+            layer = (row.get("layer") or "").strip()
             enabled = (row.get("enabled") or "true").strip().lower()
             if not ticker or not name:
                 continue
             if enabled in {"false", "0", "no", "n"}:
                 continue
-            rows.append({"ticker": ticker, "name": name, "group": group})
+            if not layer:
+                if group == "theme":
+                    layer = "short_attack"
+                elif group in {"core", "etf"}:
+                    layer = "midlong_core"
+                else:
+                    layer = "midlong_core"
+            rows.append({"ticker": ticker, "name": name, "group": group, "layer": layer})
     if not rows:
         raise ValueError("No enabled symbols found in watchlist csv")
     return rows
@@ -226,7 +234,7 @@ def score_band(setup_score: int, risk_score: int) -> str:
     return "一般觀察"
 
 
-def detect_row(df: pd.DataFrame, ticker: str, name: str, group: str) -> dict:
+def detect_row(df: pd.DataFrame, ticker: str, name: str, group: str, layer: str) -> dict:
     x = df.iloc[-1]
     prev = df.iloc[-2] if len(df) >= 2 else x
 
@@ -382,6 +390,7 @@ def detect_row(df: pd.DataFrame, ticker: str, name: str, group: str) -> dict:
         "ticker": ticker,
         "name": name,
         "group": group,
+        "layer": layer,
         "close": round(close_, 2),
         "ret1_pct": round(ret1 * 100, 2),
         "ret5_pct": round(ret5 * 100, 2),
@@ -551,6 +560,8 @@ def reorder_priority_groups(df_rank: pd.DataFrame) -> pd.DataFrame:
 def select_short_term_candidates(df_rank: pd.DataFrame) -> pd.DataFrame:
     rule = CONFIG.notify
     df = reorder_priority_groups(df_rank)
+    if "layer" in df.columns:
+        df = df[df["layer"].isin(["short_attack", "midlong_core"])].copy()
 
     base_mask = (
         (df["setup_score"] >= rule.min_setup_score)
@@ -579,6 +590,8 @@ def select_short_term_candidates(df_rank: pd.DataFrame) -> pd.DataFrame:
 def select_midlong_candidates(df_rank: pd.DataFrame, exclude_tickers: Optional[set[str]] = None) -> pd.DataFrame:
     rule = CONFIG.notify
     df = reorder_priority_groups(df_rank)
+    if "layer" in df.columns:
+        df = df[df["layer"].isin(["midlong_core", "defensive_watch"])].copy()
 
     base_mask = (
         (df["setup_score"] >= max(rule.min_setup_score + 1, 5))
@@ -667,7 +680,7 @@ def build_push_message(df_rank: pd.DataFrame, market_regime: dict) -> str:
                 action = "續追蹤"
 
             lines.append(
-                f"{int(r['rank'])}. {r['name']} {r['ticker']} {action} | "
+                f"{int(r['rank'])}. [{r['layer']}] {r['name']} {r['ticker']} {action} | "
                 f"G{r['grade']} S{int(r['setup_score'])}/R{int(r['risk_score'])} | "
                 f"5D {r['ret5_pct']}% 量比 {r['volume_ratio20']} | {r['signals']}"
             )
@@ -686,7 +699,7 @@ def build_push_message(df_rank: pd.DataFrame, market_regime: dict) -> str:
                 action = "可續抱觀察"
 
             lines.append(
-                f"{int(r['rank'])}. {r['name']} {r['ticker']} {action} | "
+                f"{int(r['rank'])}. [{r['layer']}] {r['name']} {r['ticker']} {action} | "
                 f"G{r['grade']} S{int(r['setup_score'])}/R{int(r['risk_score'])} | "
                 f"20D {r['ret20_pct']}% 量比 {r['volume_ratio20']} | {r['signals']}"
             )
@@ -718,7 +731,7 @@ def summarize_events(events_df: pd.DataFrame, horizons: List[int]) -> pd.DataFra
 def upsert_alert_tracking(short_candidates: pd.DataFrame, midlong_candidates: pd.DataFrame) -> None:
     cols = [
         "alert_date", "watch_type", "ticker", "name", "group", "grade", "rank", "setup_score", "risk_score",
-        "signals", "regime", "alert_close", "ret1_future_pct", "ret5_future_pct", "ret20_future_pct",
+        "layer", "signals", "regime", "alert_close", "ret1_future_pct", "ret5_future_pct", "ret20_future_pct",
         "status"
     ]
 
@@ -751,6 +764,7 @@ def upsert_alert_tracking(short_candidates: pd.DataFrame, midlong_candidates: pd
                 "ticker": r["ticker"],
                 "name": r["name"],
                 "group": r["group"],
+                "layer": r.get("layer", ""),
                 "grade": r["grade"],
                 "rank": int(r["rank"]),
                 "setup_score": int(r["setup_score"]),
@@ -805,7 +819,7 @@ def run_watchlist() -> pd.DataFrame:
         try:
             df = yf_download_one(ticker, CONFIG.yf_period)
             df = add_indicators(df)
-            row = detect_row(df, ticker, name, group)
+            row = detect_row(df, ticker, name, group, item["layer"])
             rows.append(row)
             append_stock_log(row)
             logger.info("OK: %s %s", ticker, name)
@@ -825,13 +839,13 @@ def run_backtest_dual() -> tuple[Optional[pd.DataFrame], Optional[pd.DataFrame]]
     max_horizon = max(CONFIG.backtest.lookahead_days)
 
     for item in WATCHLIST:
-        ticker, name, group = item["ticker"], item["name"], item["group"]
+        ticker, name, group, layer = item["ticker"], item["name"], item["group"], item["layer"]
         try:
             df = yf_download_one(ticker, CONFIG.backtest.period)
             df = add_indicators(df)
             for i in range(250, len(df) - max_horizon):
                 cut = df.iloc[: i + 1].copy()
-                row = detect_row(cut, ticker, name, group)
+                row = detect_row(cut, ticker, name, group, layer)
                 entry = float(df.iloc[i]["Close"])
 
                 event = {
@@ -889,12 +903,12 @@ def build_daily_report_markdown(df_rank: pd.DataFrame, market_regime: dict, bt_s
         "",
         "## Top Ranking",
         "",
-        "| Rank | Grade | Name | Ticker | Group | Setup | Risk | Signals | RankΔ | SetupΔ | 5D% | 10D% | 20D% | VolRatio | Regime |",
-        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+        "| Rank | Grade | Name | Ticker | Group | Layer | Setup | Risk | Signals | RankΔ | SetupΔ | 5D% | 10D% | 20D% | VolRatio | Regime |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
     for _, r in df_rank.iterrows():
         lines.append(
-            f"| {int(r['rank'])} | {r['grade']} | {r['name']} | {r['ticker']} | {r['group']} | "
+            f"| {int(r['rank'])} | {r['grade']} | {r['name']} | {r['ticker']} | {r['group']} | {r['layer']} | "
             f"{int(r['setup_score'])} | {int(r['risk_score'])} | {r['signals']} | "
             f"{int(r['rank_change']):+d} | {int(r['setup_change']):+d} | "
             f"{r['ret5_pct']} | {r['ret10_pct']} | {r['ret20_pct']} | {r['volume_ratio20']} | {r['regime']} |"
@@ -908,7 +922,7 @@ def build_daily_report_markdown(df_rank: pd.DataFrame, market_regime: dict, bt_s
     else:
         for _, r in short_candidates.iterrows():
             lines.append(
-                f"- #{int(r['rank'])} {r['name']} {r['ticker']} [{r['group']}] | "
+                f"- #{int(r['rank'])} {r['name']} {r['ticker']} [{r['group']}/{r['layer']}] | "
                 f"setup {r['setup_score']} risk {r['risk_score']} | "
                 f"5D {r['ret5_pct']}% 10D {r['ret10_pct']}% 20D {r['ret20_pct']}% | "
                 f"{r['signals']} | rankΔ {int(r['rank_change']):+d} setupΔ {int(r['setup_change']):+d}"
@@ -920,7 +934,7 @@ def build_daily_report_markdown(df_rank: pd.DataFrame, market_regime: dict, bt_s
     else:
         for _, r in midlong_candidates.iterrows():
             lines.append(
-                f"- #{int(r['rank'])} {r['name']} {r['ticker']} [{r['group']}] | "
+                f"- #{int(r['rank'])} {r['name']} {r['ticker']} [{r['group']}/{r['layer']}] | "
                 f"setup {r['setup_score']} risk {r['risk_score']} | "
                 f"10D {r['ret10_pct']}% 20D {r['ret20_pct']}% | "
                 f"{r['signals']} | rankΔ {int(r['rank_change']):+d} setupΔ {int(r['setup_change']):+d}"

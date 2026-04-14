@@ -33,7 +33,7 @@ class DetectRowTests(unittest.TestCase):
             index=dates,
         )
 
-        out = detect_row(add_indicators(df), "TEST1.TW", "Accel Name", "theme")
+        out = detect_row(add_indicators(df), "TEST1.TW", "Accel Name", "theme", "short_attack")
 
         self.assertEqual(out["ticker"], "TEST1.TW")
         self.assertEqual(out["name"], "Accel Name")
@@ -77,6 +77,7 @@ class SelectPushCandidatesTests(unittest.TestCase):
                     "ticker": "TEST1.TW",
                     "name": "Accel Name",
                     "group": "theme",
+                    "layer": "midlong_core",
                     "grade": "B",
                     "setup_score": 6,
                     "risk_score": 3,
@@ -107,6 +108,7 @@ class SelectPushCandidatesTests(unittest.TestCase):
                     "ticker": "MID1.TW",
                     "name": "Trend Name",
                     "group": "theme",
+                    "layer": "midlong_core",
                     "grade": "B",
                     "setup_score": 7,
                     "risk_score": 3,
@@ -137,6 +139,7 @@ class SelectPushCandidatesTests(unittest.TestCase):
                     "ticker": "BOTH1.TW",
                     "name": "Both Name",
                     "group": "theme",
+                    "layer": "midlong_core",
                     "grade": "A",
                     "setup_score": 8,
                     "risk_score": 3,
@@ -167,6 +170,7 @@ class SelectPushCandidatesTests(unittest.TestCase):
                     "ticker": "LOWVOL.TW",
                     "name": "Low Vol Trend",
                     "group": "theme",
+                    "layer": "midlong_core",
                     "grade": "B",
                     "setup_score": 7,
                     "risk_score": 3,
@@ -199,6 +203,7 @@ class PushMessageTests(unittest.TestCase):
                     "ticker": "SHORT1.TW",
                     "name": "Short Name",
                     "group": "theme",
+                    "layer": "short_attack",
                     "grade": "A",
                     "setup_score": 8,
                     "risk_score": 3,
@@ -219,6 +224,7 @@ class PushMessageTests(unittest.TestCase):
                     "ticker": "MID1.TW",
                     "name": "Mid Name",
                     "group": "theme",
+                    "layer": "midlong_core",
                     "grade": "B",
                     "setup_score": 7,
                     "risk_score": 3,
