@@ -1,3 +1,4 @@
 ﻿date,ticker,name,close,ret5_pct,ret20_pct,volume,avg_vol20,ma20,ma60,ma120,drawdown120_pct,bias20_pct,setup_score,risk_score,signals,score_band,regime,group,grade,ret1_pct,ret3_pct,ret10_pct,volume_ratio20,ma5,ma10,drawdown20_pct,drawdown60_pct,bias5_pct
 2026-04-10,3013.TW,晟銘電,103.5,3.6,10.11,2173429,3009810,99.29,108.85,118.34,-26.07,4.24,4,0,PULLBACK,開始轉強,高檔拉回整理,theme,,1.47,,4.86,0.72,,,,,
 2026-04-13,3013.TW,晟銘電,103.0,4.89,12.45,1669120,3003519,99.86,108.4,118.17,-26.43,3.14,6,0,PULLBACK,偏強可追蹤,高檔拉回整理,theme,,-0.48,,6.74,0.56,,,,,
+2026-04-14,3013.TW,晟銘電,104.0,6.67,3.48,628899,2748947,100.04,108.0,118.02,-25.71,3.96,7,0,PULLBACK,偏強可追蹤,高檔拉回整理,theme,,0.97,,-1.89,0.23,,,,,

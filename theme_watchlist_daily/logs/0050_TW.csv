@@ -1,3 +1,4 @@
 ﻿date,ticker,name,group,close,ret5_pct,ret20_pct,volume,avg_vol20,ma20,ma60,ma120,drawdown120_pct,bias20_pct,setup_score,risk_score,signals,score_band,regime,grade,ret1_pct,ret3_pct,ret10_pct,volume_ratio20,ma5,ma10,drawdown20_pct,drawdown60_pct,bias5_pct
 2026-04-10,0050.TW,元大台灣50,etf,80.75,7.02,3.26,115520077,117819512,76.01,74.36,68.11,-0.49,6.24,4,1,NONE,開始轉強,還在觀察,,2.02,,5.97,0.98,,,,,
 2026-04-13,0050.TW,元大台灣50,etf,80.6,8.99,5.22,87581345,116164569,76.21,74.56,68.27,-0.68,5.76,5,1,NONE,開始轉強,還在觀察,,-0.19,,6.33,0.75,,,,,
+2026-04-14,0050.TW,元大台灣50,etf,82.25,9.23,8.29,35536641,112642887,76.53,74.77,68.46,0.0,7.48,6,1,TREND,偏強可追蹤,中段延續中,,2.05,,9.67,0.32,,,,,

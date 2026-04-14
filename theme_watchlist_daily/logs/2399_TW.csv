@@ -1,3 +1,4 @@
 ﻿date,ticker,name,close,ret5_pct,ret20_pct,volume,avg_vol20,ma20,ma60,ma120,drawdown120_pct,bias20_pct,setup_score,risk_score,signals,score_band,regime,group,grade,ret1_pct,ret3_pct,ret10_pct,volume_ratio20,ma5,ma10,drawdown20_pct,drawdown60_pct,bias5_pct
 2026-04-10,2399.TW,映泰,34.2,7.38,40.45,14210362,14807176,31.74,26.9,25.12,-9.88,7.76,11,2,TREND,進攻優勢區,中段延續中,theme,,-3.53,,8.4,0.96,,,,,
 2026-04-13,2399.TW,映泰,33.0,-2.37,26.2,9075963,14703405,32.08,27.02,25.22,-13.04,2.87,8,0,TREND,進攻優勢區,中段延續中,theme,,-3.51,,12.82,0.62,,,,,
+2026-04-14,2399.TW,映泰,33.05,-4.2,25.9,1881223,13693173,32.42,27.15,25.32,-12.91,1.94,8,0,TREND,進攻優勢區,中段延續中,theme,,0.15,,6.61,0.14,,,,,

@@ -1,3 +1,4 @@
 ﻿date,ticker,name,group,close,ret1_pct,ret5_pct,ret10_pct,ret20_pct,volume,avg_vol20,volume_ratio20,ma20,ma60,ma120,drawdown120_pct,bias20_pct,setup_score,risk_score,signals,score_band,regime
 2026-04-10,3661.TW,世芯-KY,satellite,3025.0,4.49,10.81,-3.97,-10.1,1763626,1891361,0.93,3021.25,3256.5,3275.54,-19.01,0.12,5,0,NONE,開始轉強,還在觀察
 2026-04-13,3661.TW,世芯-KY,satellite,3090.0,2.15,14.23,0.82,-6.79,1857092,1910207,0.97,3010.0,3247.17,3272.46,-17.27,2.66,5,0,NONE,開始轉強,還在觀察
+2026-04-14,3661.TW,世芯-KY,satellite,3200.0,3.56,18.3,5.26,0.31,591377,1854269,0.32,3010.5,3238.25,3270.42,-14.32,6.29,5,2,NONE,開始轉強,還在觀察

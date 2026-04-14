@@ -1,3 +1,4 @@
 ﻿date,ticker,name,group,close,ret1_pct,ret5_pct,ret10_pct,ret20_pct,volume,avg_vol20,volume_ratio20,ma20,ma60,ma120,drawdown120_pct,bias20_pct,setup_score,risk_score,signals,score_band,regime
 2026-04-10,3014.TW,聯陽,satellite,118.5,0.0,2.16,1.28,-0.42,627835,697695,0.9,117.2,118.09,120.51,-11.9,1.11,8,0,BASE,進攻優勢區,低檔慢慢墊高
 2026-04-13,3014.TW,聯陽,satellite,119.0,0.42,3.03,2.59,-0.83,822105,676988,1.21,117.15,118.22,120.4,-11.52,1.58,8,0,NONE,進攻優勢區,還在觀察
+2026-04-14,3014.TW,聯陽,satellite,119.5,0.42,3.02,1.7,0.84,197563,640996,0.31,117.2,118.34,120.28,-11.15,1.96,8,0,BASE,進攻優勢區,低檔慢慢墊高
