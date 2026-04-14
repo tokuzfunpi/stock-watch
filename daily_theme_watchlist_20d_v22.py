@@ -234,6 +234,15 @@ def score_band(setup_score: int, risk_score: int) -> str:
     return "一般觀察"
 
 
+def layer_label(layer: str) -> str:
+    labels = {
+        "short_attack": "短線主攻",
+        "midlong_core": "中長線核心",
+        "defensive_watch": "防守觀察",
+    }
+    return labels.get(layer, layer)
+
+
 def detect_row(df: pd.DataFrame, ticker: str, name: str, group: str, layer: str) -> dict:
     x = df.iloc[-1]
     prev = df.iloc[-2] if len(df) >= 2 else x
@@ -680,7 +689,7 @@ def build_push_message(df_rank: pd.DataFrame, market_regime: dict) -> str:
                 action = "續追蹤"
 
             lines.append(
-                f"{int(r['rank'])}. [{r['layer']}] {r['name']} {r['ticker']} {action} | "
+                f"{int(r['rank'])}. [{layer_label(r['layer'])}] {r['name']} {r['ticker']} {action} | "
                 f"G{r['grade']} S{int(r['setup_score'])}/R{int(r['risk_score'])} | "
                 f"5D {r['ret5_pct']}% 量比 {r['volume_ratio20']} | {r['signals']}"
             )
@@ -699,7 +708,7 @@ def build_push_message(df_rank: pd.DataFrame, market_regime: dict) -> str:
                 action = "可續抱觀察"
 
             lines.append(
-                f"{int(r['rank'])}. [{r['layer']}] {r['name']} {r['ticker']} {action} | "
+                f"{int(r['rank'])}. [{layer_label(r['layer'])}] {r['name']} {r['ticker']} {action} | "
                 f"G{r['grade']} S{int(r['setup_score'])}/R{int(r['risk_score'])} | "
                 f"20D {r['ret20_pct']}% 量比 {r['volume_ratio20']} | {r['signals']}"
             )
@@ -908,7 +917,7 @@ def build_daily_report_markdown(df_rank: pd.DataFrame, market_regime: dict, bt_s
     ]
     for _, r in df_rank.iterrows():
         lines.append(
-            f"| {int(r['rank'])} | {r['grade']} | {r['name']} | {r['ticker']} | {r['group']} | {r['layer']} | "
+            f"| {int(r['rank'])} | {r['grade']} | {r['name']} | {r['ticker']} | {r['group']} | {layer_label(r['layer'])} | "
             f"{int(r['setup_score'])} | {int(r['risk_score'])} | {r['signals']} | "
             f"{int(r['rank_change']):+d} | {int(r['setup_change']):+d} | "
             f"{r['ret5_pct']} | {r['ret10_pct']} | {r['ret20_pct']} | {r['volume_ratio20']} | {r['regime']} |"
@@ -922,7 +931,7 @@ def build_daily_report_markdown(df_rank: pd.DataFrame, market_regime: dict, bt_s
     else:
         for _, r in short_candidates.iterrows():
             lines.append(
-                f"- #{int(r['rank'])} {r['name']} {r['ticker']} [{r['group']}/{r['layer']}] | "
+                f"- #{int(r['rank'])} {r['name']} {r['ticker']} [{r['group']}/{layer_label(r['layer'])}] | "
                 f"setup {r['setup_score']} risk {r['risk_score']} | "
                 f"5D {r['ret5_pct']}% 10D {r['ret10_pct']}% 20D {r['ret20_pct']}% | "
                 f"{r['signals']} | rankΔ {int(r['rank_change']):+d} setupΔ {int(r['setup_change']):+d}"
@@ -934,7 +943,7 @@ def build_daily_report_markdown(df_rank: pd.DataFrame, market_regime: dict, bt_s
     else:
         for _, r in midlong_candidates.iterrows():
             lines.append(
-                f"- #{int(r['rank'])} {r['name']} {r['ticker']} [{r['group']}/{r['layer']}] | "
+                f"- #{int(r['rank'])} {r['name']} {r['ticker']} [{r['group']}/{layer_label(r['layer'])}] | "
                 f"setup {r['setup_score']} risk {r['risk_score']} | "
                 f"10D {r['ret10_pct']}% 20D {r['ret20_pct']}% | "
                 f"{r['signals']} | rankΔ {int(r['rank_change']):+d} setupΔ {int(r['setup_change']):+d}"
