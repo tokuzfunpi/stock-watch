@@ -574,6 +574,55 @@ def get_market_regime() -> dict:
     }
 
 
+def get_us_market_reference() -> dict:
+    refs = [
+        ("^GSPC", "S&P500"),
+        ("^IXIC", "NASDAQ"),
+        ("SOXX", "SOXX"),
+        ("NVDA", "NVDA"),
+    ]
+    rows = []
+    for ticker, name in refs:
+        try:
+            df = yf_download_one(ticker, CONFIG.yf_period)
+            df = add_indicators(df)
+            x = df.iloc[-1]
+            rows.append(
+                {
+                    "ticker": ticker,
+                    "name": name,
+                    "ret1_pct": round(float(x["Ret1D"]) * 100, 2) if pd.notna(x["Ret1D"]) else 0.0,
+                    "ret5_pct": round(float(x["Ret5D"]) * 100, 2) if pd.notna(x["Ret5D"]) else 0.0,
+                    "close": round(float(x["Close"]), 2),
+                }
+            )
+        except Exception as exc:
+            logger.warning("US market reference failed for %s: %s", ticker, exc)
+
+    if not rows:
+        return {"summary": "美股參考暫時抓不到。", "rows": []}
+
+    df_ref = pd.DataFrame(rows)
+    avg_1d = round(float(df_ref["ret1_pct"].mean()), 2)
+    avg_5d = round(float(df_ref["ret5_pct"].mean()), 2)
+    if avg_1d >= 1:
+        tone = "美股昨晚偏強，台股開盤情緒通常較正面。"
+    elif avg_1d <= -1:
+        tone = "美股昨晚偏弱，台股早盤要提防開高走低或續殺。"
+    else:
+        tone = "美股昨晚中性，台股仍以個股表現為主。"
+
+    summary = (
+        f"{tone} "
+        f"S&P500 {df_ref.loc[df_ref['name']=='S&P500', 'ret1_pct'].iloc[0]:+.2f}% / "
+        f"NASDAQ {df_ref.loc[df_ref['name']=='NASDAQ', 'ret1_pct'].iloc[0]:+.2f}% / "
+        f"SOXX {df_ref.loc[df_ref['name']=='SOXX', 'ret1_pct'].iloc[0]:+.2f}% / "
+        f"NVDA {df_ref.loc[df_ref['name']=='NVDA', 'ret1_pct'].iloc[0]:+.2f}% "
+        f"(5日均值 {avg_5d:+.2f}%)"
+    )
+    return {"summary": summary, "rows": rows}
+
+
 def reorder_priority_groups(df_rank: pd.DataFrame) -> pd.DataFrame:
     rule = CONFIG.notify
     df = df_rank.copy()
@@ -710,49 +759,58 @@ def should_alert(df_rank: pd.DataFrame, current_state: str, last_state: str, mar
     return False
 
 
-def build_push_message(df_rank: pd.DataFrame, market_regime: dict) -> str:
+def build_short_term_message(df_rank: pd.DataFrame, market_regime: dict, us_market: dict) -> str:
     short_candidates, midlong_candidates = build_candidate_sets(df_rank)
     total_a = int((df_rank["grade"] == "A").sum()) if not df_rank.empty else 0
     total_b = int((df_rank["grade"] == "B").sum()) if not df_rank.empty else 0
     total_up = int((df_rank["status_change"] == "UP").sum()) if "status_change" in df_rank.columns else 0
 
     lines = [
-        "📣 今日重點",
+        "📣 短線推薦",
         market_regime["comment"],
+        us_market["summary"],
         f"A級 {total_a} 檔，B級 {total_b} 檔，轉強 {total_up} 檔。",
     ]
-
-    if short_candidates.empty and midlong_candidates.empty:
-        lines.append("今天短線和中長線都沒有夠清楚的機會，先等。")
+    if short_candidates.empty:
+        lines.append("今天短線沒有夠清楚的機會，先等。")
         return "\n".join(lines)
 
     lines.append("")
-    lines.append(f"短線推薦 ({len(short_candidates)}檔)")
-    if short_candidates.empty:
-        lines.append("暫無")
-    else:
-        for _, r in short_candidates.iterrows():
-            action = short_term_action_label(r)
+    lines.append("解讀：短線看的是動能延續，不是看到強就直接追。連漲過快的優先看『開高不追』或『等拉回』。")
+    lines.append("")
+    for _, r in short_candidates.iterrows():
+        action = short_term_action_label(r)
+        lines.append(
+            f"{int(r['rank'])}. [{layer_label(r['layer'])}] {r['name']} {r['ticker']} {action} | "
+            f"G{r['grade']} S{int(r['setup_score'])}/R{int(r['risk_score'])} | "
+            f"5D {r['ret5_pct']}% 量比 {r['volume_ratio20']} | {r['signals']}"
+        )
+    return "\n".join(lines).strip()
 
-            lines.append(
-                f"{int(r['rank'])}. [{layer_label(r['layer'])}] {r['name']} {r['ticker']} {action} | "
-                f"G{r['grade']} S{int(r['setup_score'])}/R{int(r['risk_score'])} | "
-                f"5D {r['ret5_pct']}% 量比 {r['volume_ratio20']} | {r['signals']}"
-            )
+
+def build_midlong_message(df_rank: pd.DataFrame, market_regime: dict, us_market: dict) -> str:
+    _, midlong_candidates = build_candidate_sets(df_rank)
+    total_b = int((df_rank["grade"] == "B").sum()) if not df_rank.empty else 0
+    lines = [
+        "📣 中長線推薦",
+        market_regime["comment"],
+        us_market["summary"],
+        f"目前可追蹤的中長線結構股以 B級 {total_b} 檔為主。",
+    ]
+    if midlong_candidates.empty:
+        lines.append("今天中長線沒有夠穩的結構股，先觀察。")
+        return "\n".join(lines)
 
     lines.append("")
-    lines.append(f"中長線推薦 ({len(midlong_candidates)}檔)")
-    if midlong_candidates.empty:
-        lines.append("暫無")
-    else:
-        for _, r in midlong_candidates.iterrows():
-            action = midlong_action_label(r)
-
-            lines.append(
-                f"{int(r['rank'])}. [{layer_label(r['layer'])}] {r['name']} {r['ticker']} {action} | "
-                f"G{r['grade']} S{int(r['setup_score'])}/R{int(r['risk_score'])} | "
-                f"20D {r['ret20_pct']}% 量比 {r['volume_ratio20']} | {r['signals']}"
-            )
+    lines.append("解讀：中長線看的是趨勢、結構與續抱價值，不是短線衝刺速度。")
+    lines.append("")
+    for _, r in midlong_candidates.iterrows():
+        action = midlong_action_label(r)
+        lines.append(
+            f"{int(r['rank'])}. [{layer_label(r['layer'])}] {r['name']} {r['ticker']} {action} | "
+            f"G{r['grade']} S{int(r['setup_score'])}/R{int(r['risk_score'])} | "
+            f"20D {r['ret20_pct']}% 量比 {r['volume_ratio20']} | {r['signals']}"
+        )
     return "\n".join(lines).strip()
 
 
@@ -1119,6 +1177,7 @@ def main() -> int:
             return 0
 
         market_regime = get_market_regime()
+        us_market = get_us_market_reference()
         df_rank = run_watchlist()
         bt_steady, bt_attack = run_backtest_dual()
 
@@ -1133,7 +1192,8 @@ def main() -> int:
         last_state = load_last_state()
 
         if should_alert(df_rank, current_state, last_state, market_regime):
-            send_telegram_message(build_push_message(df_rank, market_regime))
+            send_telegram_message(build_short_term_message(df_rank, market_regime, us_market))
+            send_telegram_message(build_midlong_message(df_rank, market_regime, us_market))
             logger.info("Notification sent.")
         else:
             logger.info("No notification sent.")

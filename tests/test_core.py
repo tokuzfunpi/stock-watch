@@ -6,7 +6,8 @@ import pandas as pd
 
 from daily_theme_watchlist_20d_v22 import (
     add_indicators,
-    build_push_message,
+    build_midlong_message,
+    build_short_term_message,
     detect_row,
     grade_signal,
     select_midlong_candidates,
@@ -195,7 +196,7 @@ class SelectPushCandidatesTests(unittest.TestCase):
 
 
 class PushMessageTests(unittest.TestCase):
-    def test_push_message_contains_short_and_midlong_sections(self) -> None:
+    def test_short_and_midlong_messages_render_independently(self) -> None:
         df = pd.DataFrame(
             [
                 {
@@ -244,11 +245,17 @@ class PushMessageTests(unittest.TestCase):
         )
 
         market_regime = {"comment": "加權指數目前偏多"}
-        message = build_push_message(df, market_regime)
+        us_market = {"summary": "美股昨晚偏強，台股開盤情緒通常較正面。"}
+        short_message = build_short_term_message(df, market_regime, us_market)
+        midlong_message = build_midlong_message(df, market_regime, us_market)
 
-        self.assertIn("短線推薦", message)
-        self.assertIn("中長線推薦", message)
-        self.assertTrue(any(label in message for label in ["可追", "等拉回", "開高不追", "續抱觀察", "分批落袋", "續抱", "可分批", "觀察"]))
+        self.assertIn("短線推薦", short_message)
+        self.assertIn("美股昨晚偏強", short_message)
+        self.assertTrue(any(label in short_message for label in ["可追", "等拉回", "開高不追", "續抱觀察", "分批落袋"]))
+
+        self.assertIn("中長線推薦", midlong_message)
+        self.assertIn("美股昨晚偏強", midlong_message)
+        self.assertTrue(any(label in midlong_message for label in ["續抱", "可分批", "觀察", "分批落袋"]))
 
 
 class SplitMessageTests(unittest.TestCase):
