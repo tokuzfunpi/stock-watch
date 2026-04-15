@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
 import logging
 import os
@@ -588,11 +589,42 @@ def today_local_str() -> str:
 def load_last_success_date() -> str:
     if not SUCCESS_FILE.exists():
         return ""
-    return SUCCESS_FILE.read_text(encoding="utf-8").strip()
+    raw = SUCCESS_FILE.read_text(encoding="utf-8").strip()
+    if not raw:
+        return ""
+    try:
+        data = json.loads(raw)
+        return str(data.get("date", ""))
+    except json.JSONDecodeError:
+        return raw
+
+
+def current_run_signature() -> str:
+    hasher = hashlib.sha256()
+    for path in [Path(__file__), CONFIG_PATH, WATCHLIST_CSV]:
+        hasher.update(str(path).encode("utf-8"))
+        hasher.update(path.read_bytes())
+    return hasher.hexdigest()[:16]
+
+
+def load_last_success_signature() -> str:
+    if not SUCCESS_FILE.exists():
+        return ""
+    raw = SUCCESS_FILE.read_text(encoding="utf-8").strip()
+    if not raw:
+        return ""
+    try:
+        data = json.loads(raw)
+        return str(data.get("signature", ""))
+    except json.JSONDecodeError:
+        return ""
 
 
 def save_last_success_date(success_date: str) -> None:
-    SUCCESS_FILE.write_text(success_date, encoding="utf-8")
+    SUCCESS_FILE.write_text(
+        json.dumps({"date": success_date, "signature": current_run_signature()}, ensure_ascii=False),
+        encoding="utf-8",
+    )
 
 
 def get_market_regime() -> dict:
@@ -1299,8 +1331,12 @@ def send_telegram_message(message: str) -> None:
 
 def main() -> int:
     try:
-        if not FORCE_RUN and load_last_success_date() == today_local_str():
-            logger.info("Already completed successfully for %s. Skip duplicate run.", today_local_str())
+        if (
+            not FORCE_RUN
+            and load_last_success_date() == today_local_str()
+            and load_last_success_signature() == current_run_signature()
+        ):
+            logger.info("Already completed successfully for %s with same code/config. Skip duplicate run.", today_local_str())
             return 0
 
         market_regime = get_market_regime()
