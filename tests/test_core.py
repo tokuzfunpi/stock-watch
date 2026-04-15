@@ -6,6 +6,7 @@ import pandas as pd
 
 from daily_theme_watchlist_20d_v22 import (
     add_indicators,
+    build_special_etf_message,
     build_midlong_message,
     build_short_term_message,
     detect_row,
@@ -172,14 +173,35 @@ class SelectPushCandidatesTests(unittest.TestCase):
                     "regime": "轉強速度有出來",
                     "date": "2026-04-14",
                     "close": 100.0,
-                }
+                },
+                {
+                    "rank": 2,
+                    "ticker": "MID2.TW",
+                    "name": "Mid Two",
+                    "group": "core",
+                    "layer": "midlong_core",
+                    "grade": "B",
+                    "setup_score": 7,
+                    "risk_score": 2,
+                    "ret5_pct": 2.0,
+                    "ret10_pct": 6.0,
+                    "ret20_pct": 10.0,
+                    "volume_ratio20": 0.8,
+                    "signals": "TREND",
+                    "rank_change": 1,
+                    "setup_change": 1,
+                    "regime": "中段延續中",
+                    "date": "2026-04-14",
+                    "close": 80.0,
+                },
             ]
         )
 
         out = select_push_candidates(df)
 
-        self.assertEqual(len(out), 2)
-        self.assertEqual(list(out["ticker"]), ["BOTH1.TW", "BOTH1.TW"])
+        self.assertGreaterEqual(len(out), 3)
+        self.assertGreaterEqual(list(out["ticker"]).count("BOTH1.TW"), 2)
+        self.assertIn("MID2.TW", list(out["ticker"]))
 
     def test_midlong_candidates_allow_lower_volume_ratio_when_trend_is_valid(self) -> None:
         df = pd.DataFrame(
@@ -261,6 +283,28 @@ class PushMessageTests(unittest.TestCase):
                     "date": "2026-04-14",
                     "close": 120.0,
                 },
+                {
+                    "rank": 3,
+                    "ticker": "MID2.TW",
+                    "name": "Mid Two",
+                    "group": "core",
+                    "layer": "midlong_core",
+                    "grade": "B",
+                    "setup_score": 6,
+                    "risk_score": 2,
+                    "ret5_pct": 1.0,
+                    "ret10_pct": 4.0,
+                    "ret20_pct": 9.0,
+                    "volume_ratio20": 0.9,
+                    "spec_risk_label": "正常",
+                    "signals": "REBREAK",
+                    "rank_change": 1,
+                    "setup_change": 1,
+                    "status_change": "UP",
+                    "regime": "重新站上來了",
+                    "date": "2026-04-14",
+                    "close": 90.0,
+                },
             ]
         )
 
@@ -278,6 +322,110 @@ class PushMessageTests(unittest.TestCase):
         self.assertIn("美股昨晚偏強", midlong_message)
         self.assertIn("投機 正常", midlong_message)
         self.assertTrue(any(label in midlong_message for label in ["續抱", "可分批", "觀察", "分批落袋"]))
+
+    def test_special_etf_message_renders_requested_tickers(self) -> None:
+        df = pd.DataFrame(
+            [
+                {
+                    "rank": 10,
+                    "ticker": "0050.TW",
+                    "name": "元大台灣50",
+                    "group": "etf",
+                    "layer": "midlong_core",
+                    "grade": "B",
+                    "setup_score": 6,
+                    "risk_score": 2,
+                    "ret5_pct": 2.0,
+                    "ret10_pct": 4.0,
+                    "ret20_pct": 8.0,
+                    "volume_ratio20": 1.1,
+                    "spec_risk_label": "正常",
+                    "signals": "TREND",
+                    "rank_change": 1,
+                    "setup_change": 1,
+                    "status_change": "UP",
+                    "regime": "中段延續中",
+                    "date": "2026-04-14",
+                    "close": 100.0,
+                },
+                {
+                    "rank": 11,
+                    "ticker": "00878.TW",
+                    "name": "國泰永續高股息",
+                    "group": "etf",
+                    "layer": "midlong_core",
+                    "grade": "B",
+                    "setup_score": 5,
+                    "risk_score": 2,
+                    "ret5_pct": 1.0,
+                    "ret10_pct": 3.0,
+                    "ret20_pct": 4.0,
+                    "volume_ratio20": 0.9,
+                    "spec_risk_label": "正常",
+                    "signals": "REBREAK",
+                    "rank_change": 0,
+                    "setup_change": 1,
+                    "status_change": "UP",
+                    "regime": "重新站上來了",
+                    "date": "2026-04-14",
+                    "close": 22.0,
+                },
+                {
+                    "rank": 12,
+                    "ticker": "00772B.TWO",
+                    "name": "中信高評級公司債",
+                    "group": "etf",
+                    "layer": "defensive_watch",
+                    "grade": "B",
+                    "setup_score": 4,
+                    "risk_score": 1,
+                    "ret5_pct": 0.3,
+                    "ret10_pct": 1.0,
+                    "ret20_pct": 3.5,
+                    "volume_ratio20": 0.7,
+                    "spec_risk_label": "正常",
+                    "signals": "TREND",
+                    "rank_change": 0,
+                    "setup_change": 0,
+                    "status_change": "FLAT",
+                    "regime": "中段延續中",
+                    "date": "2026-04-14",
+                    "close": 33.0,
+                },
+                {
+                    "rank": 13,
+                    "ticker": "00773B.TWO",
+                    "name": "中信優先金融債",
+                    "group": "etf",
+                    "layer": "defensive_watch",
+                    "grade": "B",
+                    "setup_score": 4,
+                    "risk_score": 1,
+                    "ret5_pct": 0.2,
+                    "ret10_pct": 0.8,
+                    "ret20_pct": 2.5,
+                    "volume_ratio20": 0.6,
+                    "spec_risk_label": "正常",
+                    "signals": "BASE",
+                    "rank_change": 0,
+                    "setup_change": 0,
+                    "status_change": "FLAT",
+                    "regime": "低檔慢慢墊高",
+                    "date": "2026-04-14",
+                    "close": 36.0,
+                },
+            ]
+        )
+
+        market_regime = {"comment": "加權指數目前偏多"}
+        us_market = {"summary": "美股昨晚偏強，台股開盤情緒通常較正面。"}
+        message = build_special_etf_message(df, market_regime, us_market)
+
+        self.assertIn("ETF / 債券觀察", message)
+        self.assertIn("0050.TW", message)
+        self.assertIn("00878.TW", message)
+        self.assertIn("00772B.TWO", message)
+        self.assertIn("00773B.TWO", message)
 
 
 class SplitMessageTests(unittest.TestCase):

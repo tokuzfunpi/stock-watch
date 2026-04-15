@@ -30,6 +30,7 @@ ticker,name,group,layer,enabled
 2892.TW,第一金,core,midlong_core,true
 1301.TW,台塑,core,midlong_core,false
 0050.TW,元大台灣50,etf,midlong_core,true
+00878.TW,國泰永續高股息,etf,midlong_core,true
 0052.TW,富邦科技,etf,midlong_core,true
 00631L.TW,元大台灣50正2,etf,short_attack,false
 00929.TW,復華台灣科技優息,etf,midlong_core,false
@@ -41,3 +42,5 @@ ticker,name,group,layer,enabled
 5274.TWO,信驊,satellite,midlong_core,true
 00679B.TWO,元大美債20年,etf,defensive_watch,true
 00687B.TWO,國泰20年美債,etf,defensive_watch,true
+00772B.TWO,中信高評級公司債,etf,defensive_watch,true
+00773B.TWO,中信優先金融債,etf,defensive_watch,true

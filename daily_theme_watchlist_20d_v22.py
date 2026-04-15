@@ -171,6 +171,12 @@ def load_watchlist(csv_path: Path) -> List[dict]:
 
 
 WATCHLIST = load_watchlist(WATCHLIST_CSV)
+SPECIAL_ETF_TICKERS = [
+    "00772B.TWO",
+    "00773B.TWO",
+    "0050.TW",
+    "00878.TW",
+]
 
 
 def yf_download_one(ticker: str, period: str) -> pd.DataFrame:
@@ -896,6 +902,91 @@ def midlong_action_label(row: pd.Series) -> str:
     return "觀察"
 
 
+def special_etf_action_label(row: pd.Series) -> str:
+    ticker = str(row["ticker"])
+    ret5 = float(row["ret5_pct"])
+    ret20 = float(row["ret20_pct"])
+    risk = int(row["risk_score"])
+    signals = str(row["signals"])
+
+    if ticker.endswith("B.TWO"):
+        if ret20 >= 3 and risk <= 3:
+            return "防守續抱"
+        if ret20 >= 0:
+            return "穩定追蹤"
+        return "保守觀察"
+
+    if "TREND" in signals or "REBREAK" in signals:
+        return "續抱觀察"
+    if ret5 >= 6 and risk <= 4:
+        return "可分批"
+    return "觀察"
+
+
+def select_special_etf_candidates(df_rank: pd.DataFrame) -> pd.DataFrame:
+    if df_rank.empty:
+        return df_rank.head(0).copy()
+    df = df_rank[df_rank["ticker"].astype(str).isin(SPECIAL_ETF_TICKERS)].copy()
+    if df.empty:
+        return df
+    df["_ticker_order"] = pd.Categorical(df["ticker"], categories=SPECIAL_ETF_TICKERS, ordered=True)
+    df = df.sort_values(by=["_ticker_order", "rank"], ascending=[True, True]).reset_index(drop=True)
+    return df.drop(columns=["_ticker_order"])
+
+
+def build_special_etf_summary(etf_candidates: pd.DataFrame) -> list[str]:
+    if etf_candidates.empty:
+        return ["今天指定 ETF / 債券標的沒有抓到完整資料，先看盤中報表。"]
+
+    equity = etf_candidates[etf_candidates["ticker"].isin(["0050.TW", "00878.TW"])].copy()
+    bonds = etf_candidates[etf_candidates["ticker"].isin(["00772B.TWO", "00773B.TWO"])].copy()
+    summary: list[str] = []
+
+    if not equity.empty:
+        eq_ret20 = float(equity["ret20_pct"].mean())
+        if eq_ret20 >= 5:
+            summary.append("股票 ETF 偏多，台股大盤與高股息風格仍有撐。")
+        elif eq_ret20 >= 0:
+            summary.append("股票 ETF 偏穩，較像整理後續看量價。")
+        else:
+            summary.append("股票 ETF 偏弱，今天台股大型權值先別太急。")
+
+    if not bonds.empty:
+        bond_ret20 = float(bonds["ret20_pct"].mean())
+        if bond_ret20 >= 3:
+            summary.append("債券 ETF 偏穩，防守資金和利率壓力都還算可控。")
+        elif bond_ret20 >= 0:
+            summary.append("債券 ETF 中性，先當防守觀察，不急著加碼。")
+        else:
+            summary.append("債券 ETF 偏弱，代表利率面壓力仍在。")
+
+    return summary or ["ETF / 債券整體訊號還不夠明確，先觀察。"]
+
+
+def build_special_etf_message(df_rank: pd.DataFrame, market_regime: dict, us_market: dict) -> str:
+    etf_candidates = select_special_etf_candidates(df_rank)
+    lines = [
+        "📣 ETF / 債券觀察",
+        market_regime["comment"],
+        us_market["summary"],
+    ]
+    lines.extend(build_special_etf_summary(etf_candidates))
+    if etf_candidates.empty:
+        return "\n".join(lines).strip()
+
+    lines.append("")
+    lines.append("解讀：0050、00878偏向台股風向球；00772B、00773B偏向利率與防守溫度計。")
+    lines.append("")
+    for _, r in etf_candidates.iterrows():
+        action = special_etf_action_label(r)
+        lines.append(
+            f"[{layer_label(r['layer'])}] {r['name']} {r['ticker']} {action} | "
+            f"G{r['grade']} S{int(r['setup_score'])}/R{int(r['risk_score'])} | "
+            f"5D {r['ret5_pct']}% 20D {r['ret20_pct']}% | 投機 {r['spec_risk_label']} | {r['signals']}"
+        )
+    return "\n".join(lines).strip()
+
+
 def should_alert(df_rank: pd.DataFrame, current_state: str, last_state: str, market_regime: dict) -> bool:
     if CONFIG.always_notify:
         return True
@@ -1247,6 +1338,22 @@ def build_daily_report_markdown(df_rank: pd.DataFrame, market_regime: dict, bt_s
                 f"{r['signals']} | rankΔ {int(r['rank_change']):+d} setupΔ {int(r['setup_change']):+d}"
             )
 
+    special_etf_candidates = select_special_etf_candidates(df_rank)
+    lines.extend(["", "## ETF / 債券觀察", ""])
+    if special_etf_candidates.empty:
+        lines.append("- None")
+    else:
+        for summary in build_special_etf_summary(special_etf_candidates):
+            lines.append(f"- {summary}")
+        lines.append("")
+        for _, r in special_etf_candidates.iterrows():
+            lines.append(
+                f"- #{int(r['rank'])} {r['name']} {r['ticker']} [{r['group']}/{layer_label(r['layer'])}] | "
+                f"setup {r['setup_score']} risk {r['risk_score']} | "
+                f"5D {r['ret5_pct']}% 20D {r['ret20_pct']}% | 投機 {r['spec_risk_label']} | "
+                f"{r['signals']} | 操作 {special_etf_action_label(r)}"
+            )
+
     lines.extend([
         "",
         "## Grade 對照表",
@@ -1317,6 +1424,8 @@ def build_daily_report_html(df_rank: pd.DataFrame, market_regime: dict, bt_stead
     short_backup_html = "<p>None</p>" if short_backups.empty else dataframe_to_html(short_backups)
     midlong_html = "<p>None</p>" if midlong_candidates.empty else dataframe_to_html(midlong_candidates)
     midlong_backup_html = "<p>None</p>" if midlong_backups.empty else dataframe_to_html(midlong_backups)
+    special_etf_candidates = select_special_etf_candidates(df_rank)
+    special_etf_html = "<p>None</p>" if special_etf_candidates.empty else dataframe_to_html(special_etf_candidates)
     return f"""<!doctype html>
 <html><head><meta charset="utf-8"><title>Daily 20D v2.2 Attack Report</title>
 <style>
@@ -1332,6 +1441,7 @@ th {{ background: #f4f4f4; }}
 <h2>Short-Term Backups</h2>{short_backup_html}
 <h2>Mid-Long Candidates</h2>{midlong_html}
 <h2>Mid-Long Backups</h2>{midlong_backup_html}
+<h2>ETF / 債券觀察</h2>{special_etf_html}
 <h2>Steady Backtest</h2>{steady_html}
 <h2>Attack Backtest</h2>{attack_html}
 </body></html>"""
@@ -1401,6 +1511,7 @@ def main() -> int:
         if should_alert(df_rank, current_state, last_state, market_regime):
             send_telegram_message(build_short_term_message(df_rank, market_regime, us_market))
             send_telegram_message(build_midlong_message(df_rank, market_regime, us_market))
+            send_telegram_message(build_special_etf_message(df_rank, market_regime, us_market))
             logger.info("Notification sent.")
         else:
             logger.info("No notification sent.")
