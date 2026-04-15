@@ -1,4 +1,5 @@
-﻿date,ticker,name,group,close,ret1_pct,ret5_pct,ret10_pct,ret20_pct,volume,avg_vol20,volume_ratio20,ma20,ma60,ma120,drawdown120_pct,bias20_pct,setup_score,risk_score,signals,score_band,regime,layer
-2026-04-10,2388.TW,威盛,theme,53.5,-1.29,1.9,3.08,9.07,2852143,6906078,0.41,52.12,51.35,52.53,-19.67,2.65,8,0,TREND,進攻優勢區,中段延續中,
-2026-04-13,2388.TW,威盛,theme,55.4,3.55,7.78,5.73,13.06,5958545,6907350,0.86,52.44,51.42,52.52,-16.82,5.65,12,0,TREND,進攻優勢區,中段延續中,
-2026-04-14,2388.TW,威盛,theme,56.8,2.53,14.29,4.22,17.72,7970520,7195810,1.11,52.87,51.52,52.53,-14.71,7.44,12,0,TREND,進攻優勢區,中段延續中,short_attack
+﻿date,ticker,name,group,close,ret1_pct,ret5_pct,ret10_pct,ret20_pct,volume,avg_vol20,volume_ratio20,ma20,ma60,ma120,drawdown120_pct,bias20_pct,setup_score,risk_score,signals,score_band,regime,layer,spec_risk_score,spec_risk_label
+2026-04-10,2388.TW,威盛,theme,53.5,-1.29,1.9,3.08,9.07,2852143,6906078,0.41,52.12,51.35,52.53,-19.67,2.65,8,0,TREND,進攻優勢區,中段延續中,,,
+2026-04-13,2388.TW,威盛,theme,55.4,3.55,7.78,5.73,13.06,5958545,6907350,0.86,52.44,51.42,52.52,-16.82,5.65,12,0,TREND,進攻優勢區,中段延續中,,,
+2026-04-14,2388.TW,威盛,theme,56.8,2.53,14.29,4.22,17.72,7970520,7195810,1.11,52.87,51.52,52.53,-14.71,7.44,12,0,TREND,進攻優勢區,中段延續中,short_attack,,
+2026-04-15,2388.TW,威盛,theme,59.8,5.28,9.52,15.0,20.81,2048290,7142256,0.29,53.38,51.66,52.56,-10.21,12.03,12,1,TREND,進攻優勢區,中段延續中,short_attack,1.0,正常
