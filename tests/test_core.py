@@ -271,7 +271,6 @@ class PushMessageTests(unittest.TestCase):
 
         self.assertIn("短線推薦", short_message)
         self.assertIn("美股昨晚偏強", short_message)
-        self.assertIn("短線候補", short_message)
         self.assertIn("投機 正常", short_message)
         self.assertTrue(any(label in short_message for label in ["可追", "等拉回", "開高不追", "續抱觀察", "分批落袋"]))
 

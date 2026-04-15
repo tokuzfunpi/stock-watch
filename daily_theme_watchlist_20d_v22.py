@@ -730,87 +730,103 @@ def reorder_priority_groups(df_rank: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def select_short_term_candidates(df_rank: pd.DataFrame) -> pd.DataFrame:
-    rule = CONFIG.notify
+def _apply_grade_rank(df: pd.DataFrame) -> pd.Series:
+    rank_map = {"A": 3, "B": 2, "X": 1, "C": 0}
+    return df["grade"].map(rank_map).fillna(0)
+
+
+def _signal_strength(df: pd.DataFrame, patterns: str) -> pd.Series:
+    return df["signals"].fillna("").str.contains(patterns).astype(int)
+
+
+def rank_short_term_pool(df_rank: pd.DataFrame) -> pd.DataFrame:
     df = reorder_priority_groups(df_rank)
     if "layer" in df.columns:
         df = df[df["layer"].isin(["short_attack", "midlong_core"])].copy()
 
-    base_mask = (
-        (df["setup_score"] >= rule.min_setup_score)
-        & (df["risk_score"] <= rule.max_risk_score)
-        & (
-            (df["ret20_pct"] >= rule.min_ret20_pct)
-            & ((df["ret5_pct"] >= rule.min_ret5_pct) | (df["volume_ratio20"] >= rule.min_volume_ratio))
-        )
-    )
+    df = df[
+        (df["setup_score"] >= 4)
+        & (df["risk_score"] <= 6)
+        & (df["ret20_pct"] >= -5)
+    ].copy()
+    if df.empty:
+        return df
 
-    # 進攻版過濾：避免假突破
-    attack_filter = (
-        (df["ret5_pct"] > 8)
-        & (df["volume_ratio20"] > 1.3)
-        & (df["ret20_pct"] > 0)
-    )
-
-    cond_a = df["grade"] == "A"
-    cond_b = (df["setup_score"] >= 5) & (df["rank"] <= 3)
-    cond_c = attack_filter | df["signals"].fillna("").str.contains("ACCEL")
-    cond_d = (df["setup_change"] > 0) | (df["rank_change"] > 0)
-
-    return df[base_mask & (cond_a | cond_b | cond_c | cond_d)].head(rule.top_n_short).copy()
-
-
-def select_short_term_backup_candidates(df_rank: pd.DataFrame, exclude_tickers: Optional[set[str]] = None) -> pd.DataFrame:
-    rule = CONFIG.notify
-    df = reorder_priority_groups(df_rank)
-    if "layer" in df.columns:
-        df = df[df["layer"].isin(["short_attack", "midlong_core"])].copy()
-    if exclude_tickers:
-        df = df[~df["ticker"].astype(str).isin(exclude_tickers)].copy()
-
-    base_mask = (
-        (df["setup_score"] >= max(rule.min_setup_score, 4))
-        & (df["risk_score"] <= rule.max_risk_score + 1)
-        & (df["ret20_pct"] >= 0)
-        & ((df["ret5_pct"] >= 3) | (df["volume_ratio20"] >= 0.7))
-    )
-
-    cond_a = df["grade"].isin(["A", "B"])
-    cond_b = df["signals"].fillna("").str.contains("TREND|ACCEL|REBREAK")
-    cond_c = (df["setup_change"] > 0) | (df["rank_change"] > 0)
-    out = df[base_mask & (cond_a | cond_b | cond_c)].copy()
-    out = out.sort_values(
-        by=["setup_score", "ret5_pct", "ret20_pct", "risk_score", "rank"],
-        ascending=[False, False, False, True, True],
-    )
-    return out.head(5).copy()
+    df["_grade_rank"] = _apply_grade_rank(df)
+    df["_signal_rank"] = _signal_strength(df, "ACCEL|TREND|REBREAK")
+    df = df.sort_values(
+        by=[
+            "_grade_rank",
+            "_signal_rank",
+            "setup_score",
+            "ret5_pct",
+            "volume_ratio20",
+            "setup_change",
+            "rank_change",
+            "risk_score",
+            "rank",
+        ],
+        ascending=[False, False, False, False, False, False, False, True, True],
+    ).reset_index(drop=True)
+    return df.drop(columns=["_grade_rank", "_signal_rank"])
 
 
-def select_midlong_candidates(df_rank: pd.DataFrame, exclude_tickers: Optional[set[str]] = None) -> pd.DataFrame:
-    rule = CONFIG.notify
+def rank_midlong_pool(df_rank: pd.DataFrame) -> pd.DataFrame:
     df = reorder_priority_groups(df_rank)
     if "layer" in df.columns:
         df = df[df["layer"].isin(["midlong_core", "defensive_watch"])].copy()
 
-    base_mask = (
-        (df["setup_score"] >= max(rule.min_setup_score + 1, 5))
-        & (df["risk_score"] <= rule.max_risk_score + 1)
-        & (df["ret20_pct"] >= 0)
-        & (df["volume_ratio20"] >= 0.3)
-    )
+    df = df[
+        (df["setup_score"] >= 4)
+        & (df["risk_score"] <= 6)
+        & (df["ret20_pct"] >= -5)
+    ].copy()
+    if df.empty:
+        return df
 
-    trend_signal = df["signals"].fillna("").str.contains("TREND|REBREAK|BASE")
-    cond_a = df["grade"].isin(["A", "B"])
-    cond_b = trend_signal
-    cond_c = (df["setup_score"] >= 6) & (df["ret20_pct"] >= 8)
-    cond_d = (df["rank_change"] > 0) & (df["risk_score"] <= 4)
+    df["_grade_rank"] = _apply_grade_rank(df)
+    df["_signal_rank"] = _signal_strength(df, "TREND|REBREAK|BASE")
+    df = df.sort_values(
+        by=[
+            "_grade_rank",
+            "_signal_rank",
+            "setup_score",
+            "ret20_pct",
+            "rank_change",
+            "setup_change",
+            "risk_score",
+            "rank",
+        ],
+        ascending=[False, False, False, False, False, False, True, True],
+    ).reset_index(drop=True)
+    return df.drop(columns=["_grade_rank", "_signal_rank"])
 
-    out = df[base_mask & (cond_a | cond_b | cond_c | cond_d)].copy()
-    out = out.sort_values(
-        by=["setup_score", "ret20_pct", "risk_score", "rank"],
-        ascending=[False, False, True, True],
-    )
-    return out.head(rule.top_n_midlong).copy()
+
+def select_short_term_candidates(df_rank: pd.DataFrame) -> pd.DataFrame:
+    rule = CONFIG.notify
+    return rank_short_term_pool(df_rank).head(rule.top_n_short).copy()
+
+
+def select_short_term_backup_candidates(df_rank: pd.DataFrame, exclude_tickers: Optional[set[str]] = None) -> pd.DataFrame:
+    df = rank_short_term_pool(df_rank)
+    if exclude_tickers:
+        df = df[~df["ticker"].astype(str).isin(exclude_tickers)].copy()
+    return df.head(5).copy()
+
+
+def select_midlong_candidates(df_rank: pd.DataFrame, exclude_tickers: Optional[set[str]] = None) -> pd.DataFrame:
+    rule = CONFIG.notify
+    df = rank_midlong_pool(df_rank)
+    if exclude_tickers:
+        df = df[~df["ticker"].astype(str).isin(exclude_tickers)].copy()
+    return df.head(rule.top_n_midlong).copy()
+
+
+def select_midlong_backup_candidates(df_rank: pd.DataFrame, exclude_tickers: Optional[set[str]] = None) -> pd.DataFrame:
+    df = rank_midlong_pool(df_rank)
+    if exclude_tickers:
+        df = df[~df["ticker"].astype(str).isin(exclude_tickers)].copy()
+    return df.head(5).copy()
 
 
 def select_push_candidates(df_rank: pd.DataFrame) -> pd.DataFrame:
@@ -819,14 +835,18 @@ def select_push_candidates(df_rank: pd.DataFrame) -> pd.DataFrame:
     return pd.concat([short_candidates, midlong_candidates], ignore_index=True)
 
 
-def build_candidate_sets(df_rank: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+def build_candidate_sets(df_rank: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     short_candidates = select_short_term_candidates(df_rank)
     short_backups = select_short_term_backup_candidates(
         df_rank,
         exclude_tickers=set(short_candidates["ticker"].astype(str)),
     )
     midlong_candidates = select_midlong_candidates(df_rank)
-    return short_candidates, short_backups, midlong_candidates
+    midlong_backups = select_midlong_backup_candidates(
+        df_rank,
+        exclude_tickers=set(midlong_candidates["ticker"].astype(str)),
+    )
+    return short_candidates, short_backups, midlong_candidates, midlong_backups
 
 
 def build_state(df_rank: pd.DataFrame, market_regime: dict) -> str:
@@ -881,8 +901,8 @@ def should_alert(df_rank: pd.DataFrame, current_state: str, last_state: str, mar
         return True
     if current_state == last_state:
         return False
-    short_candidates, short_backups, midlong_candidates = build_candidate_sets(df_rank)
-    candidates = pd.concat([short_candidates, short_backups, midlong_candidates], ignore_index=True)
+    short_candidates, short_backups, midlong_candidates, midlong_backups = build_candidate_sets(df_rank)
+    candidates = pd.concat([short_candidates, short_backups, midlong_candidates, midlong_backups], ignore_index=True)
     if candidates.empty:
         return False
     if market_regime.get("is_bullish", True):
@@ -893,7 +913,7 @@ def should_alert(df_rank: pd.DataFrame, current_state: str, last_state: str, mar
 
 
 def build_short_term_message(df_rank: pd.DataFrame, market_regime: dict, us_market: dict) -> str:
-    short_candidates, short_backups, midlong_candidates = build_candidate_sets(df_rank)
+    short_candidates, short_backups, _, _ = build_candidate_sets(df_rank)
     total_a = int((df_rank["grade"] == "A").sum()) if not df_rank.empty else 0
     total_b = int((df_rank["grade"] == "B").sum()) if not df_rank.empty else 0
     total_up = int((df_rank["status_change"] == "UP").sum()) if "status_change" in df_rank.columns else 0
@@ -934,7 +954,7 @@ def build_short_term_message(df_rank: pd.DataFrame, market_regime: dict, us_mark
 
 
 def build_midlong_message(df_rank: pd.DataFrame, market_regime: dict, us_market: dict) -> str:
-    _, _, midlong_candidates = build_candidate_sets(df_rank)
+    _, _, midlong_candidates, midlong_backups = build_candidate_sets(df_rank)
     total_b = int((df_rank["grade"] == "B").sum()) if not df_rank.empty else 0
     lines = [
         "📣 中長線推薦",
@@ -956,6 +976,16 @@ def build_midlong_message(df_rank: pd.DataFrame, market_regime: dict, us_market:
             f"G{r['grade']} S{int(r['setup_score'])}/R{int(r['risk_score'])} | "
             f"20D {r['ret20_pct']}% 量比 {r['volume_ratio20']} | 投機 {r['spec_risk_label']} | {r['signals']}"
         )
+    if not midlong_backups.empty:
+        lines.append("")
+        lines.append("中長線候補 (最多5檔)")
+        for _, r in midlong_backups.iterrows():
+            action = midlong_action_label(r)
+            lines.append(
+                f"{int(r['rank'])}. [{layer_label(r['layer'])}] {r['name']} {r['ticker']} {action} | "
+                f"G{r['grade']} S{int(r['setup_score'])}/R{int(r['risk_score'])} | "
+                f"20D {r['ret20_pct']}% 量比 {r['volume_ratio20']} | 投機 {r['spec_risk_label']} | {r['signals']}"
+            )
     return "\n".join(lines).strip()
 
 
@@ -1167,7 +1197,7 @@ def build_daily_report_markdown(df_rank: pd.DataFrame, market_regime: dict, bt_s
             f"{r['ret5_pct']} | {r['ret10_pct']} | {r['ret20_pct']} | {r['volume_ratio20']} | {r['regime']} |"
         )
 
-    short_candidates, short_backups, midlong_candidates = build_candidate_sets(df_rank)
+    short_candidates, short_backups, midlong_candidates, midlong_backups = build_candidate_sets(df_rank)
 
     lines.extend(["", "## Short-Term Candidates", ""])
     if short_candidates.empty:
@@ -1198,6 +1228,18 @@ def build_daily_report_markdown(df_rank: pd.DataFrame, market_regime: dict, bt_s
         lines.append("- None")
     else:
         for _, r in midlong_candidates.iterrows():
+            lines.append(
+                f"- #{int(r['rank'])} {r['name']} {r['ticker']} [{r['group']}/{layer_label(r['layer'])}] | "
+                f"setup {r['setup_score']} risk {r['risk_score']} | "
+                f"10D {r['ret10_pct']}% 20D {r['ret20_pct']}% | 投機 {r['spec_risk_label']} | "
+                f"{r['signals']} | rankΔ {int(r['rank_change']):+d} setupΔ {int(r['setup_change']):+d}"
+            )
+
+    lines.extend(["", "## Mid-Long Backups", ""])
+    if midlong_backups.empty:
+        lines.append("- None")
+    else:
+        for _, r in midlong_backups.iterrows():
             lines.append(
                 f"- #{int(r['rank'])} {r['name']} {r['ticker']} [{r['group']}/{layer_label(r['layer'])}] | "
                 f"setup {r['setup_score']} risk {r['risk_score']} | "
@@ -1270,10 +1312,11 @@ def build_daily_report_markdown(df_rank: pd.DataFrame, market_regime: dict, bt_s
 def build_daily_report_html(df_rank: pd.DataFrame, market_regime: dict, bt_steady: Optional[pd.DataFrame], bt_attack: Optional[pd.DataFrame]) -> str:
     steady_html = "<p>None</p>" if bt_steady is None or bt_steady.empty else dataframe_to_html(bt_steady)
     attack_html = "<p>None</p>" if bt_attack is None or bt_attack.empty else dataframe_to_html(bt_attack)
-    short_candidates, short_backups, midlong_candidates = build_candidate_sets(df_rank)
+    short_candidates, short_backups, midlong_candidates, midlong_backups = build_candidate_sets(df_rank)
     short_html = "<p>None</p>" if short_candidates.empty else dataframe_to_html(short_candidates)
     short_backup_html = "<p>None</p>" if short_backups.empty else dataframe_to_html(short_backups)
     midlong_html = "<p>None</p>" if midlong_candidates.empty else dataframe_to_html(midlong_candidates)
+    midlong_backup_html = "<p>None</p>" if midlong_backups.empty else dataframe_to_html(midlong_backups)
     return f"""<!doctype html>
 <html><head><meta charset="utf-8"><title>Daily 20D v2.2 Attack Report</title>
 <style>
@@ -1288,6 +1331,7 @@ th {{ background: #f4f4f4; }}
 <h2>Short-Term Candidates</h2>{short_html}
 <h2>Short-Term Backups</h2>{short_backup_html}
 <h2>Mid-Long Candidates</h2>{midlong_html}
+<h2>Mid-Long Backups</h2>{midlong_backup_html}
 <h2>Steady Backtest</h2>{steady_html}
 <h2>Attack Backtest</h2>{attack_html}
 </body></html>"""
@@ -1347,7 +1391,7 @@ def main() -> int:
         logger.info("=== 今日排行榜 ===\n%s", df_rank.to_string(index=False))
         logger.info("Market regime: %s", market_regime["comment"])
 
-        short_candidates, short_backups, midlong_candidates = build_candidate_sets(df_rank)
+        short_candidates, short_backups, midlong_candidates, _ = build_candidate_sets(df_rank)
         upsert_alert_tracking(short_candidates, midlong_candidates)
         save_reports(df_rank, market_regime, bt_steady, bt_attack)
 
