@@ -248,7 +248,7 @@ class PushMessageTests(unittest.TestCase):
 
         self.assertIn("短線推薦", message)
         self.assertIn("中長線推薦", message)
-        self.assertTrue(any(label in message for label in ["可追", "等拉回", "續抱觀察", "分批落袋", "續抱", "可分批", "觀察"]))
+        self.assertTrue(any(label in message for label in ["可追", "等拉回", "開高不追", "續抱觀察", "分批落袋", "續抱", "可分批", "觀察"]))
 
 
 class SplitMessageTests(unittest.TestCase):

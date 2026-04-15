@@ -667,8 +667,10 @@ def short_term_action_label(row: pd.Series) -> str:
     vol_ratio = float(row["volume_ratio20"])
     signals = str(row["signals"])
 
-    if risk >= 4 or ret5 >= 18:
+    if risk >= 5 or ret5 >= 25:
         return "分批落袋"
+    if ret5 >= 15 or (risk >= 4 and ret5 >= 10):
+        return "開高不追"
     if "ACCEL" in signals and vol_ratio >= 1.3 and ret5 <= 12:
         return "可追"
     if ret5 >= 10:
