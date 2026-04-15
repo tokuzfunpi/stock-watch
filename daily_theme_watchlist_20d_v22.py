@@ -247,6 +247,51 @@ def layer_label(layer: str) -> str:
     return labels.get(layer, layer)
 
 
+def speculative_risk_score(
+    ret5_pct: float,
+    ret20_pct: float,
+    volume_ratio20: float,
+    bias20_pct: float,
+    risk_score: int,
+    signals: str,
+    group: str,
+) -> int:
+    score = 0
+    if ret5_pct >= 15:
+        score += 2
+    if ret5_pct >= 25:
+        score += 1
+    if ret20_pct >= 30:
+        score += 2
+    if volume_ratio20 >= 1.8:
+        score += 1
+    if volume_ratio20 >= 2.5:
+        score += 1
+    if bias20_pct >= 12:
+        score += 2
+    if risk_score >= 5:
+        score += 1
+    if "TREND" not in signals and "REBREAK" not in signals and ret5_pct >= 15:
+        score += 1
+
+    if "TREND" in signals:
+        score -= 1
+    if "REBREAK" in signals:
+        score -= 1
+    if group in {"core", "etf"}:
+        score -= 1
+
+    return max(score, 0)
+
+
+def speculative_risk_label(score: int) -> str:
+    if score >= 6:
+        return "疑似炒作風險高"
+    if score >= 3:
+        return "投機偏高"
+    return "正常"
+
+
 def detect_row(df: pd.DataFrame, ticker: str, name: str, group: str, layer: str) -> dict:
     x = df.iloc[-1]
     prev = df.iloc[-2] if len(df) >= 2 else x
@@ -398,6 +443,16 @@ def detect_row(df: pd.DataFrame, ticker: str, name: str, group: str, layer: str)
     else:
         regime = "還在觀察"
 
+    spec_score = speculative_risk_score(
+        ret5_pct=ret5 * 100,
+        ret20_pct=ret20 * 100,
+        volume_ratio20=vol_ratio20,
+        bias20_pct=bias20 * 100,
+        risk_score=risk_score,
+        signals=",".join(signals) if signals else "NONE",
+        group=group,
+    )
+
     return {
         "date": df.index[-1].strftime("%Y-%m-%d"),
         "ticker": ticker,
@@ -422,6 +477,8 @@ def detect_row(df: pd.DataFrame, ticker: str, name: str, group: str, layer: str)
         "signals": ",".join(signals) if signals else "NONE",
         "score_band": score_band(setup_score, risk_score),
         "regime": regime,
+        "spec_risk_score": int(spec_score),
+        "spec_risk_label": speculative_risk_label(spec_score),
     }
 
 
@@ -753,7 +810,10 @@ def short_term_action_label(row: pd.Series) -> str:
     ret5 = float(row["ret5_pct"])
     vol_ratio = float(row["volume_ratio20"])
     signals = str(row["signals"])
+    spec_label = str(row.get("spec_risk_label", "正常"))
 
+    if spec_label == "疑似炒作風險高":
+        return "只觀察不追"
     if risk >= 5 or ret5 >= 25:
         return "分批落袋"
     if ret5 >= 15 or (risk >= 4 and ret5 >= 10):
@@ -771,7 +831,10 @@ def midlong_action_label(row: pd.Series) -> str:
     risk = int(row["risk_score"])
     ret20 = float(row["ret20_pct"])
     signals = str(row["signals"])
+    spec_label = str(row.get("spec_risk_label", "正常"))
 
+    if spec_label == "疑似炒作風險高":
+        return "減碼觀察"
     if risk >= 5 or ret20 >= 25:
         return "分批落袋"
     if "TREND" in signals or "REBREAK" in signals:
@@ -823,7 +886,7 @@ def build_short_term_message(df_rank: pd.DataFrame, market_regime: dict, us_mark
         lines.append(
             f"{int(r['rank'])}. [{layer_label(r['layer'])}] {r['name']} {r['ticker']} {action} | "
             f"G{r['grade']} S{int(r['setup_score'])}/R{int(r['risk_score'])} | "
-            f"5D {r['ret5_pct']}% 量比 {r['volume_ratio20']} | {r['signals']}"
+            f"5D {r['ret5_pct']}% 量比 {r['volume_ratio20']} | 投機 {r['spec_risk_label']} | {r['signals']}"
         )
     if not short_backups.empty:
         lines.append("")
@@ -833,7 +896,7 @@ def build_short_term_message(df_rank: pd.DataFrame, market_regime: dict, us_mark
             lines.append(
                 f"{int(r['rank'])}. [{layer_label(r['layer'])}] {r['name']} {r['ticker']} {action} | "
                 f"G{r['grade']} S{int(r['setup_score'])}/R{int(r['risk_score'])} | "
-                f"5D {r['ret5_pct']}% 量比 {r['volume_ratio20']} | {r['signals']}"
+                f"5D {r['ret5_pct']}% 量比 {r['volume_ratio20']} | 投機 {r['spec_risk_label']} | {r['signals']}"
             )
     return "\n".join(lines).strip()
 
@@ -859,7 +922,7 @@ def build_midlong_message(df_rank: pd.DataFrame, market_regime: dict, us_market:
         lines.append(
             f"{int(r['rank'])}. [{layer_label(r['layer'])}] {r['name']} {r['ticker']} {action} | "
             f"G{r['grade']} S{int(r['setup_score'])}/R{int(r['risk_score'])} | "
-            f"20D {r['ret20_pct']}% 量比 {r['volume_ratio20']} | {r['signals']}"
+            f"20D {r['ret20_pct']}% 量比 {r['volume_ratio20']} | 投機 {r['spec_risk_label']} | {r['signals']}"
         )
     return "\n".join(lines).strip()
 
@@ -1061,13 +1124,13 @@ def build_daily_report_markdown(df_rank: pd.DataFrame, market_regime: dict, bt_s
         "",
         "## Top Ranking",
         "",
-        "| Rank | Grade | Name | Ticker | Group | Layer | Setup | Risk | Signals | RankΔ | SetupΔ | 5D% | 10D% | 20D% | VolRatio | Regime |",
-        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+        "| Rank | Grade | Name | Ticker | Group | Layer | Setup | Risk | 投機風險 | Signals | RankΔ | SetupΔ | 5D% | 10D% | 20D% | VolRatio | Regime |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
     for _, r in df_rank.iterrows():
         lines.append(
             f"| {int(r['rank'])} | {r['grade']} | {r['name']} | {r['ticker']} | {r['group']} | {layer_label(r['layer'])} | "
-            f"{int(r['setup_score'])} | {int(r['risk_score'])} | {r['signals']} | "
+            f"{int(r['setup_score'])} | {int(r['risk_score'])} | {r['spec_risk_label']} | {r['signals']} | "
             f"{int(r['rank_change']):+d} | {int(r['setup_change']):+d} | "
             f"{r['ret5_pct']} | {r['ret10_pct']} | {r['ret20_pct']} | {r['volume_ratio20']} | {r['regime']} |"
         )
@@ -1082,7 +1145,7 @@ def build_daily_report_markdown(df_rank: pd.DataFrame, market_regime: dict, bt_s
             lines.append(
                 f"- #{int(r['rank'])} {r['name']} {r['ticker']} [{r['group']}/{layer_label(r['layer'])}] | "
                 f"setup {r['setup_score']} risk {r['risk_score']} | "
-                f"5D {r['ret5_pct']}% 10D {r['ret10_pct']}% 20D {r['ret20_pct']}% | "
+                f"5D {r['ret5_pct']}% 10D {r['ret10_pct']}% 20D {r['ret20_pct']}% | 投機 {r['spec_risk_label']} | "
                 f"{r['signals']} | rankΔ {int(r['rank_change']):+d} setupΔ {int(r['setup_change']):+d}"
             )
 
@@ -1094,7 +1157,7 @@ def build_daily_report_markdown(df_rank: pd.DataFrame, market_regime: dict, bt_s
             lines.append(
                 f"- #{int(r['rank'])} {r['name']} {r['ticker']} [{r['group']}/{layer_label(r['layer'])}] | "
                 f"setup {r['setup_score']} risk {r['risk_score']} | "
-                f"5D {r['ret5_pct']}% 10D {r['ret10_pct']}% 20D {r['ret20_pct']}% | "
+                f"5D {r['ret5_pct']}% 10D {r['ret10_pct']}% 20D {r['ret20_pct']}% | 投機 {r['spec_risk_label']} | "
                 f"{r['signals']} | rankΔ {int(r['rank_change']):+d} setupΔ {int(r['setup_change']):+d}"
             )
 
@@ -1106,7 +1169,7 @@ def build_daily_report_markdown(df_rank: pd.DataFrame, market_regime: dict, bt_s
             lines.append(
                 f"- #{int(r['rank'])} {r['name']} {r['ticker']} [{r['group']}/{layer_label(r['layer'])}] | "
                 f"setup {r['setup_score']} risk {r['risk_score']} | "
-                f"10D {r['ret10_pct']}% 20D {r['ret20_pct']}% | "
+                f"10D {r['ret10_pct']}% 20D {r['ret20_pct']}% | 投機 {r['spec_risk_label']} | "
                 f"{r['signals']} | rankΔ {int(r['rank_change']):+d} setupΔ {int(r['setup_change']):+d}"
             )
 

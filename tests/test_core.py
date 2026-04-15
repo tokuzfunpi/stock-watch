@@ -10,6 +10,8 @@ from daily_theme_watchlist_20d_v22 import (
     build_short_term_message,
     detect_row,
     grade_signal,
+    speculative_risk_label,
+    speculative_risk_score,
     select_midlong_candidates,
     select_short_term_candidates,
     select_push_candidates,
@@ -67,6 +69,22 @@ class GradeSignalTests(unittest.TestCase):
         }
 
         self.assertEqual(grade_signal(row), "C")
+
+
+class SpeculativeRiskTests(unittest.TestCase):
+    def test_speculative_risk_flags_hot_non_trend_name(self) -> None:
+        score = speculative_risk_score(
+            ret5_pct=26.0,
+            ret20_pct=38.0,
+            volume_ratio20=2.6,
+            bias20_pct=14.0,
+            risk_score=6,
+            signals="SURGE",
+            group="theme",
+        )
+
+        self.assertGreaterEqual(score, 6)
+        self.assertEqual(speculative_risk_label(score), "疑似炒作風險高")
 
 
 class SelectPushCandidatesTests(unittest.TestCase):
@@ -212,6 +230,7 @@ class PushMessageTests(unittest.TestCase):
                     "ret10_pct": 12.0,
                     "ret20_pct": 15.0,
                     "volume_ratio20": 1.6,
+                    "spec_risk_label": "正常",
                     "signals": "ACCEL",
                     "rank_change": 1,
                     "setup_change": 1,
@@ -233,6 +252,7 @@ class PushMessageTests(unittest.TestCase):
                     "ret10_pct": 8.0,
                     "ret20_pct": 14.0,
                     "volume_ratio20": 1.1,
+                    "spec_risk_label": "正常",
                     "signals": "TREND",
                     "rank_change": 1,
                     "setup_change": 1,
@@ -252,10 +272,12 @@ class PushMessageTests(unittest.TestCase):
         self.assertIn("短線推薦", short_message)
         self.assertIn("美股昨晚偏強", short_message)
         self.assertIn("短線候補", short_message)
+        self.assertIn("投機 正常", short_message)
         self.assertTrue(any(label in short_message for label in ["可追", "等拉回", "開高不追", "續抱觀察", "分批落袋"]))
 
         self.assertIn("中長線推薦", midlong_message)
         self.assertIn("美股昨晚偏強", midlong_message)
+        self.assertIn("投機 正常", midlong_message)
         self.assertTrue(any(label in midlong_message for label in ["續抱", "可分批", "觀察", "分批落袋"]))
 
 
