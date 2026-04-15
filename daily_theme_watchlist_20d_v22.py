@@ -612,6 +612,14 @@ def get_us_market_reference() -> dict:
     else:
         tone = "美股昨晚中性，台股仍以個股表現為主。"
 
+    tech_bias = ""
+    soxx_1d = float(df_ref.loc[df_ref["name"] == "SOXX", "ret1_pct"].iloc[0])
+    nasdaq_1d = float(df_ref.loc[df_ref["name"] == "NASDAQ", "ret1_pct"].iloc[0])
+    if soxx_1d <= -1.5 or nasdaq_1d <= -1.2:
+        tech_bias = "美股科技偏弱，今天台股電子股先保守，不追開高。"
+    elif soxx_1d >= 1.5 and nasdaq_1d >= 1.0:
+        tech_bias = "美股科技偏強，台股電子股若量價配合可積極一點。"
+
     summary = (
         f"{tone} "
         f"S&P500 {df_ref.loc[df_ref['name']=='S&P500', 'ret1_pct'].iloc[0]:+.2f}% / "
@@ -620,7 +628,7 @@ def get_us_market_reference() -> dict:
         f"NVDA {df_ref.loc[df_ref['name']=='NVDA', 'ret1_pct'].iloc[0]:+.2f}% "
         f"(5日均值 {avg_5d:+.2f}%)"
     )
-    return {"summary": summary, "rows": rows}
+    return {"summary": summary, "tech_bias": tech_bias, "rows": rows}
 
 
 def reorder_priority_groups(df_rank: pd.DataFrame) -> pd.DataFrame:
@@ -771,6 +779,8 @@ def build_short_term_message(df_rank: pd.DataFrame, market_regime: dict, us_mark
         us_market["summary"],
         f"A級 {total_a} 檔，B級 {total_b} 檔，轉強 {total_up} 檔。",
     ]
+    if us_market.get("tech_bias"):
+        lines.append(us_market["tech_bias"])
     if short_candidates.empty:
         lines.append("今天短線沒有夠清楚的機會，先等。")
         return "\n".join(lines)
