@@ -1,0 +1,2 @@
+﻿date,ticker,name,group,layer,close,ret1_pct,ret5_pct,ret10_pct,ret20_pct,volume,avg_vol20,volume_ratio20,ma20,ma60,ma120,drawdown120_pct,bias20_pct,setup_score,risk_score,signals,score_band,regime,spec_risk_score,spec_risk_label
+2026-04-15,00878.TW,國泰永續高股息,etf,midlong_core,23.39,0.82,2.05,5.79,4.28,90708755,53748184,1.69,22.54,22.52,21.65,-1.47,3.76,6,1,NONE,偏強可追蹤,還在觀察,0,正常
