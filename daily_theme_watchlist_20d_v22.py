@@ -661,6 +661,37 @@ def build_state(df_rank: pd.DataFrame, market_regime: dict) -> str:
     return f"market={market_regime.get('is_bullish', True)}||{base_state}"
 
 
+def short_term_action_label(row: pd.Series) -> str:
+    risk = int(row["risk_score"])
+    ret5 = float(row["ret5_pct"])
+    vol_ratio = float(row["volume_ratio20"])
+    signals = str(row["signals"])
+
+    if risk >= 4 or ret5 >= 18:
+        return "分批落袋"
+    if "ACCEL" in signals and vol_ratio >= 1.3 and ret5 <= 12:
+        return "可追"
+    if ret5 >= 10:
+        return "等拉回"
+    if row["setup_change"] > 0 or row["rank_change"] > 0:
+        return "續抱觀察"
+    return "續追蹤"
+
+
+def midlong_action_label(row: pd.Series) -> str:
+    risk = int(row["risk_score"])
+    ret20 = float(row["ret20_pct"])
+    signals = str(row["signals"])
+
+    if risk >= 5 or ret20 >= 25:
+        return "分批落袋"
+    if "TREND" in signals or "REBREAK" in signals:
+        return "續抱"
+    if row["setup_change"] > 0 or row["rank_change"] > 0:
+        return "可分批"
+    return "觀察"
+
+
 def should_alert(df_rank: pd.DataFrame, current_state: str, last_state: str, market_regime: dict) -> bool:
     if CONFIG.always_notify:
         return True
@@ -699,12 +730,7 @@ def build_push_message(df_rank: pd.DataFrame, market_regime: dict) -> str:
         lines.append("暫無")
     else:
         for _, r in short_candidates.iterrows():
-            if r["grade"] == "A":
-                action = "可優先看"
-            elif r["setup_change"] > 0 or r["rank_change"] > 0:
-                action = "轉強中"
-            else:
-                action = "續追蹤"
+            action = short_term_action_label(r)
 
             lines.append(
                 f"{int(r['rank'])}. [{layer_label(r['layer'])}] {r['name']} {r['ticker']} {action} | "
@@ -718,12 +744,7 @@ def build_push_message(df_rank: pd.DataFrame, market_regime: dict) -> str:
         lines.append("暫無")
     else:
         for _, r in midlong_candidates.iterrows():
-            if "REBREAK" in r["signals"] or "TREND" in r["signals"]:
-                action = "趨勢續強"
-            elif r["setup_change"] > 0:
-                action = "結構轉好"
-            else:
-                action = "可續抱觀察"
+            action = midlong_action_label(r)
 
             lines.append(
                 f"{int(r['rank'])}. [{layer_label(r['layer'])}] {r['name']} {r['ticker']} {action} | "
