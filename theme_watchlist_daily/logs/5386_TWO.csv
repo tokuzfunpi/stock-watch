@@ -1,4 +1,4 @@
 ﻿date,ticker,name,close,ret5_pct,ret20_pct,volume,avg_vol20,ma20,ma60,ma120,drawdown120_pct,bias20_pct,setup_score,risk_score,signals,score_band,regime,group,grade,ret1_pct,ret3_pct,ret10_pct,volume_ratio20,ma5,ma10,drawdown20_pct,drawdown60_pct,bias5_pct,layer
 2026-04-10,5386.TWO,青雲,339.0,18.12,6.27,233973,591779,327.15,201.38,137.21,-23.13,3.62,10,2,PULLBACK,進攻優勢區,高檔拉回整理,theme,,6.1,,5.61,0.4,,,,,,
 2026-04-13,5386.TWO,青雲,330.0,19.57,14.78,280259,563349,329.27,205.39,139.42,-25.17,0.22,12,2,"TREND,PULLBACK",進攻優勢區,中段延續中,theme,,-2.65,,14.19,0.5,,,,,,
-2026-04-14,5386.TWO,青雲,351.0,15.65,11.78,113276,528329,331.12,209.82,141.81,-20.41,6.0,11,0,"TREND,PULLBACK",進攻優勢區,中段延續中,theme,,6.36,,34.74,0.21,,,,,,short_attack
+2026-04-14,5386.TWO,青雲,363.0,19.6,15.61,415926,543462,331.73,210.02,141.91,-17.69,9.43,12,3,TREND,進攻優勢區,中段延續中,theme,,10.0,,39.35,0.77,,,,,,short_attack

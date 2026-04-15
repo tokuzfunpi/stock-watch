@@ -1,2 +1,2 @@
 ﻿date,ticker,name,group,layer,close,ret1_pct,ret5_pct,ret10_pct,ret20_pct,volume,avg_vol20,volume_ratio20,ma20,ma60,ma120,drawdown120_pct,bias20_pct,setup_score,risk_score,signals,score_band,regime
-2026-04-14,2891.TW,中信金,core,midlong_core,53.8,0.94,-3.58,1.51,4.87,9231985,40995285,0.23,53.18,51.97,48.33,-4.78,1.16,5,1,NONE,開始轉強,還在觀察
+2026-04-14,2891.TW,中信金,core,midlong_core,53.1,-0.38,-4.84,0.19,3.51,45517593,42809566,1.06,53.15,51.96,48.32,-6.02,-0.09,3,0,NONE,一般觀察,還在觀察

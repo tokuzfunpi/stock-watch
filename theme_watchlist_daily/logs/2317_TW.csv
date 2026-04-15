@@ -1,4 +1,4 @@
 ﻿date,ticker,name,group,close,ret5_pct,ret20_pct,volume,avg_vol20,ma20,ma60,ma120,drawdown120_pct,bias20_pct,setup_score,risk_score,signals,score_band,regime,grade,ret1_pct,ret3_pct,ret10_pct,volume_ratio20,ma5,ma10,drawdown20_pct,drawdown60_pct,bias5_pct,layer
 2026-04-10,2317.TW,鴻海,core,200.5,1.78,-8.45,55780853,55642473,201.6,217.72,224.98,-23.47,-0.55,0,0,PULLBACK,一般觀察,高檔拉回整理,,0.25,,0.25,1.0,,,,,,
 2026-04-13,2317.TW,鴻海,core,200.0,3.63,-6.76,36786764,55334121,200.88,217.14,224.75,-23.66,-0.44,1,0,PULLBACK,一般觀察,高檔拉回整理,,-0.25,,-0.25,0.66,,,,,,
-2026-04-14,2317.TW,鴻海,core,206.0,7.29,-3.96,21072285,54592997,200.45,216.64,224.59,-21.37,2.77,4,0,PULLBACK,開始轉強,高檔拉回整理,,3.0,,3.26,0.39,,,,,,midlong_core
+2026-04-14,2317.TW,鴻海,core,207.5,8.07,-3.26,56963436,56387554,200.53,216.67,224.6,-20.8,3.48,4,0,PULLBACK,開始轉強,高檔拉回整理,,3.75,,4.01,1.01,,,,,,midlong_core
