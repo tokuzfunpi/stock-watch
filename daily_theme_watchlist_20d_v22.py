@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 import requests
@@ -28,6 +29,7 @@ PREV_RANK_CSV = OUTDIR / "prev_daily_rank.csv"
 REPORT_MD = OUTDIR / "daily_report.md"
 REPORT_HTML = OUTDIR / "daily_report.html"
 ALERT_TRACK_CSV = OUTDIR / "alert_tracking.csv"
+SUCCESS_FILE = OUTDIR / "last_success_date.txt"
 LOG_DIR = OUTDIR / "logs"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -35,6 +37,8 @@ TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "").strip()
 TELEGRAM_CHAT_IDS = [int(x.strip()) for x in os.getenv("TELEGRAM_CHAT_IDS", "").split(",") if x.strip()]
 HTTP_TIMEOUT = int(os.getenv("HTTP_TIMEOUT", "20"))
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+FORCE_RUN = os.getenv("FORCE_RUN", "").strip().lower() in {"1", "true", "yes", "y"}
+LOCAL_TZ = ZoneInfo(os.getenv("LOCAL_TZ", "Asia/Taipei"))
 
 
 @dataclass
@@ -518,6 +522,20 @@ def load_last_state() -> str:
 def save_last_state(state: str) -> None:
     if CONFIG.state_enabled:
         STATE_FILE.write_text(state, encoding="utf-8")
+
+
+def today_local_str() -> str:
+    return datetime.now(LOCAL_TZ).strftime("%Y-%m-%d")
+
+
+def load_last_success_date() -> str:
+    if not SUCCESS_FILE.exists():
+        return ""
+    return SUCCESS_FILE.read_text(encoding="utf-8").strip()
+
+
+def save_last_success_date(success_date: str) -> None:
+    SUCCESS_FILE.write_text(success_date, encoding="utf-8")
 
 
 def get_market_regime() -> dict:
@@ -1073,6 +1091,10 @@ def send_telegram_message(message: str) -> None:
 
 def main() -> int:
     try:
+        if not FORCE_RUN and load_last_success_date() == today_local_str():
+            logger.info("Already completed successfully for %s. Skip duplicate run.", today_local_str())
+            return 0
+
         market_regime = get_market_regime()
         df_rank = run_watchlist()
         bt_steady, bt_attack = run_backtest_dual()
@@ -1094,6 +1116,7 @@ def main() -> int:
             logger.info("No notification sent.")
 
         save_last_state(current_state)
+        save_last_success_date(today_local_str())
         return 0
     except Exception as exc:
         err_msg = f"Watchlist job failed: {exc}"
