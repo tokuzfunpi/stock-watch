@@ -22,10 +22,10 @@
 2026-04-14,2465.TW,麗臺,theme,B,5,12,0,TREND,中段延續中,62.0,,,,OPEN,midlong,
 2026-04-14,2308.TW,台達電,core,B,18,8,3,TREND,中段延續中,1765.0,,,,OPEN,short,midlong_core
 2026-04-14,2308.TW,台達電,core,B,19,8,3,TREND,中段延續中,1750.0,,,,OPEN,midlong,midlong_core
-2026-04-14,3711.TW,日月光投控,core,X,17,8,5,TREND,中段延續中,431.0,,,,OPEN,midlong,midlong_core
+2026-04-14,3711.TW,日月光投控,core,X,24,7,5,TREND,中段延續中,424.0,,,,OPEN,midlong,midlong_core
 2026-04-14,2330.TW,台積電,core,A,21,8,2,"TREND,ACCEL",轉強速度有出來,2055.0,,,,OPEN,midlong,midlong_core
 2026-04-14,3014.TW,聯陽,satellite,B,22,8,0,NONE,還在觀察,120.5,,,,OPEN,midlong,midlong_core
-2026-04-14,3035.TW,智原,satellite,B,24,7,0,NONE,還在觀察,151.5,,,,OPEN,midlong,midlong_core
+2026-04-14,3035.TW,智原,satellite,B,26,6,0,NONE,還在觀察,153.0,,,,OPEN,midlong,midlong_core
 2026-04-14,3057.TW,喬鼎,theme,A,3,14,4,"SURGE,ACCEL,PULLBACK",題材正在發酵,18.75,,,,OPEN,short,short_attack
 2026-04-14,2465.TW,麗臺,theme,A,4,13,1,"TREND,ACCEL,PULLBACK",轉強速度有出來,60.6,,,,OPEN,short,short_attack
 2026-04-14,2356.TW,英業達,theme,A,5,13,0,ACCEL,轉強速度有出來,44.6,,,,OPEN,short,short_attack
@@ -33,3 +33,7 @@
 2026-04-14,3450.TW,聯鈞,theme,A,11,11,3,"TREND,ACCEL",轉強速度有出來,314.5,,,,OPEN,short,short_attack
 2026-04-14,5274.TWO,信驊,satellite,B,17,9,2,TREND,中段延續中,13005.0,,,,OPEN,midlong,midlong_core
 2026-04-14,2454.TW,聯發科,core,B,18,8,0,NONE,還在觀察,1720.0,,,,OPEN,midlong,midlong_core
+2026-04-14,2330.TW,台積電,core,A,21,8,2,"TREND,ACCEL",轉強速度有出來,2055.0,,,,OPEN,short,midlong_core
+2026-04-14,2886.TW,兆豐金,core,X,27,6,0,BASE,低檔慢慢墊高,39.35,,,,OPEN,midlong,midlong_core
+2026-04-13,0050.TW,元大台灣50,etf,B,29,5,1,NONE,還在觀察,80.6,,,,OPEN,midlong,midlong_core
+2026-04-13,0052.TW,富邦科技,etf,B,28,5,0,PULLBACK,高檔拉回整理,47.86,,,,OPEN,midlong,midlong_core
