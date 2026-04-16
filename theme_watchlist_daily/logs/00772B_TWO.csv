@@ -1,2 +1,2 @@
 ﻿date,ticker,name,group,layer,close,ret1_pct,ret5_pct,ret10_pct,ret20_pct,volume,avg_vol20,volume_ratio20,ma20,ma60,ma120,drawdown120_pct,bias20_pct,setup_score,risk_score,signals,score_band,regime,spec_risk_score,spec_risk_label
-2026-04-15,00772B.TWO,中信高評級公司債,etf,defensive_watch,34.31,0.32,-0.26,2.02,1.69,3912652,3369782,1.16,33.96,34.03,33.79,-0.54,1.04,5,1,NONE,開始轉強,還在觀察,0,正常
+2026-04-15,00772B.TWO,中信高評級公司債,etf,defensive_watch,34.31,0.32,-0.26,2.02,1.69,3896000,3368950,1.16,33.96,34.03,33.79,-0.54,1.04,5,1,NONE,開始轉強,還在觀察,0,正常

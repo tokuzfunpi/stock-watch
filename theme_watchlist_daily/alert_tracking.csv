@@ -39,13 +39,13 @@
 2026-04-13,0052.TW,富邦科技,etf,B,28,5,0,PULLBACK,高檔拉回整理,47.86,4.37,,,OPEN,midlong,midlong_core
 2026-04-15,2495.TW,普安,theme,B,3,12,4,TREND,中段延續中,41.2,,,,OPEN,short,short_attack
 2026-04-15,2388.TW,威盛,theme,A,3,15,4,"SURGE,TREND,ACCEL",題材正在發酵,62.4,,,,OPEN,short,short_attack
-2026-04-15,8111.TWO,立碁,theme,A,6,12,3,ACCEL,轉強速度有出來,70.7,,,,OPEN,short,short_attack
+2026-04-15,8111.TWO,立碁,theme,A,7,12,3,ACCEL,轉強速度有出來,70.7,,,,OPEN,short,short_attack
 2026-04-15,5274.TWO,信驊,satellite,B,15,8,4,TREND,中段延續中,13535.0,,,,OPEN,short,midlong_core
 2026-04-15,3661.TW,世芯-KY,satellite,B,20,7,1,NONE,還在觀察,3260.0,,,,OPEN,short,midlong_core
 2026-04-15,3711.TW,日月光投控,core,B,13,8,3,TREND,中段延續中,438.5,,,,OPEN,short,midlong_core
 2026-04-15,0052.TW,富邦科技,etf,B,24,6,1,"TREND,PULLBACK",中段延續中,49.96,,,,OPEN,short,midlong_core
 2026-04-15,0050.TW,元大台灣50,etf,B,25,6,2,TREND,中段延續中,84.05,,,,OPEN,short,midlong_core
-2026-04-15,2454.TW,聯發科,core,A,13,8,3,ACCEL,轉強速度有出來,1790.0,,,,OPEN,midlong,midlong_core
+2026-04-15,2454.TW,聯發科,core,A,13,8,2,ACCEL,轉強速度有出來,1790.0,,,,OPEN,midlong,midlong_core
 2026-04-15,5274.TWO,信驊,satellite,B,15,8,4,TREND,中段延續中,13535.0,,,,OPEN,midlong,midlong_core
 2026-04-15,3711.TW,日月光投控,core,B,13,8,3,TREND,中段延續中,438.5,,,,OPEN,midlong,midlong_core
 2026-04-15,2330.TW,台積電,core,A,19,7,2,"TREND,ACCEL",轉強速度有出來,2080.0,,,,OPEN,midlong,midlong_core
@@ -53,7 +53,9 @@
 2026-04-15,0052.TW,富邦科技,etf,B,23,6,1,"TREND,PULLBACK",中段延續中,50.15,,,,OPEN,midlong,midlong_core
 2026-04-15,4919.TW,新唐,theme,A,2,15,3,"SURGE,TREND,ACCEL",題材正在發酵,107.0,,,,OPEN,short,short_attack
 2026-04-15,2399.TW,映泰,theme,A,9,11,4,"SURGE,TREND,ACCEL",題材正在發酵,37.05,,,,OPEN,short,short_attack
-2026-04-15,2454.TW,聯發科,core,A,13,8,3,ACCEL,轉強速度有出來,1790.0,,,,OPEN,short,midlong_core
+2026-04-15,2454.TW,聯發科,core,A,13,8,2,ACCEL,轉強速度有出來,1790.0,,,,OPEN,short,midlong_core
 2026-04-15,00878.TW,國泰永續高股息,etf,B,22,6,1,NONE,還在觀察,23.39,,,,OPEN,midlong,midlong_core
 2026-04-15,3661.TW,世芯-KY,satellite,B,26,5,0,NONE,還在觀察,3210.0,,,,OPEN,midlong,midlong_core
 2026-04-15,00679B.TWO,元大美債20年,etf,B,29,5,1,NONE,還在觀察,27.26,,,,OPEN,midlong,defensive_watch
+2026-04-14,0052.TW,富邦科技,etf,B,21,6,1,"TREND,PULLBACK",中段延續中,49.33,,,,OPEN,midlong,midlong_core
+2026-04-14,0050.TW,元大台灣50,etf,B,27,5,2,TREND,中段延續中,83.1,,,,OPEN,midlong,midlong_core

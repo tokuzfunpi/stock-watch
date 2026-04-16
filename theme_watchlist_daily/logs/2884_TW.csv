@@ -1,3 +1,3 @@
 ﻿date,ticker,name,group,layer,close,ret1_pct,ret5_pct,ret10_pct,ret20_pct,volume,avg_vol20,volume_ratio20,ma20,ma60,ma120,drawdown120_pct,bias20_pct,setup_score,risk_score,signals,score_band,regime,spec_risk_score,spec_risk_label
 2026-04-14,2884.TW,玉山金,core,midlong_core,32.7,2.03,0.93,1.55,-1.06,30915340,31237718,0.99,32.11,33.08,32.35,-6.84,1.84,5,0,NONE,開始轉強,還在觀察,,
-2026-04-15,2884.TW,玉山金,core,midlong_core,32.95,0.76,1.54,2.97,2.33,38010938,29796824,1.28,32.15,33.07,32.35,-6.13,2.5,5,0,NONE,開始轉強,還在觀察,0.0,正常
+2026-04-15,2884.TW,玉山金,core,midlong_core,32.95,0.76,1.54,2.97,2.33,37815055,29787030,1.27,32.15,33.07,32.35,-6.13,2.5,5,0,NONE,開始轉強,還在觀察,0.0,正常
