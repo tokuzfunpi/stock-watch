@@ -1003,6 +1003,73 @@ def select_special_etf_candidates(df_rank: pd.DataFrame) -> pd.DataFrame:
     return df.drop(columns=["_ticker_order"])
 
 
+def select_early_gem_candidates(df_rank: pd.DataFrame) -> pd.DataFrame:
+    if df_rank.empty:
+        return df_rank.head(0).copy()
+
+    df = reorder_priority_groups(df_rank)
+    df = df[
+        (df["setup_score"] >= 4)
+        & (df["risk_score"] <= 4)
+        & (df["ret20_pct"] >= 2)
+        & (df["ret20_pct"] <= 18)
+        & (df["ret5_pct"] >= -2)
+        & (df["ret5_pct"] <= 8)
+        & (df["volume_ratio20"] >= 0.8)
+        & (df["volume_ratio20"] <= 1.8)
+        & (df["spec_risk_label"] == "正常")
+    ].copy()
+    if df.empty:
+        return df
+
+    signal_mask = df["signals"].fillna("").str.contains("TREND|REBREAK|BASE|ACCEL")
+    change_mask = (df["setup_change"] > 0) | (df["rank_change"] > 0)
+    df = df[signal_mask | change_mask].copy()
+    if df.empty:
+        return df
+
+    df["_grade_rank"] = _apply_grade_rank(df)
+    df["_signal_rank"] = _signal_strength(df, "TREND|REBREAK|BASE|ACCEL")
+    df = df.sort_values(
+        by=[
+            "_grade_rank",
+            "_signal_rank",
+            "setup_change",
+            "rank_change",
+            "setup_score",
+            "ret20_pct",
+            "volume_ratio20",
+            "rank",
+        ],
+        ascending=[False, False, False, False, False, False, False, True],
+    ).reset_index(drop=True)
+    return df.drop(columns=["_grade_rank", "_signal_rank"]).head(5).copy()
+
+
+def early_gem_reason(row: pd.Series) -> str:
+    reasons: list[str] = []
+    signals = str(row["signals"])
+    if "REBREAK" in signals:
+        reasons.append("重新站回結構")
+    elif "TREND" in signals:
+        reasons.append("趨勢剛延續")
+    elif "BASE" in signals:
+        reasons.append("底部墊高")
+    elif "ACCEL" in signals:
+        reasons.append("剛開始加速")
+
+    if int(row["setup_change"]) > 0:
+        reasons.append("setup 轉強")
+    if int(row["rank_change"]) > 0:
+        reasons.append("排名上升")
+    if float(row["ret20_pct"]) <= 10:
+        reasons.append("20日漲幅還不算熱")
+    if float(row["volume_ratio20"]) <= 1.3:
+        reasons.append("量能溫和")
+
+    return " + ".join(reasons[:3]) if reasons else "早期轉強觀察"
+
+
 def build_special_etf_summary(etf_candidates: pd.DataFrame) -> list[str]:
     if etf_candidates.empty:
         return ["今天指定 ETF / 債券標的沒有抓到完整資料，先看盤中報表。"]
@@ -1030,6 +1097,30 @@ def build_special_etf_summary(etf_candidates: pd.DataFrame) -> list[str]:
             summary.append("債券 ETF 偏弱，代表利率面壓力仍在。")
 
     return summary or ["ETF / 債券整體訊號還不夠明確，先觀察。"]
+
+
+def build_early_gem_message(df_rank: pd.DataFrame, market_regime: dict, us_market: dict) -> str:
+    gem_candidates = select_early_gem_candidates(df_rank)
+    lines = [
+        "📣 早期轉強觀察",
+        market_regime["comment"],
+        us_market["summary"],
+    ]
+    lines.extend(runtime_context_lines())
+    if gem_candidates.empty:
+        lines.append("今天沒有特別像『還沒完全被市場定價，但已開始轉強』的標的。")
+        return "\n".join(lines).strip()
+
+    lines.append("解讀：這一區不是追最熱，而是找剛轉強、還沒太擁擠的候選。")
+    lines.append("")
+    for _, r in gem_candidates.iterrows():
+        lines.append(
+            f"{int(r['rank'])}. [{layer_label(r['layer'])}] {r['name']} {r['ticker']} | "
+            f"G{r['grade']} S{int(r['setup_score'])}/R{int(r['risk_score'])} | "
+            f"5D {r['ret5_pct']}% 20D {r['ret20_pct']}% 量比 {r['volume_ratio20']} | "
+            f"{early_gem_reason(r)}"
+        )
+    return "\n".join(lines).strip()
 
 
 def build_special_etf_message(df_rank: pd.DataFrame, market_regime: dict, us_market: dict) -> str:
@@ -1411,6 +1502,7 @@ def build_daily_report_markdown(df_rank: pd.DataFrame, market_regime: dict, bt_s
             )
 
     special_etf_candidates = select_special_etf_candidates(df_rank)
+    gem_candidates = select_early_gem_candidates(df_rank)
     lines.extend(["", "## ETF / 債券觀察", ""])
     if special_etf_candidates.empty:
         lines.append("- None")
@@ -1424,6 +1516,18 @@ def build_daily_report_markdown(df_rank: pd.DataFrame, market_regime: dict, bt_s
                 f"setup {r['setup_score']} risk {r['risk_score']} | "
                 f"5D {r['ret5_pct']}% 20D {r['ret20_pct']}% | 投機 {r['spec_risk_label']} | "
                 f"{r['signals']} | 操作 {special_etf_action_label(r)}"
+            )
+
+    lines.extend(["", "## Early Gem Watch", ""])
+    if gem_candidates.empty:
+        lines.append("- None")
+    else:
+        for _, r in gem_candidates.iterrows():
+            lines.append(
+                f"- #{int(r['rank'])} {r['name']} {r['ticker']} [{r['group']}/{layer_label(r['layer'])}] | "
+                f"setup {r['setup_score']} risk {r['risk_score']} | "
+                f"5D {r['ret5_pct']}% 20D {r['ret20_pct']}% | 投機 {r['spec_risk_label']} | "
+                f"{r['signals']} | 理由 {early_gem_reason(r)}"
             )
 
     lines.extend([
@@ -1498,6 +1602,8 @@ def build_daily_report_html(df_rank: pd.DataFrame, market_regime: dict, bt_stead
     midlong_backup_html = "<p>None</p>" if midlong_backups.empty else dataframe_to_html(midlong_backups)
     special_etf_candidates = select_special_etf_candidates(df_rank)
     special_etf_html = "<p>None</p>" if special_etf_candidates.empty else dataframe_to_html(special_etf_candidates)
+    gem_candidates = select_early_gem_candidates(df_rank)
+    gem_html = "<p>None</p>" if gem_candidates.empty else dataframe_to_html(gem_candidates)
     return f"""<!doctype html>
 <html><head><meta charset="utf-8"><title>Daily 20D v2.2 Attack Report</title>
 <style>
@@ -1514,6 +1620,7 @@ th {{ background: #f4f4f4; }}
 <h2>Mid-Long Candidates</h2>{midlong_html}
 <h2>Mid-Long Backups</h2>{midlong_backup_html}
 <h2>ETF / 債券觀察</h2>{special_etf_html}
+<h2>Early Gem Watch</h2>{gem_html}
 <h2>Steady Backtest</h2>{steady_html}
 <h2>Attack Backtest</h2>{attack_html}
 </body></html>"""
@@ -1584,6 +1691,7 @@ def main() -> int:
             send_telegram_message(build_short_term_message(df_rank, market_regime, us_market))
             send_telegram_message(build_midlong_message(df_rank, market_regime, us_market))
             send_telegram_message(build_special_etf_message(df_rank, market_regime, us_market))
+            send_telegram_message(build_early_gem_message(df_rank, market_regime, us_market))
             logger.info("Notification sent.")
         else:
             logger.info("No notification sent.")

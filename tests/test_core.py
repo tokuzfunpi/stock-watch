@@ -6,6 +6,7 @@ import pandas as pd
 
 from daily_theme_watchlist_20d_v22 import (
     add_indicators,
+    build_early_gem_message,
     build_special_etf_message,
     build_midlong_message,
     build_short_term_message,
@@ -432,6 +433,42 @@ class PushMessageTests(unittest.TestCase):
         self.assertIn("00878.TW", message)
         self.assertIn("00772B.TWO", message)
         self.assertIn("00773B.TWO", message)
+
+    def test_early_gem_message_renders_turning_candidates(self) -> None:
+        df = pd.DataFrame(
+            [
+                {
+                    "rank": 6,
+                    "ticker": "GEM1.TW",
+                    "name": "Gem One",
+                    "group": "core",
+                    "layer": "midlong_core",
+                    "grade": "B",
+                    "setup_score": 5,
+                    "risk_score": 2,
+                    "ret5_pct": 3.0,
+                    "ret10_pct": 5.0,
+                    "ret20_pct": 8.0,
+                    "volume_ratio20": 1.1,
+                    "spec_risk_label": "正常",
+                    "signals": "REBREAK",
+                    "rank_change": 1,
+                    "setup_change": 1,
+                    "status_change": "UP",
+                    "regime": "重新站上來了",
+                    "date": "2026-04-14",
+                    "close": 55.0,
+                }
+            ]
+        )
+
+        market_regime = {"comment": "加權指數目前偏多"}
+        us_market = {"summary": "美股昨晚偏強，台股開盤情緒通常較正面。"}
+        message = build_early_gem_message(df, market_regime, us_market)
+
+        self.assertIn("早期轉強觀察", message)
+        self.assertIn("GEM1.TW", message)
+        self.assertIn("重新站回結構", message)
 
 
 class SplitMessageTests(unittest.TestCase):
