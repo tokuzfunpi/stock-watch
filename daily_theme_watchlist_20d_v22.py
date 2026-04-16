@@ -1164,8 +1164,9 @@ def build_short_term_message(df_rank: pd.DataFrame, market_regime: dict, us_mark
 
     lines = [
         "📣 短線可買",
-        f"A級 {total_a} 檔，B級 {total_b} 檔，轉強 {total_up} 檔。",
     ]
+    summary_parts = [f"A級 {total_a} 檔", f"B級 {total_b} 檔", f"轉強 {total_up} 檔"]
+    lines.append(" / ".join(summary_parts))
     if short_candidates.empty:
         lines.append("今天短線沒有夠清楚的可買標的，先等。")
         return "\n".join(lines)
@@ -1198,7 +1199,7 @@ def build_midlong_message(df_rank: pd.DataFrame, market_regime: dict, us_market:
     total_b = int((df_rank["grade"] == "B").sum()) if not df_rank.empty else 0
     lines = [
         "📣 中長線可布局",
-        f"目前可追蹤的中長線結構股以 B級 {total_b} 檔為主。",
+        f"B級結構股 {total_b} 檔",
     ]
     if midlong_candidates.empty:
         lines.append("今天中長線沒有夠穩、夠適合布局的標的，先觀察。")
