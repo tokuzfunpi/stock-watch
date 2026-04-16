@@ -1103,10 +1103,7 @@ def build_early_gem_message(df_rank: pd.DataFrame, market_regime: dict, us_marke
     gem_candidates = select_early_gem_candidates(df_rank)
     lines = [
         "📣 早期轉強觀察",
-        market_regime["comment"],
-        us_market["summary"],
     ]
-    lines.extend(runtime_context_lines())
     if gem_candidates.empty:
         lines.append("今天沒有特別像『還沒完全被市場定價，但已開始轉強』的標的。")
         return "\n".join(lines).strip()
@@ -1126,10 +1123,7 @@ def build_special_etf_message(df_rank: pd.DataFrame, market_regime: dict, us_mar
     etf_candidates = select_special_etf_candidates(df_rank)
     lines = [
         "📣 ETF / 債券觀察",
-        market_regime["comment"],
-        us_market["summary"],
     ]
-    lines.extend(runtime_context_lines())
     lines.extend(build_special_etf_summary(etf_candidates))
     if etf_candidates.empty:
         return "\n".join(lines).strip()
@@ -1170,13 +1164,8 @@ def build_short_term_message(df_rank: pd.DataFrame, market_regime: dict, us_mark
 
     lines = [
         "📣 短線可買",
-        market_regime["comment"],
-        us_market["summary"],
         f"A級 {total_a} 檔，B級 {total_b} 檔，轉強 {total_up} 檔。",
     ]
-    lines.extend(runtime_context_lines())
-    if us_market.get("tech_bias"):
-        lines.append(us_market["tech_bias"])
     if short_candidates.empty:
         lines.append("今天短線沒有夠清楚的可買標的，先等。")
         return "\n".join(lines)
@@ -1209,11 +1198,8 @@ def build_midlong_message(df_rank: pd.DataFrame, market_regime: dict, us_market:
     total_b = int((df_rank["grade"] == "B").sum()) if not df_rank.empty else 0
     lines = [
         "📣 中長線可布局",
-        market_regime["comment"],
-        us_market["summary"],
         f"目前可追蹤的中長線結構股以 B級 {total_b} 檔為主。",
     ]
-    lines.extend(runtime_context_lines())
     if midlong_candidates.empty:
         lines.append("今天中長線沒有夠穩、夠適合布局的標的，先觀察。")
         return "\n".join(lines)
@@ -1238,6 +1224,18 @@ def build_midlong_message(df_rank: pd.DataFrame, market_regime: dict, us_market:
                 f"20日 {r['ret20_pct']}% / 量比 {r['volume_ratio20']} | "
                 f"{r['regime']}"
             )
+    return "\n".join(lines).strip()
+
+
+def build_macro_message(market_regime: dict, us_market: dict) -> str:
+    lines = [
+        "📣 大盤 / 美股摘要",
+        market_regime["comment"],
+        us_market["summary"],
+    ]
+    lines.extend(runtime_context_lines())
+    if us_market.get("tech_bias"):
+        lines.append(us_market["tech_bias"])
     return "\n".join(lines).strip()
 
 
@@ -1686,6 +1684,7 @@ def main() -> int:
         last_state = load_last_state()
 
         if should_alert(df_rank, current_state, last_state, market_regime):
+            send_telegram_message(build_macro_message(market_regime, us_market))
             send_telegram_message(build_short_term_message(df_rank, market_regime, us_market))
             send_telegram_message(build_midlong_message(df_rank, market_regime, us_market))
             send_telegram_message(build_special_etf_message(df_rank, market_regime, us_market))

@@ -7,6 +7,7 @@ import pandas as pd
 from daily_theme_watchlist_20d_v22 import (
     add_indicators,
     build_early_gem_message,
+    build_macro_message,
     build_special_etf_message,
     build_midlong_message,
     build_short_term_message,
@@ -237,6 +238,18 @@ class SelectPushCandidatesTests(unittest.TestCase):
 
 
 class PushMessageTests(unittest.TestCase):
+    def test_macro_message_renders_market_and_us_summary_once(self) -> None:
+        market_regime = {"comment": "加權指數目前偏多"}
+        us_market = {"summary": "美股昨晚偏強，台股開盤情緒通常較正面。", "tech_bias": "美股科技偏強，台股電子股若量價配合可積極一點。"}
+
+        message = build_macro_message(market_regime, us_market)
+
+        self.assertIn("大盤 / 美股摘要", message)
+        self.assertIn("加權指數目前偏多", message)
+        self.assertIn("美股昨晚偏強", message)
+        self.assertIn("觸發來源", message)
+        self.assertIn("台灣時間", message)
+
     def test_short_and_midlong_messages_render_independently(self) -> None:
         df = pd.DataFrame(
             [
@@ -315,16 +328,14 @@ class PushMessageTests(unittest.TestCase):
         midlong_message = build_midlong_message(df, market_regime, us_market)
 
         self.assertIn("短線可買", short_message)
-        self.assertIn("美股昨晚偏強", short_message)
-        self.assertIn("觸發來源", short_message)
-        self.assertIn("台灣時間", short_message)
+        self.assertNotIn("美股昨晚偏強", short_message)
+        self.assertNotIn("觸發來源", short_message)
         self.assertIn("5日 9.0%", short_message)
         self.assertTrue(any(label in short_message for label in ["可追", "等拉回", "開高不追", "續抱觀察", "分批落袋"]))
 
         self.assertIn("中長線可布局", midlong_message)
-        self.assertIn("美股昨晚偏強", midlong_message)
-        self.assertIn("觸發來源", midlong_message)
-        self.assertIn("台灣時間", midlong_message)
+        self.assertNotIn("美股昨晚偏強", midlong_message)
+        self.assertNotIn("觸發來源", midlong_message)
         self.assertIn("20日 14.0%", midlong_message)
         self.assertTrue(any(label in midlong_message for label in ["續抱", "可分批", "觀察", "分批落袋"]))
 
@@ -427,8 +438,7 @@ class PushMessageTests(unittest.TestCase):
         message = build_special_etf_message(df, market_regime, us_market)
 
         self.assertIn("ETF / 債券觀察", message)
-        self.assertIn("觸發來源", message)
-        self.assertIn("台灣時間", message)
+        self.assertNotIn("觸發來源", message)
         self.assertIn("0050.TW", message)
         self.assertIn("00878.TW", message)
         self.assertIn("00772B.TWO", message)
@@ -467,6 +477,7 @@ class PushMessageTests(unittest.TestCase):
         message = build_early_gem_message(df, market_regime, us_market)
 
         self.assertIn("早期轉強觀察", message)
+        self.assertNotIn("觸發來源", message)
         self.assertIn("GEM1.TW", message)
         self.assertIn("重新站回結構", message)
 
