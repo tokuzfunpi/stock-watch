@@ -20,6 +20,7 @@ ticker,name,group,layer,enabled
 2330.TW,台積電,core,midlong_core,true
 2317.TW,鴻海,core,midlong_core,true
 2454.TW,聯發科,core,midlong_core,true
+2303.TW,聯電,core,midlong_core,true
 2308.TW,台達電,core,midlong_core,true
 3711.TW,日月光投控,core,midlong_core,true
 2881.TW,富邦金,core,midlong_core,true
