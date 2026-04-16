@@ -1,2 +1,2 @@
 ﻿date,ticker,name,group,layer,close,ret1_pct,ret5_pct,ret10_pct,ret20_pct,volume,avg_vol20,volume_ratio20,ma20,ma60,ma120,drawdown120_pct,bias20_pct,setup_score,risk_score,signals,score_band,regime,spec_risk_score,spec_risk_label
-2026-04-16,2303.TW,聯電,core,midlong_core,68.3,9.98,13.83,20.88,12.52,202793558,93905215,2.16,59.06,61.47,54.36,-10.37,15.65,9,3,ACCEL,進攻優勢區,轉強速度有出來,2,正常
+2026-04-16,2303.TW,聯電,core,midlong_core,68.3,9.98,13.83,20.88,12.52,280417097,97786392,2.87,59.06,61.47,54.36,-10.37,15.65,9,4,ACCEL,進攻優勢區,轉強速度有出來,3,投機偏高
