@@ -1686,9 +1686,9 @@ def main() -> int:
         if should_alert(df_rank, current_state, last_state, market_regime):
             send_telegram_message(build_macro_message(market_regime, us_market))
             send_telegram_message(build_short_term_message(df_rank, market_regime, us_market))
+            send_telegram_message(build_early_gem_message(df_rank, market_regime, us_market))
             send_telegram_message(build_midlong_message(df_rank, market_regime, us_market))
             send_telegram_message(build_special_etf_message(df_rank, market_regime, us_market))
-            send_telegram_message(build_early_gem_message(df_rank, market_regime, us_market))
             logger.info("Notification sent.")
         else:
             logger.info("No notification sent.")
