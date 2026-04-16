@@ -1440,15 +1440,15 @@ def build_daily_report_markdown(df_rank: pd.DataFrame, market_regime: dict, bt_s
         "",
         "## Top Ranking",
         "",
-        "| Rank | Grade | Name | Ticker | Group | Layer | Setup | Risk | 投機風險 | Signals | RankΔ | SetupΔ | 5D% | 10D% | 20D% | VolRatio | Regime |",
-        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+        "| 排名 | 等級 | 股票 | 分類 | 近況 | 5日 | 20日 | 投機風險 | 重點 |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
     for _, r in df_rank.iterrows():
         lines.append(
-            f"| {int(r['rank'])} | {r['grade']} | {r['name']} | {r['ticker']} | {r['group']} | {layer_label(r['layer'])} | "
-            f"{int(r['setup_score'])} | {int(r['risk_score'])} | {r['spec_risk_label']} | {r['signals']} | "
-            f"{int(r['rank_change']):+d} | {int(r['setup_change']):+d} | "
-            f"{r['ret5_pct']} | {r['ret10_pct']} | {r['ret20_pct']} | {r['volume_ratio20']} | {r['regime']} |"
+            f"| {int(r['rank'])} | {r['grade']} | {r['name']} ({r['ticker']}) | "
+            f"{layer_label(r['layer'])} | {r['regime']} | "
+            f"{r['ret5_pct']}% | {r['ret20_pct']}% | {r['spec_risk_label']} | "
+            f"{r['signals']} / 量比 {r['volume_ratio20']} |"
         )
 
     short_candidates, short_backups, midlong_candidates, midlong_backups = build_candidate_sets(df_rank)
