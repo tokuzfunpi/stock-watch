@@ -104,7 +104,7 @@ class SelectPushCandidatesTests(unittest.TestCase):
                     "ret5_pct": 6.0,
                     "ret10_pct": 13.0,
                     "ret20_pct": 4.0,
-                    "volume_ratio20": 1.2,
+                    "volume_ratio20": 1.4,
                     "signals": "ACCEL",
                     "rank_change": 0,
                     "setup_change": 0,
@@ -313,14 +313,14 @@ class PushMessageTests(unittest.TestCase):
         short_message = build_short_term_message(df, market_regime, us_market)
         midlong_message = build_midlong_message(df, market_regime, us_market)
 
-        self.assertIn("短線推薦", short_message)
+        self.assertIn("短線可買", short_message)
         self.assertIn("美股昨晚偏強", short_message)
         self.assertIn("觸發來源", short_message)
         self.assertIn("台灣時間", short_message)
         self.assertIn("投機 正常", short_message)
         self.assertTrue(any(label in short_message for label in ["可追", "等拉回", "開高不追", "續抱觀察", "分批落袋"]))
 
-        self.assertIn("中長線推薦", midlong_message)
+        self.assertIn("中長線可布局", midlong_message)
         self.assertIn("美股昨晚偏強", midlong_message)
         self.assertIn("觸發來源", midlong_message)
         self.assertIn("台灣時間", midlong_message)

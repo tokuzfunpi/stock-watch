@@ -858,11 +858,18 @@ def rank_midlong_pool(df_rank: pd.DataFrame) -> pd.DataFrame:
 
 def select_short_term_candidates(df_rank: pd.DataFrame) -> pd.DataFrame:
     rule = CONFIG.notify
-    return rank_short_term_pool(df_rank).head(rule.top_n_short).copy()
+    df = rank_short_term_pool(df_rank)
+    if df.empty:
+        return df
+    buyable_mask = df.apply(is_short_term_buyable, axis=1)
+    return df[buyable_mask].head(rule.top_n_short).copy()
 
 
 def select_short_term_backup_candidates(df_rank: pd.DataFrame, exclude_tickers: Optional[set[str]] = None) -> pd.DataFrame:
     df = rank_short_term_pool(df_rank)
+    if not df.empty:
+        buyable_mask = df.apply(is_short_term_buyable, axis=1)
+        df = df[~buyable_mask].copy()
     if exclude_tickers:
         df = df[~df["ticker"].astype(str).isin(exclude_tickers)].copy()
     return df.head(5).copy()
@@ -871,6 +878,9 @@ def select_short_term_backup_candidates(df_rank: pd.DataFrame, exclude_tickers: 
 def select_midlong_candidates(df_rank: pd.DataFrame, exclude_tickers: Optional[set[str]] = None) -> pd.DataFrame:
     rule = CONFIG.notify
     df = rank_midlong_pool(df_rank)
+    if not df.empty:
+        buyable_mask = df.apply(is_midlong_buyable, axis=1)
+        df = df[buyable_mask].copy()
     if exclude_tickers:
         df = df[~df["ticker"].astype(str).isin(exclude_tickers)].copy()
     return df.head(rule.top_n_midlong).copy()
@@ -878,6 +888,9 @@ def select_midlong_candidates(df_rank: pd.DataFrame, exclude_tickers: Optional[s
 
 def select_midlong_backup_candidates(df_rank: pd.DataFrame, exclude_tickers: Optional[set[str]] = None) -> pd.DataFrame:
     df = rank_midlong_pool(df_rank)
+    if not df.empty:
+        buyable_mask = df.apply(is_midlong_buyable, axis=1)
+        df = df[~buyable_mask].copy()
     if exclude_tickers:
         df = df[~df["ticker"].astype(str).isin(exclude_tickers)].copy()
     return df.head(5).copy()
@@ -933,6 +946,10 @@ def short_term_action_label(row: pd.Series) -> str:
     return "續追蹤"
 
 
+def is_short_term_buyable(row: pd.Series) -> bool:
+    return short_term_action_label(row) in {"可追", "等拉回"}
+
+
 def midlong_action_label(row: pd.Series) -> str:
     risk = int(row["risk_score"])
     ret20 = float(row["ret20_pct"])
@@ -948,6 +965,10 @@ def midlong_action_label(row: pd.Series) -> str:
     if row["setup_change"] > 0 or row["rank_change"] > 0:
         return "可分批"
     return "觀察"
+
+
+def is_midlong_buyable(row: pd.Series) -> bool:
+    return midlong_action_label(row) in {"續抱", "可分批"}
 
 
 def special_etf_action_label(row: pd.Series) -> str:
@@ -1059,7 +1080,7 @@ def build_short_term_message(df_rank: pd.DataFrame, market_regime: dict, us_mark
     total_up = int((df_rank["status_change"] == "UP").sum()) if "status_change" in df_rank.columns else 0
 
     lines = [
-        "📣 短線推薦",
+        "📣 短線可買",
         market_regime["comment"],
         us_market["summary"],
         f"A級 {total_a} 檔，B級 {total_b} 檔，轉強 {total_up} 檔。",
@@ -1068,11 +1089,11 @@ def build_short_term_message(df_rank: pd.DataFrame, market_regime: dict, us_mark
     if us_market.get("tech_bias"):
         lines.append(us_market["tech_bias"])
     if short_candidates.empty:
-        lines.append("今天短線沒有夠清楚的機會，先等。")
+        lines.append("今天短線沒有夠清楚的可買標的，先等。")
         return "\n".join(lines)
 
     lines.append("")
-    lines.append("解讀：短線看的是動能延續，不是看到強就直接追。連漲過快的優先看『開高不追』或『等拉回』。")
+    lines.append("解讀：這一區只放今天相對可考慮出手的短線標的；太熱或只適合續看的，會放到短線觀察。")
     lines.append("")
     for _, r in short_candidates.iterrows():
         action = short_term_action_label(r)
@@ -1083,7 +1104,7 @@ def build_short_term_message(df_rank: pd.DataFrame, market_regime: dict, us_mark
         )
     if not short_backups.empty:
         lines.append("")
-        lines.append("短線候補 (最多5檔)")
+        lines.append("短線觀察 (最多5檔)")
         for _, r in short_backups.iterrows():
             action = short_term_action_label(r)
             lines.append(
@@ -1098,18 +1119,18 @@ def build_midlong_message(df_rank: pd.DataFrame, market_regime: dict, us_market:
     _, _, midlong_candidates, midlong_backups = build_candidate_sets(df_rank)
     total_b = int((df_rank["grade"] == "B").sum()) if not df_rank.empty else 0
     lines = [
-        "📣 中長線推薦",
+        "📣 中長線可布局",
         market_regime["comment"],
         us_market["summary"],
         f"目前可追蹤的中長線結構股以 B級 {total_b} 檔為主。",
     ]
     lines.extend(runtime_context_lines())
     if midlong_candidates.empty:
-        lines.append("今天中長線沒有夠穩的結構股，先觀察。")
+        lines.append("今天中長線沒有夠穩、夠適合布局的標的，先觀察。")
         return "\n".join(lines)
 
     lines.append("")
-    lines.append("解讀：中長線看的是趨勢、結構與續抱價值，不是短線衝刺速度。")
+    lines.append("解讀：這一區偏向可布局的趨勢股；強但不一定適合現在進場的，會放到中長線觀察。")
     lines.append("")
     for _, r in midlong_candidates.iterrows():
         action = midlong_action_label(r)
@@ -1120,7 +1141,7 @@ def build_midlong_message(df_rank: pd.DataFrame, market_regime: dict, us_market:
         )
     if not midlong_backups.empty:
         lines.append("")
-        lines.append("中長線候補 (最多5檔)")
+        lines.append("中長線觀察 (最多5檔)")
         for _, r in midlong_backups.iterrows():
             action = midlong_action_label(r)
             lines.append(
