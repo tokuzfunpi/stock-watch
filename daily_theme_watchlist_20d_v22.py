@@ -1115,9 +1115,8 @@ def build_early_gem_message(df_rank: pd.DataFrame, market_regime: dict, us_marke
     lines.append("")
     for _, r in gem_candidates.iterrows():
         lines.append(
-            f"{int(r['rank'])}. [{layer_label(r['layer'])}] {r['name']} {r['ticker']} | "
-            f"G{r['grade']} S{int(r['setup_score'])}/R{int(r['risk_score'])} | "
-            f"5D {r['ret5_pct']}% 20D {r['ret20_pct']}% 量比 {r['volume_ratio20']} | "
+            f"{int(r['rank'])}. {r['name']} ({r['ticker']}) | "
+            f"{layer_label(r['layer'])} | 5日 {r['ret5_pct']}% / 20日 {r['ret20_pct']}% | "
             f"{early_gem_reason(r)}"
         )
     return "\n".join(lines).strip()
@@ -1141,9 +1140,8 @@ def build_special_etf_message(df_rank: pd.DataFrame, market_regime: dict, us_mar
     for _, r in etf_candidates.iterrows():
         action = special_etf_action_label(r)
         lines.append(
-            f"[{layer_label(r['layer'])}] {r['name']} {r['ticker']} {action} | "
-            f"G{r['grade']} S{int(r['setup_score'])}/R{int(r['risk_score'])} | "
-            f"5D {r['ret5_pct']}% 20D {r['ret20_pct']}% | 投機 {r['spec_risk_label']} | {r['signals']}"
+            f"{r['name']} ({r['ticker']}) {action} | "
+            f"5日 {r['ret5_pct']}% / 20日 {r['ret20_pct']}% | {layer_label(r['layer'])}"
         )
     return "\n".join(lines).strip()
 
@@ -1189,9 +1187,9 @@ def build_short_term_message(df_rank: pd.DataFrame, market_regime: dict, us_mark
     for _, r in short_candidates.iterrows():
         action = short_term_action_label(r)
         lines.append(
-            f"{int(r['rank'])}. [{layer_label(r['layer'])}] {r['name']} {r['ticker']} {action} | "
-            f"G{r['grade']} S{int(r['setup_score'])}/R{int(r['risk_score'])} | "
-            f"5D {r['ret5_pct']}% 量比 {r['volume_ratio20']} | 投機 {r['spec_risk_label']} | {r['signals']}"
+            f"{int(r['rank'])}. {r['name']} ({r['ticker']}) {action} | "
+            f"5日 {r['ret5_pct']}% / 量比 {r['volume_ratio20']} | "
+            f"{r['regime']}"
         )
     if not short_backups.empty:
         lines.append("")
@@ -1199,9 +1197,9 @@ def build_short_term_message(df_rank: pd.DataFrame, market_regime: dict, us_mark
         for _, r in short_backups.iterrows():
             action = short_term_action_label(r)
             lines.append(
-                f"{int(r['rank'])}. [{layer_label(r['layer'])}] {r['name']} {r['ticker']} {action} | "
-                f"G{r['grade']} S{int(r['setup_score'])}/R{int(r['risk_score'])} | "
-                f"5D {r['ret5_pct']}% 量比 {r['volume_ratio20']} | 投機 {r['spec_risk_label']} | {r['signals']}"
+                f"{int(r['rank'])}. {r['name']} ({r['ticker']}) {action} | "
+                f"5日 {r['ret5_pct']}% / 量比 {r['volume_ratio20']} | "
+                f"{r['regime']}"
             )
     return "\n".join(lines).strip()
 
@@ -1226,9 +1224,9 @@ def build_midlong_message(df_rank: pd.DataFrame, market_regime: dict, us_market:
     for _, r in midlong_candidates.iterrows():
         action = midlong_action_label(r)
         lines.append(
-            f"{int(r['rank'])}. [{layer_label(r['layer'])}] {r['name']} {r['ticker']} {action} | "
-            f"G{r['grade']} S{int(r['setup_score'])}/R{int(r['risk_score'])} | "
-            f"20D {r['ret20_pct']}% 量比 {r['volume_ratio20']} | 投機 {r['spec_risk_label']} | {r['signals']}"
+            f"{int(r['rank'])}. {r['name']} ({r['ticker']}) {action} | "
+            f"20日 {r['ret20_pct']}% / 量比 {r['volume_ratio20']} | "
+            f"{r['regime']}"
         )
     if not midlong_backups.empty:
         lines.append("")
@@ -1236,9 +1234,9 @@ def build_midlong_message(df_rank: pd.DataFrame, market_regime: dict, us_market:
         for _, r in midlong_backups.iterrows():
             action = midlong_action_label(r)
             lines.append(
-                f"{int(r['rank'])}. [{layer_label(r['layer'])}] {r['name']} {r['ticker']} {action} | "
-                f"G{r['grade']} S{int(r['setup_score'])}/R{int(r['risk_score'])} | "
-                f"20D {r['ret20_pct']}% 量比 {r['volume_ratio20']} | 投機 {r['spec_risk_label']} | {r['signals']}"
+                f"{int(r['rank'])}. {r['name']} ({r['ticker']}) {action} | "
+                f"20日 {r['ret20_pct']}% / 量比 {r['volume_ratio20']} | "
+                f"{r['regime']}"
             )
     return "\n".join(lines).strip()
 

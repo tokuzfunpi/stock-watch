@@ -318,14 +318,14 @@ class PushMessageTests(unittest.TestCase):
         self.assertIn("美股昨晚偏強", short_message)
         self.assertIn("觸發來源", short_message)
         self.assertIn("台灣時間", short_message)
-        self.assertIn("投機 正常", short_message)
+        self.assertIn("5日 9.0%", short_message)
         self.assertTrue(any(label in short_message for label in ["可追", "等拉回", "開高不追", "續抱觀察", "分批落袋"]))
 
         self.assertIn("中長線可布局", midlong_message)
         self.assertIn("美股昨晚偏強", midlong_message)
         self.assertIn("觸發來源", midlong_message)
         self.assertIn("台灣時間", midlong_message)
-        self.assertIn("投機 正常", midlong_message)
+        self.assertIn("20日 14.0%", midlong_message)
         self.assertTrue(any(label in midlong_message for label in ["續抱", "可分批", "觀察", "分批落袋"]))
 
     def test_special_etf_message_renders_requested_tickers(self) -> None:
