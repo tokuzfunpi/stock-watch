@@ -315,11 +315,15 @@ class PushMessageTests(unittest.TestCase):
 
         self.assertIn("短線推薦", short_message)
         self.assertIn("美股昨晚偏強", short_message)
+        self.assertIn("觸發來源", short_message)
+        self.assertIn("台灣時間", short_message)
         self.assertIn("投機 正常", short_message)
         self.assertTrue(any(label in short_message for label in ["可追", "等拉回", "開高不追", "續抱觀察", "分批落袋"]))
 
         self.assertIn("中長線推薦", midlong_message)
         self.assertIn("美股昨晚偏強", midlong_message)
+        self.assertIn("觸發來源", midlong_message)
+        self.assertIn("台灣時間", midlong_message)
         self.assertIn("投機 正常", midlong_message)
         self.assertTrue(any(label in midlong_message for label in ["續抱", "可分批", "觀察", "分批落袋"]))
 
@@ -422,6 +426,8 @@ class PushMessageTests(unittest.TestCase):
         message = build_special_etf_message(df, market_regime, us_market)
 
         self.assertIn("ETF / 債券觀察", message)
+        self.assertIn("觸發來源", message)
+        self.assertIn("台灣時間", message)
         self.assertIn("0050.TW", message)
         self.assertIn("00878.TW", message)
         self.assertIn("00772B.TWO", message)

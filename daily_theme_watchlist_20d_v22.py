@@ -177,6 +177,7 @@ SPECIAL_ETF_TICKERS = [
     "0050.TW",
     "00878.TW",
 ]
+SCHEDULE_TARGET_TIMES = ["08:37", "08:52"]
 
 
 def yf_download_one(ticker: str, period: str) -> pd.DataFrame:
@@ -592,6 +593,53 @@ def today_local_str() -> str:
     return datetime.now(LOCAL_TZ).strftime("%Y-%m-%d")
 
 
+def runtime_trigger_label() -> str:
+    event_name = os.getenv("GITHUB_EVENT_NAME", "").strip().lower()
+    if event_name == "schedule":
+        return "Scheduled"
+    if event_name == "workflow_dispatch":
+        return "Manual"
+    if event_name:
+        return event_name
+    return "Local"
+
+
+def nearest_schedule_delay_minutes(now_local: datetime) -> Optional[int]:
+    candidates: list[int] = []
+    for time_str in SCHEDULE_TARGET_TIMES:
+        hour_str, minute_str = time_str.split(":")
+        target = now_local.replace(
+            hour=int(hour_str),
+            minute=int(minute_str),
+            second=0,
+            microsecond=0,
+        )
+        delta_minutes = int((now_local - target).total_seconds() // 60)
+        if delta_minutes >= 0:
+            candidates.append(delta_minutes)
+    return min(candidates) if candidates else None
+
+
+def runtime_context_lines() -> list[str]:
+    now_local = datetime.now(LOCAL_TZ)
+    trigger = runtime_trigger_label()
+    lines = [
+        f"觸發來源：{trigger}",
+        f"台灣時間：{now_local.strftime('%Y-%m-%d %H:%M:%S')}",
+    ]
+
+    if trigger == "Scheduled":
+        delay_minutes = nearest_schedule_delay_minutes(now_local)
+        if delay_minutes is None:
+            lines.append("排程延遲：尚未到預定時段")
+        elif delay_minutes <= 15:
+            lines.append(f"排程延遲：{delay_minutes} 分鐘內，屬正常波動")
+        else:
+            lines.append(f"排程延遲：已延後約 {delay_minutes} 分鐘")
+
+    return lines
+
+
 def load_last_success_date() -> str:
     if not SUCCESS_FILE.exists():
         return ""
@@ -970,6 +1018,7 @@ def build_special_etf_message(df_rank: pd.DataFrame, market_regime: dict, us_mar
         market_regime["comment"],
         us_market["summary"],
     ]
+    lines.extend(runtime_context_lines())
     lines.extend(build_special_etf_summary(etf_candidates))
     if etf_candidates.empty:
         return "\n".join(lines).strip()
@@ -1015,6 +1064,7 @@ def build_short_term_message(df_rank: pd.DataFrame, market_regime: dict, us_mark
         us_market["summary"],
         f"A級 {total_a} 檔，B級 {total_b} 檔，轉強 {total_up} 檔。",
     ]
+    lines.extend(runtime_context_lines())
     if us_market.get("tech_bias"):
         lines.append(us_market["tech_bias"])
     if short_candidates.empty:
@@ -1053,6 +1103,7 @@ def build_midlong_message(df_rank: pd.DataFrame, market_regime: dict, us_market:
         us_market["summary"],
         f"目前可追蹤的中長線結構股以 B級 {total_b} 檔為主。",
     ]
+    lines.extend(runtime_context_lines())
     if midlong_candidates.empty:
         lines.append("今天中長線沒有夠穩的結構股，先觀察。")
         return "\n".join(lines)
