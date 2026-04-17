@@ -133,6 +133,9 @@
 - 目前 `ACCEL` 已經和以下兩邊保持一致：
   - attack backtest 納入條件
   - Telegram 候選通知條件
+- `run_watchlist()` 逐檔成功訊息目前降為 `debug`
+  - 預設 CLI 不再印出每檔 `OK: ticker name`
+  - 失敗與摘要仍會保留
 - 最終排行排序依序偏重：
   - `setup_score`
   - `ret5_pct`

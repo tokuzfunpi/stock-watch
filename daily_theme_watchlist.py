@@ -1634,7 +1634,7 @@ def run_watchlist() -> pd.DataFrame:
             row = detect_row(df, ticker, name, group, item["layer"])
             rows.append(row)
             append_stock_log(row)
-            logger.info("OK: %s %s", ticker, name)
+            logger.debug("OK: %s %s", ticker, name)
         except Exception as exc:
             logger.exception("FAILED: %s %s -> %s", ticker, name, exc)
     if not rows:
