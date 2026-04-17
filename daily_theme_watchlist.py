@@ -1573,6 +1573,7 @@ def build_daily_report_markdown(df_rank: pd.DataFrame, market_regime: dict, bt_s
         )
 
     short_candidates, short_backups, midlong_candidates, midlong_backups = build_candidate_sets(df_rank)
+    feedback_summary = build_feedback_summary()
 
     lines.extend(["", "## Short-Term Candidates", ""])
     if short_candidates.empty:

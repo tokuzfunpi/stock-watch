@@ -11,6 +11,7 @@ from daily_theme_watchlist import (
     add_indicators,
     apply_feedback_adjustment,
     build_feedback_summary,
+    build_daily_report_markdown,
     build_early_gem_message,
     build_macro_message,
     build_special_etf_message,
@@ -520,6 +521,38 @@ class PushMessageTests(unittest.TestCase):
         self.assertNotIn("觸發來源", message)
         self.assertIn("GEM1.TW", message)
         self.assertIn("重新站回結構", message)
+
+    def test_daily_report_markdown_includes_prediction_feedback_section(self) -> None:
+        df = pd.DataFrame(
+            [
+                {
+                    "rank": 1,
+                    "ticker": "RPT1.TW",
+                    "name": "Report One",
+                    "group": "theme",
+                    "layer": "short_attack",
+                    "grade": "A",
+                    "setup_score": 8,
+                    "risk_score": 2,
+                    "ret5_pct": 6.0,
+                    "ret10_pct": 9.0,
+                    "ret20_pct": 12.0,
+                    "volume_ratio20": 1.4,
+                    "spec_risk_label": "正常",
+                    "signals": "ACCEL,TREND",
+                    "rank_change": 1,
+                    "setup_change": 1,
+                    "status_change": "UP",
+                    "regime": "轉強速度有出來",
+                    "date": "2026-04-14",
+                    "close": 100.0,
+                }
+            ]
+        )
+
+        report = build_daily_report_markdown(df, {"comment": "加權指數目前偏多"}, None, None)
+
+        self.assertIn("## Prediction Feedback", report)
 
 
 class SplitMessageTests(unittest.TestCase):
