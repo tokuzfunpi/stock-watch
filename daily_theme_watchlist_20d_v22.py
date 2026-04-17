@@ -1148,6 +1148,7 @@ def should_alert(df_rank: pd.DataFrame, current_state: str, last_state: str, mar
         return False
     short_candidates, short_backups, midlong_candidates, midlong_backups = build_candidate_sets(df_rank)
     feedback_summary = build_feedback_summary()
+    feedback_summary = build_feedback_summary()
     candidates = pd.concat([short_candidates, short_backups, midlong_candidates, midlong_backups], ignore_index=True)
     if candidates.empty:
         return False
