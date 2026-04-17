@@ -186,6 +186,13 @@ def normalize_ticker_symbol(raw_ticker: str) -> str:
     ticker = str(raw_ticker).strip().upper()
     if not ticker:
         return ""
+    if ticker.endswith(".0"):
+        ticker = ticker[:-2]
+    if ticker.isdigit():
+        if len(ticker) <= 2:
+            ticker = ticker.zfill(4)
+        elif len(ticker) == 3:
+            ticker = ticker.zfill(5)
     if "." in ticker:
         return ticker
     if ticker.endswith("B"):
@@ -236,7 +243,7 @@ def sync_watchlist_with_portfolio(watchlist_csv: Path, portfolio_csv: Path) -> l
 def load_portfolio(csv_path: Path) -> pd.DataFrame:
     if not csv_path.exists():
         return pd.DataFrame(columns=["ticker", "shares", "avg_cost", "target_profit_pct"])
-    df = pd.read_csv(csv_path)
+    df = pd.read_csv(csv_path, dtype={"ticker": str})
     if df.empty:
         return df
     df = df.copy()

@@ -139,6 +139,8 @@ class FeedbackTests(unittest.TestCase):
 class PortfolioTests(unittest.TestCase):
     def test_normalize_ticker_symbol_supports_plain_codes(self) -> None:
         self.assertEqual(normalize_ticker_symbol("2495"), "2495.TW")
+        self.assertEqual(normalize_ticker_symbol("50"), "0050.TW")
+        self.assertEqual(normalize_ticker_symbol("878"), "00878.TW")
         self.assertEqual(normalize_ticker_symbol("00772B"), "00772B.TWO")
 
     def test_sync_watchlist_with_portfolio_adds_missing_symbols(self) -> None:
@@ -161,6 +163,13 @@ class PortfolioTests(unittest.TestCase):
             portfolio_csv.write_text("ticker,shares,avg_cost,target_profit_pct\n2495,4000,36.35,20\n", encoding="utf-8")
             loaded = load_portfolio(portfolio_csv)
             self.assertEqual(loaded.iloc[0]["ticker"], "2495.TW")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            portfolio_csv = Path(tmpdir) / "portfolio.csv"
+            portfolio_csv.write_text("ticker,shares,avg_cost,target_profit_pct\n0050,1408,63.11,50\n00878,4574,21.41,50\n", encoding="utf-8")
+            loaded = load_portfolio(portfolio_csv)
+            self.assertEqual(loaded.iloc[0]["ticker"], "0050.TW")
+            self.assertEqual(loaded.iloc[1]["ticker"], "00878.TW")
 
         df = pd.DataFrame(
             [
