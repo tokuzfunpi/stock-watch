@@ -44,7 +44,7 @@
 - `portfolio_check.py`
   - 持股檢查專用執行檔
   - 共用 `daily_theme_watchlist.py` 的資料抓取、排行與判讀邏輯
-  - 只產生持股專用報表與通知
+  - 只產生持股專用報表與 CLI 輸出
 - `backtest_runner.py`
   - 簡單的 CLI 包裝
   - 直接呼叫 `run_backtest_dual()`
@@ -123,8 +123,8 @@
 3. `get_us_market_reference()`
 4. `run_watchlist()`
 5. `save_portfolio_reports()`
-6. 發送大盤 / 美股摘要
-7. 發送 `持股檢查`
+6. 在 CLI 印出大盤 / 美股摘要
+7. 在 CLI 印出 `持股檢查`
 
 ## 訊號與排序重點
 
@@ -149,9 +149,10 @@
   - 代表 state 沒變也照樣送
   - 但訊息內容仍然只會從 `select_push_candidates()` 選出的標的組成
 - `daily_theme_watchlist.py` 不再夾帶 `持股檢查`
-- `持股檢查` 改由 `portfolio_check.py` 單獨送出
+- `持股檢查` 改由 `portfolio_check.py` 單獨執行
   - 來源是本機 `portfolio.csv`
   - 會根據成本、目標報酬、當前走勢給出分層建議
+  - 不走 Telegram，只留本機檔案與 CLI 顯示
   - 目前常見標籤：
     - `強勢續抱`
     - `續抱`

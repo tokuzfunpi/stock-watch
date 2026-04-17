@@ -17,7 +17,7 @@
 - `portfolio_check.py`
   - 本機持股檢查專用
   - 共用同一套資料抓取與判讀邏輯
-  - 但通知與報表獨立
+  - 不送 Telegram，只輸出本機報表與 CLI 內容
 
 主要設定檔：
 - `config.json`
@@ -36,6 +36,10 @@
 - 複製 `portfolio.csv.example` 成本機的 `portfolio.csv`
 - 填入自己的持股資料
 - `python3 portfolio_check.py`
+- 執行後會：
+  - 更新 `theme_watchlist_daily/portfolio_report.md`
+  - 更新 `theme_watchlist_daily/portfolio_report.html`
+  - 直接在 CLI 印出大盤摘要與持股建議
 
 補充：
 - `daily_report.md` 會包含 Signals 對照表與 Regime 解釋，方便直接看報表判讀
