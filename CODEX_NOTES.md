@@ -20,6 +20,7 @@
 - `daily_theme_watchlist.py`
 - `config.json`
 - `watchlist.csv`
+- `portfolio.csv`
 - `README.md`
 - `.github/workflows/stock-watch.yml`
 
@@ -54,6 +55,16 @@
   - 股票池
   - 群組有 `theme`、`core`、`etf`、`satellite`
   - `enabled=false` 的列會被略過
+- `portfolio.csv`
+  - 個人持股範本
+  - 目前先提供本地記錄格式，之後可接每日持股檢查
+  - 建議欄位：
+    - `ticker`
+    - `name`
+    - `shares`
+    - `avg_cost`
+    - `target_profit_pct`
+    - `note`
 
 ## 輸出產物
 
