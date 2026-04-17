@@ -17,7 +17,10 @@ from daily_theme_watchlist import (
     build_portfolio_message,
     build_portfolio_report_markdown,
     is_placeholder_name,
+    lookup_twse_display_name,
+    lookup_yahoo_tw_name,
     resolve_security_name,
+    should_refresh_watchlist_name,
     portfolio_advice_label,
     build_special_etf_message,
     build_midlong_message,
@@ -178,6 +181,35 @@ class PortfolioTests(unittest.TestCase):
     def test_placeholder_name_detection(self) -> None:
         self.assertTrue(is_placeholder_name("2412", "2412.TW"))
         self.assertFalse(is_placeholder_name("中華電", "2412.TW"))
+        self.assertTrue(should_refresh_watchlist_name("CHUNGHWA TELECOM", "2412.TW"))
+        self.assertFalse(should_refresh_watchlist_name("中華電", "2412.TW"))
+
+    def test_lookup_twse_display_name_reads_official_name(self) -> None:
+        class FakeResponse:
+            def raise_for_status(self) -> None:
+                return None
+
+            def json(self) -> dict:
+                return {"msgArray": [{"n": "中華電"}]}
+
+        with patch("daily_theme_watchlist.HTTP.get", return_value=FakeResponse()), patch.dict(
+            "daily_theme_watchlist.TWSE_NAME_CACHE", {}, clear=True
+        ):
+            self.assertEqual(lookup_twse_display_name("2412.TW"), "中華電")
+
+    def test_resolve_security_name_prefers_twse_chinese_name(self) -> None:
+        with patch("daily_theme_watchlist.lookup_twse_display_name", return_value="中華電"):
+            self.assertEqual(resolve_security_name("2412.TW"), "中華電")
+
+    def test_lookup_yahoo_tw_name_reads_chinese_title(self) -> None:
+        class FakeResponse:
+            text = "<html><body><h1>中華電</h1></body></html>"
+
+            def raise_for_status(self) -> None:
+                return None
+
+        with patch("daily_theme_watchlist.HTTP.get", return_value=FakeResponse()):
+            self.assertEqual(lookup_yahoo_tw_name("2412.TW"), "中華電")
 
     def test_load_portfolio_and_build_message(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

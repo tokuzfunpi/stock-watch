@@ -78,6 +78,7 @@
     - 程式會自動補進 `watchlist.csv`
     - 日常維護時記得把更新 commit / push
   - 自動補進或已存在但還是 placeholder 名稱時，程式會盡量用 Yahoo Finance metadata 補正式名稱
+    - 台股會先試官方市場 metadata，再試 Yahoo 台股頁面的中文標題，最後才 fallback 到 Yahoo Finance metadata
     - 例如 `2412` 不再只顯示 `2412`
 - `portfolio.csv.example`
   - repo 內提供的公開範例

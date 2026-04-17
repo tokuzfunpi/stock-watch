@@ -5,6 +5,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import sys
 from dataclasses import dataclass
 from datetime import datetime
@@ -52,6 +53,7 @@ HTTP_TIMEOUT = int(os.getenv("HTTP_TIMEOUT", "20"))
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 FORCE_RUN = os.getenv("FORCE_RUN", "").strip().lower() in {"1", "true", "yes", "y"}
 LOCAL_TZ = ZoneInfo(os.getenv("LOCAL_TZ", "Asia/Taipei"))
+TWSE_NAME_CACHE: dict[str, str] = {}
 
 
 @dataclass
@@ -206,8 +208,75 @@ def is_placeholder_name(name: str, ticker: str) -> bool:
     return not cleaned or cleaned == base
 
 
+def should_refresh_watchlist_name(name: str, ticker: str) -> bool:
+    cleaned = str(name or "").strip()
+    if is_placeholder_name(cleaned, ticker):
+        return True
+    return bool(re.fullmatch(r"[A-Z0-9 .&'()/-]+", cleaned))
+
+
+def lookup_twse_display_name(ticker: str) -> str:
+    cached = TWSE_NAME_CACHE.get(ticker)
+    if cached is not None:
+        return cached
+
+    base, _, suffix = ticker.partition(".")
+    if not base or not any(ch.isdigit() for ch in base):
+        TWSE_NAME_CACHE[ticker] = ""
+        return ""
+
+    channels = []
+    if suffix == "TW":
+        channels.extend([f"tse_{base}.tw", f"otc_{base}.tw"])
+    elif suffix == "TWO":
+        channels.extend([f"otc_{base}.tw", f"tse_{base}.tw"])
+    else:
+        channels.extend([f"tse_{base}.tw", f"otc_{base}.tw"])
+
+    try:
+        resp = HTTP.get(
+            "https://mis.twse.com.tw/stock/api/getStockInfo.jsp",
+            params={"ex_ch": "|".join(channels), "json": "1", "delay": "0"},
+            timeout=HTTP_TIMEOUT,
+        )
+        resp.raise_for_status()
+        payload = resp.json()
+    except Exception:
+        TWSE_NAME_CACHE[ticker] = ""
+        return ""
+
+    for item in payload.get("msgArray", []) or []:
+        name = str(item.get("n", "")).strip()
+        if name:
+            TWSE_NAME_CACHE[ticker] = name
+            return name
+
+    TWSE_NAME_CACHE[ticker] = ""
+    return ""
+
+
+def lookup_yahoo_tw_name(ticker: str) -> str:
+    base = ticker.split(".")[0]
+    try:
+        resp = HTTP.get(f"https://tw.stock.yahoo.com/quote/{base}", timeout=HTTP_TIMEOUT)
+        resp.raise_for_status()
+    except Exception:
+        return ""
+
+    match = re.search(r"<h1[^>]*>([^<]+)</h1>", resp.text)
+    if not match:
+        return ""
+    return match.group(1).strip()
+
+
 def resolve_security_name(ticker: str) -> str:
     base = ticker.split(".")[0]
+    twse_name = lookup_twse_display_name(ticker)
+    if twse_name:
+        return twse_name
+    yahoo_tw_name = lookup_yahoo_tw_name(ticker)
+    if yahoo_tw_name:
+        return yahoo_tw_name
     try:
         info = yf.Ticker(ticker).get_info()
     except Exception:
@@ -251,7 +320,7 @@ def sync_watchlist_with_portfolio(watchlist_csv: Path, portfolio_csv: Path) -> l
                 continue
             if ticker in known:
                 existing_row = row_by_ticker[ticker]
-                if is_placeholder_name(existing_row.get("name", ""), ticker):
+                if should_refresh_watchlist_name(existing_row.get("name", ""), ticker):
                     resolved_name = resolve_security_name(ticker)
                     if resolved_name and resolved_name != existing_row.get("name", ""):
                         existing_row["name"] = resolved_name
