@@ -21,6 +21,7 @@
 - `config.json`
 - `watchlist.csv`
 - `portfolio.csv`
+- `portfolio.csv.example`
 - `README.md`
 - `.github/workflows/stock-watch.yml`
 
@@ -56,7 +57,7 @@
   - 群組有 `theme`、`core`、`etf`、`satellite`
   - `enabled=false` 的列會被略過
 - `portfolio.csv`
-  - 個人持股範本
+  - 本機個人持股檔
   - 目前已接入每日持股檢查
   - 建議欄位：
     - `ticker`
@@ -70,6 +71,10 @@
   - 如果 `portfolio.csv` 裡的代碼不在 `watchlist.csv`
     - 程式會自動補進 `watchlist.csv`
     - 之後 workflow 會一起 commit / push
+- `portfolio.csv.example`
+  - repo 內提供的公開範例
+  - 真正個人持股請放在本機 `portfolio.csv`
+  - `portfolio.csv` 已加入 `.gitignore`，避免再被 push
 
 ## 輸出產物
 
