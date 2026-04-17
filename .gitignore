@@ -196,6 +196,9 @@ cython_debug/
 
 # Local personal portfolio data
 portfolio.csv
+theme_watchlist_daily/portfolio_report.md
+theme_watchlist_daily/portfolio_report.html
+theme_watchlist_daily/.yfinance_cache/
 
 # Cursor
 #  Cursor is an AI-powered code editor. `.cursorignore` specifies files/directories to

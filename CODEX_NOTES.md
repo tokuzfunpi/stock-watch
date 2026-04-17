@@ -84,6 +84,10 @@
   - repo 內提供的公開範例
   - 真正個人持股請放在本機 `portfolio.csv`
   - `portfolio.csv` 已加入 `.gitignore`，避免再被 push
+  - `theme_watchlist_daily/portfolio_report.md`
+  - `theme_watchlist_daily/portfolio_report.html`
+  - `theme_watchlist_daily/.yfinance_cache/`
+    - 這三個也屬於本機私有 / cache 輸出，已加入 `.gitignore`
 
 ## 輸出產物
 
