@@ -1,4 +1,4 @@
-這是 20D v2.2 進攻優化版。
+這是目前使用中的 stock watch 版本。
 
 你這次要的三件事都做進去了：
 1. attack 濾網更嚴，降低假突破
@@ -12,9 +12,9 @@
 - 通知給前 3 檔
 
 你要放進 repo：
-- daily_theme_watchlist_20d_v22.py
-- config_20d_v22.json
-- watchlist_20d_v22.csv
+- daily_theme_watchlist.py
+- config.json
+- watchlist.csv
 - .github/workflows/stock-watch.yml
 
 

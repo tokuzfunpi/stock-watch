@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 import pandas as pd
 
-from daily_theme_watchlist_20d_v22 import (
+from daily_theme_watchlist import (
     add_indicators,
     apply_feedback_adjustment,
     build_feedback_summary,
@@ -109,8 +109,8 @@ class FeedbackTests(unittest.TestCase):
                 ]
             ).to_csv(alert_csv, index=False)
 
-            with patch("daily_theme_watchlist_20d_v22.ALERT_TRACK_CSV", alert_csv), patch(
-                "daily_theme_watchlist_20d_v22.FEEDBACK_SUMMARY_CSV", feedback_csv
+            with patch("daily_theme_watchlist.ALERT_TRACK_CSV", alert_csv), patch(
+                "daily_theme_watchlist.FEEDBACK_SUMMARY_CSV", feedback_csv
             ):
                 summary = build_feedback_summary()
 

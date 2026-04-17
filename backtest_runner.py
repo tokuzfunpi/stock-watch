@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from daily_theme_watchlist_20d_v22 import OUTDIR, run_backtest_dual
+from daily_theme_watchlist import OUTDIR, run_backtest_dual
 
 if __name__ == "__main__":
     steady_result, attack_result = run_backtest_dual()

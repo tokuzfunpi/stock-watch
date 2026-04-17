@@ -13,9 +13,25 @@
 - 視條件送出 Telegram 通知
 - 跑兩種回測：`steady` 與 `attack`
 
+## 檔名命名原則
+
+目前 repo 已經把舊的版本尾巴檔名拿掉，未來維護請盡量維持簡潔命名：
+
+- `daily_theme_watchlist.py`
+- `config.json`
+- `watchlist.csv`
+- `README.md`
+- `.github/workflows/stock-watch.yml`
+
+原則是：
+
+- 不把 `v2.2`、`v3` 這類版本號放在檔名
+- 版本演進盡量記在 git history、release note、或 `CODEX_NOTES.md`
+- 如果策略真的大改版到無法相容，再考慮分支或新資料夾，不要先用檔名堆版本
+
 ## 主要入口
 
-- `daily_theme_watchlist_20d_v22.py`
+- `daily_theme_watchlist.py`
   - 正式主程式
   - 載入 config 與 watchlist
   - 下載資料
@@ -30,11 +46,11 @@
 
 ## 重要輸入檔
 
-- `config_20d_v22.json`
+- `config.json`
   - 全域行為設定中心
   - 目前 `always_notify` 是 `true`
   - 大盤濾網、通知門檻、回測 horizon 都在這裡
-- `watchlist_20d_v22.csv`
+- `watchlist.csv`
   - 股票池
   - 群組有 `theme`、`core`、`etf`、`satellite`
   - `enabled=false` 的列會被略過
@@ -114,7 +130,7 @@
 
 核心檔案：
 
-- `daily_theme_watchlist_20d_v22.py`
+- `daily_theme_watchlist.py`
 
 核心輸出：
 
@@ -216,7 +232,7 @@
 
 workflow 檔案：
 
-- `.github/workflows/stock-watch-20d-v22.yml`
+- `.github/workflows/stock-watch.yml`
 
 目前排程：
 
@@ -245,10 +261,10 @@ GitHub 排程要注意：
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-python3 -m py_compile daily_theme_watchlist_20d_v22.py backtest_runner.py tests/test_core.py
+python3 -m py_compile daily_theme_watchlist.py backtest_runner.py tests/test_core.py
 python3 -m unittest discover -s tests
 python3 backtest_runner.py
-python3 daily_theme_watchlist_20d_v22.py
+python3 daily_theme_watchlist.py
 ```
 
 依賴套件目前記在：

@@ -19,8 +19,8 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 BASE_DIR = Path(__file__).resolve().parent
-CONFIG_PATH = Path(os.getenv("CONFIG_PATH", BASE_DIR / "config_20d_v22.json"))
-WATCHLIST_CSV = Path(os.getenv("WATCHLIST_CSV", BASE_DIR / "watchlist_20d_v22.csv"))
+CONFIG_PATH = Path(os.getenv("CONFIG_PATH", BASE_DIR / "config.json"))
+WATCHLIST_CSV = Path(os.getenv("WATCHLIST_CSV", BASE_DIR / "watchlist.csv"))
 OUTDIR = Path(os.getenv("OUTDIR", BASE_DIR / "theme_watchlist_daily"))
 OUTDIR.mkdir(parents=True, exist_ok=True)
 
@@ -124,7 +124,7 @@ logging.basicConfig(
     level=getattr(logging, LOG_LEVEL, logging.INFO),
     format="%(asctime)s | %(levelname)s | %(message)s",
 )
-logger = logging.getLogger("theme_watchlist_20d_v22")
+logger = logging.getLogger("theme_watchlist")
 
 
 def build_session() -> requests.Session:
