@@ -16,6 +16,7 @@ from daily_theme_watchlist import (
     build_macro_message,
     build_portfolio_message,
     build_portfolio_report_markdown,
+    portfolio_advice_label,
     build_special_etf_message,
     build_midlong_message,
     build_short_term_message,
@@ -236,6 +237,36 @@ class PortfolioTests(unittest.TestCase):
         self.assertNotIn("## Portfolio Review", daily_report)
         self.assertIn("# Portfolio Review", portfolio_report)
         self.assertIn("台積電", portfolio_report)
+
+    def test_portfolio_advice_promotes_low_risk_accel_holding(self) -> None:
+        row = pd.Series(
+            {
+                "current_close": 113.0,
+                "unrealized_pnl_pct": 8.54,
+                "target_profit_pct": 20.0,
+                "risk_score": 1,
+                "signals": "ACCEL",
+                "ret20_pct": 12.68,
+                "volume_ratio20": 1.30,
+            }
+        )
+
+        self.assertEqual(portfolio_advice_label(row), "強勢續抱")
+
+    def test_portfolio_advice_flags_high_risk_target_hit(self) -> None:
+        row = pd.Series(
+            {
+                "current_close": 120.0,
+                "unrealized_pnl_pct": 25.0,
+                "target_profit_pct": 20.0,
+                "risk_score": 4,
+                "signals": "TREND",
+                "ret20_pct": 30.0,
+                "volume_ratio20": 1.1,
+            }
+        )
+
+        self.assertEqual(portfolio_advice_label(row), "達標可落袋")
 
 
 class SelectPushCandidatesTests(unittest.TestCase):

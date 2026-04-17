@@ -1330,6 +1330,33 @@ def build_macro_message(market_regime: dict, us_market: dict) -> str:
     return "\n".join(lines).strip()
 
 
+def portfolio_advice_label(row: pd.Series) -> str:
+    current_close = row.get("current_close")
+    if pd.isna(current_close):
+        return "已補進觀察清單"
+
+    profit_pct = float(row.get("unrealized_pnl_pct", 0.0))
+    target_pct = float(row.get("target_profit_pct", 0.0))
+    risk_score = int(row.get("risk_score", 0)) if pd.notna(row.get("risk_score")) else 0
+    signals = str(row.get("signals", ""))
+    ret20_pct = float(row.get("ret20_pct", 0.0)) if pd.notna(row.get("ret20_pct")) else 0.0
+    volume_ratio20 = float(row.get("volume_ratio20", 0.0)) if pd.notna(row.get("volume_ratio20")) else 0.0
+
+    if profit_pct >= target_pct and risk_score >= 4:
+        return "達標可落袋"
+    if profit_pct >= target_pct:
+        return "達標續抱"
+    if profit_pct <= -8 or risk_score >= 5:
+        return "轉弱留意"
+    if ("TREND" in signals or "REBREAK" in signals) and risk_score <= 3:
+        return "續抱"
+    if "ACCEL" in signals and risk_score <= 2 and profit_pct > 0 and ret20_pct >= 0 and volume_ratio20 >= 1.0:
+        return "強勢續抱"
+    if profit_pct > 0 and risk_score <= 3 and ret20_pct >= 0:
+        return "續抱觀察"
+    return "中性觀察"
+
+
 def build_portfolio_review_df(df_rank: pd.DataFrame) -> pd.DataFrame:
     if PORTFOLIO.empty:
         return pd.DataFrame()
@@ -1346,26 +1373,7 @@ def build_portfolio_review_df(df_rank: pd.DataFrame) -> pd.DataFrame:
     review["unrealized_pnl"] = (review["position_value"] - review["position_cost"]).round(2)
     review["unrealized_pnl_pct"] = ((review["current_close"] / review["avg_cost"] - 1.0) * 100).round(2)
     review["target_gap_pct"] = (review["target_profit_pct"] - review["unrealized_pnl_pct"]).round(2)
-
-    def _advice(row: pd.Series) -> str:
-        current_close = row.get("current_close")
-        if pd.isna(current_close):
-            return "已補進觀察清單"
-        profit_pct = float(row.get("unrealized_pnl_pct", 0.0))
-        target_pct = float(row.get("target_profit_pct", 0.0))
-        risk_score = int(row.get("risk_score", 0)) if pd.notna(row.get("risk_score")) else 0
-        signals = str(row.get("signals", ""))
-        if profit_pct >= target_pct and risk_score >= 4:
-            return "達標可落袋"
-        if profit_pct >= target_pct:
-            return "達標續抱"
-        if profit_pct <= -8 or risk_score >= 5:
-            return "轉弱留意"
-        if "TREND" in signals or "REBREAK" in signals:
-            return "續抱"
-        return "續抱觀察"
-
-    review["advice"] = review.apply(_advice, axis=1)
+    review["advice"] = review.apply(portfolio_advice_label, axis=1)
     return review.sort_values(by=["unrealized_pnl_pct", "target_gap_pct"], ascending=[False, True]).reset_index(drop=True)
 
 
