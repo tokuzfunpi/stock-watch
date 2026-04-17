@@ -14,17 +14,21 @@ from daily_theme_watchlist import (
     build_daily_report_markdown,
     build_early_gem_message,
     build_macro_message,
+    build_portfolio_message,
     build_special_etf_message,
     build_midlong_message,
     build_short_term_message,
     detect_row,
     grade_signal,
+    load_portfolio,
+    normalize_ticker_symbol,
     speculative_risk_label,
     speculative_risk_score,
     select_midlong_candidates,
     select_short_term_candidates,
     select_push_candidates,
     split_message,
+    sync_watchlist_with_portfolio,
 )
 
 
@@ -129,6 +133,59 @@ class FeedbackTests(unittest.TestCase):
 
                 self.assertEqual(adjusted.iloc[0]["ticker"], "CHASE.TW")
                 self.assertIn("feedback_label", adjusted.columns)
+
+
+class PortfolioTests(unittest.TestCase):
+    def test_normalize_ticker_symbol_supports_plain_codes(self) -> None:
+        self.assertEqual(normalize_ticker_symbol("2495"), "2495.TW")
+        self.assertEqual(normalize_ticker_symbol("00772B"), "00772B.TWO")
+
+    def test_sync_watchlist_with_portfolio_adds_missing_symbols(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            watchlist_csv = Path(tmpdir) / "watchlist.csv"
+            portfolio_csv = Path(tmpdir) / "portfolio.csv"
+            watchlist_csv.write_text("ticker,name,group,layer,enabled\n2495.TW,2495,core,midlong_core,true\n", encoding="utf-8")
+            portfolio_csv.write_text("ticker,shares,avg_cost,target_profit_pct\n2330,1000,950,15\n00772B,1000,35,10\n", encoding="utf-8")
+
+            added = sync_watchlist_with_portfolio(watchlist_csv, portfolio_csv)
+
+            self.assertEqual(added, ["2330.TW", "00772B.TWO"])
+            content = watchlist_csv.read_text(encoding="utf-8")
+            self.assertIn("2330.TW", content)
+            self.assertIn("00772B.TWO", content)
+
+    def test_load_portfolio_and_build_message(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            portfolio_csv = Path(tmpdir) / "portfolio.csv"
+            portfolio_csv.write_text("ticker,shares,avg_cost,target_profit_pct\n2495,4000,36.35,20\n", encoding="utf-8")
+            loaded = load_portfolio(portfolio_csv)
+            self.assertEqual(loaded.iloc[0]["ticker"], "2495.TW")
+
+        df = pd.DataFrame(
+            [
+                {
+                    "ticker": "2495.TW",
+                    "name": "普安",
+                    "close": 41.15,
+                    "signals": "TREND",
+                    "regime": "中段延續中",
+                    "risk_score": 3,
+                    "ret5_pct": 5.0,
+                    "ret20_pct": 15.0,
+                    "volume_ratio20": 1.2,
+                }
+            ]
+        )
+
+        with patch(
+            "daily_theme_watchlist.PORTFOLIO",
+            pd.DataFrame([{"ticker": "2495.TW", "shares": 4000, "avg_cost": 36.35, "target_profit_pct": 20.0}]),
+        ):
+            message = build_portfolio_message(df)
+
+        self.assertIn("持股檢查", message)
+        self.assertIn("2495", message)
+        self.assertIn("報酬", message)
 
 
 class SelectPushCandidatesTests(unittest.TestCase):

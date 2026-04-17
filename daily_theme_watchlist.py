@@ -21,8 +21,17 @@ from urllib3.util.retry import Retry
 BASE_DIR = Path(__file__).resolve().parent
 CONFIG_PATH = Path(os.getenv("CONFIG_PATH", BASE_DIR / "config.json"))
 WATCHLIST_CSV = Path(os.getenv("WATCHLIST_CSV", BASE_DIR / "watchlist.csv"))
+PORTFOLIO_CSV = Path(os.getenv("PORTFOLIO_CSV", BASE_DIR / "portfolio.csv"))
 OUTDIR = Path(os.getenv("OUTDIR", BASE_DIR / "theme_watchlist_daily"))
 OUTDIR.mkdir(parents=True, exist_ok=True)
+
+YF_CACHE_DIR = OUTDIR / ".yfinance_cache"
+YF_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+try:
+    yf.cache.set_cache_location(str(YF_CACHE_DIR))
+    yf.set_tz_cache_location(str(YF_CACHE_DIR))
+except Exception:
+    pass
 
 RANK_CSV = OUTDIR / "daily_rank.csv"
 STATE_FILE = OUTDIR / "last_rank_state.txt"
@@ -171,7 +180,74 @@ def load_watchlist(csv_path: Path) -> List[dict]:
     return rows
 
 
+def normalize_ticker_symbol(raw_ticker: str) -> str:
+    ticker = str(raw_ticker).strip().upper()
+    if not ticker:
+        return ""
+    if "." in ticker:
+        return ticker
+    if ticker.endswith("B"):
+        return f"{ticker}.TWO"
+    return f"{ticker}.TW"
+
+
+def infer_watchlist_row(ticker: str) -> dict:
+    base = ticker.split(".")[0]
+    if ticker.endswith(".TWO") and base.endswith("B"):
+        return {"ticker": ticker, "name": base, "group": "etf", "layer": "defensive_watch", "enabled": "true"}
+    if base.startswith("00"):
+        return {"ticker": ticker, "name": base, "group": "etf", "layer": "midlong_core", "enabled": "true"}
+    return {"ticker": ticker, "name": base, "group": "core", "layer": "midlong_core", "enabled": "true"}
+
+
+def sync_watchlist_with_portfolio(watchlist_csv: Path, portfolio_csv: Path) -> list[str]:
+    if not portfolio_csv.exists():
+        return []
+
+    with watchlist_csv.open("r", encoding="utf-8-sig", newline="") as f:
+        rows = list(csv.DictReader(f))
+        fieldnames = list(rows[0].keys()) if rows else ["ticker", "name", "group", "layer", "enabled"]
+
+    known = {str(row.get("ticker", "")).strip().upper() for row in rows}
+    additions: list[dict] = []
+    added_tickers: list[str] = []
+
+    with portfolio_csv.open("r", encoding="utf-8-sig", newline="") as f:
+        for row in csv.DictReader(f):
+            ticker = normalize_ticker_symbol(row.get("ticker", ""))
+            if not ticker or ticker in known:
+                continue
+            additions.append(infer_watchlist_row(ticker))
+            added_tickers.append(ticker)
+            known.add(ticker)
+
+    if additions:
+        rows.extend(additions)
+        with watchlist_csv.open("w", encoding="utf-8-sig", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(rows)
+
+    return added_tickers
+
+
+def load_portfolio(csv_path: Path) -> pd.DataFrame:
+    if not csv_path.exists():
+        return pd.DataFrame(columns=["ticker", "shares", "avg_cost", "target_profit_pct"])
+    df = pd.read_csv(csv_path)
+    if df.empty:
+        return df
+    df = df.copy()
+    df["ticker"] = df["ticker"].astype(str).map(normalize_ticker_symbol)
+    for col in ["shares", "avg_cost", "target_profit_pct"]:
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+    df = df.dropna(subset=["ticker", "shares", "avg_cost", "target_profit_pct"]).reset_index(drop=True)
+    return df
+
+
+AUTO_ADDED_TICKERS = sync_watchlist_with_portfolio(WATCHLIST_CSV, PORTFOLIO_CSV)
 WATCHLIST = load_watchlist(WATCHLIST_CSV)
+PORTFOLIO = load_portfolio(PORTFOLIO_CSV)
 SPECIAL_ETF_TICKERS = [
     "00772B.TWO",
     "00773B.TWO",
@@ -1240,6 +1316,67 @@ def build_macro_message(market_regime: dict, us_market: dict) -> str:
     lines.extend(runtime_context_lines())
     if us_market.get("tech_bias"):
         lines.append(us_market["tech_bias"])
+    if AUTO_ADDED_TICKERS:
+        lines.append(f"持股同步加入觀察清單：{', '.join(AUTO_ADDED_TICKERS)}")
+    return "\n".join(lines).strip()
+
+
+def build_portfolio_review_df(df_rank: pd.DataFrame) -> pd.DataFrame:
+    if PORTFOLIO.empty:
+        return pd.DataFrame()
+
+    market_cols = [
+        "ticker", "name", "close", "signals", "regime", "risk_score", "ret5_pct", "ret20_pct", "volume_ratio20"
+    ]
+    market_df = df_rank[market_cols].copy() if not df_rank.empty else pd.DataFrame(columns=market_cols)
+    review = PORTFOLIO.merge(market_df, on="ticker", how="left")
+    review["name"] = review["name"].fillna(review["ticker"].str.split(".").str[0])
+    review["current_close"] = pd.to_numeric(review["close"], errors="coerce")
+    review["position_cost"] = (review["shares"] * review["avg_cost"]).round(2)
+    review["position_value"] = (review["shares"] * review["current_close"]).round(2)
+    review["unrealized_pnl"] = (review["position_value"] - review["position_cost"]).round(2)
+    review["unrealized_pnl_pct"] = ((review["current_close"] / review["avg_cost"] - 1.0) * 100).round(2)
+    review["target_gap_pct"] = (review["target_profit_pct"] - review["unrealized_pnl_pct"]).round(2)
+
+    def _advice(row: pd.Series) -> str:
+        current_close = row.get("current_close")
+        if pd.isna(current_close):
+            return "已補進觀察清單"
+        profit_pct = float(row.get("unrealized_pnl_pct", 0.0))
+        target_pct = float(row.get("target_profit_pct", 0.0))
+        risk_score = int(row.get("risk_score", 0)) if pd.notna(row.get("risk_score")) else 0
+        signals = str(row.get("signals", ""))
+        if profit_pct >= target_pct and risk_score >= 4:
+            return "達標可落袋"
+        if profit_pct >= target_pct:
+            return "達標續抱"
+        if profit_pct <= -8 or risk_score >= 5:
+            return "轉弱留意"
+        if "TREND" in signals or "REBREAK" in signals:
+            return "續抱"
+        return "續抱觀察"
+
+    review["advice"] = review.apply(_advice, axis=1)
+    return review.sort_values(by=["unrealized_pnl_pct", "target_gap_pct"], ascending=[False, True]).reset_index(drop=True)
+
+
+def build_portfolio_message(df_rank: pd.DataFrame) -> str:
+    review = build_portfolio_review_df(df_rank)
+    lines = ["📣 持股檢查"]
+    if review.empty:
+        lines.append("portfolio.csv 目前沒有可分析的持股。")
+        return "\n".join(lines)
+
+    for _, r in review.iterrows():
+        current_close = r.get("current_close")
+        if pd.isna(current_close):
+            lines.append(f"{r['ticker'].split('.')[0]} {r['advice']} | 尚未抓到行情，已同步加入觀察清單")
+            continue
+        lines.append(
+            f"{r['name']} ({r['ticker'].split('.')[0]}) {r['advice']} | "
+            f"現價 {round(float(current_close), 2)} / 成本 {round(float(r['avg_cost']), 2)} | "
+            f"報酬 {r['unrealized_pnl_pct']}% / 目標 {r['target_profit_pct']}%"
+        )
     return "\n".join(lines).strip()
 
 
@@ -1625,6 +1762,7 @@ def build_daily_report_markdown(df_rank: pd.DataFrame, market_regime: dict, bt_s
 
     special_etf_candidates = select_special_etf_candidates(df_rank)
     gem_candidates = select_early_gem_candidates(df_rank)
+    portfolio_review = build_portfolio_review_df(df_rank)
     lines.extend(["", "## ETF / 債券觀察", ""])
     if special_etf_candidates.empty:
         lines.append("- None")
@@ -1650,6 +1788,21 @@ def build_daily_report_markdown(df_rank: pd.DataFrame, market_regime: dict, bt_s
                 f"setup {r['setup_score']} risk {r['risk_score']} | "
                 f"5D {r['ret5_pct']}% 20D {r['ret20_pct']}% | 投機 {r['spec_risk_label']} | "
                 f"{r['signals']} | 理由 {early_gem_reason(r)}"
+            )
+
+    lines.extend(["", "## Portfolio Review", ""])
+    if portfolio_review.empty:
+        lines.append("- None")
+    else:
+        for _, r in portfolio_review.iterrows():
+            current_close = r.get("current_close")
+            if pd.isna(current_close):
+                lines.append(f"- {r['ticker'].split('.')[0]} | {r['advice']} | 尚未抓到行情，已同步加入觀察清單")
+                continue
+            lines.append(
+                f"- {r['name']} ({r['ticker'].split('.')[0]}) | 現價 {round(float(current_close), 2)} | "
+                f"成本 {round(float(r['avg_cost']), 2)} | 報酬 {r['unrealized_pnl_pct']}% | "
+                f"目標 {r['target_profit_pct']}% | 建議 {r['advice']}"
             )
 
     lines.extend(["", "## Prediction Feedback", ""])
@@ -1740,6 +1893,8 @@ def build_daily_report_html(df_rank: pd.DataFrame, market_regime: dict, bt_stead
     special_etf_html = "<p>None</p>" if special_etf_candidates.empty else dataframe_to_html(special_etf_candidates)
     gem_candidates = select_early_gem_candidates(df_rank)
     gem_html = "<p>None</p>" if gem_candidates.empty else dataframe_to_html(gem_candidates)
+    portfolio_review = build_portfolio_review_df(df_rank)
+    portfolio_html = "<p>None</p>" if portfolio_review.empty else dataframe_to_html(portfolio_review)
     feedback_summary = build_feedback_summary()
     feedback_html = "<p>None</p>" if feedback_summary.empty else dataframe_to_html(feedback_summary)
     return f"""<!doctype html>
@@ -1759,6 +1914,7 @@ th {{ background: #f4f4f4; }}
 <h2>Mid-Long Backups</h2>{midlong_backup_html}
 <h2>ETF / 債券觀察</h2>{special_etf_html}
 <h2>Early Gem Watch</h2>{gem_html}
+<h2>Portfolio Review</h2>{portfolio_html}
 <h2>Prediction Feedback</h2>{feedback_html}
 <h2>Steady Backtest</h2>{steady_html}
 <h2>Attack Backtest</h2>{attack_html}
@@ -1832,6 +1988,7 @@ def main() -> int:
             send_telegram_message(build_early_gem_message(df_rank, market_regime, us_market))
             send_telegram_message(build_midlong_message(df_rank, market_regime, us_market))
             send_telegram_message(build_special_etf_message(df_rank, market_regime, us_market))
+            send_telegram_message(build_portfolio_message(df_rank))
             logger.info("Notification sent.")
         else:
             logger.info("No notification sent.")

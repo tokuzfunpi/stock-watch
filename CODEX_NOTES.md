@@ -57,13 +57,19 @@
   - `enabled=false` 的列會被略過
 - `portfolio.csv`
   - 個人持股範本
-  - 目前先提供本地記錄格式，之後可接每日持股檢查
+  - 目前已接入每日持股檢查
   - 建議欄位：
     - `ticker`
     - `shares`
     - `avg_cost`
     - `target_profit_pct`
   - `ticker` 建議只放股票代碼，例如 `2495`、`2330`
+  - 程式會自動轉成 Yahoo Finance 用的格式，例如：
+    - `2495` -> `2495.TW`
+    - `00772B` -> `00772B.TWO`
+  - 如果 `portfolio.csv` 裡的代碼不在 `watchlist.csv`
+    - 程式會自動補進 `watchlist.csv`
+    - 之後 workflow 會一起 commit / push
 
 ## 輸出產物
 
@@ -120,6 +126,10 @@
 - 目前 config 的 `always_notify=true`
   - 代表 state 沒變也照樣送
   - 但訊息內容仍然只會從 `select_push_candidates()` 選出的標的組成
+- 現在另外也會多一則：
+  - `持股檢查`
+  - 來源是 `portfolio.csv`
+  - 會根據成本、目標報酬、當前走勢給出簡單建議
 
 ## Alert Tracking 重點
 
