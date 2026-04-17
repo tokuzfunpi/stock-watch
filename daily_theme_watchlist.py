@@ -38,6 +38,8 @@ STATE_FILE = OUTDIR / "last_rank_state.txt"
 PREV_RANK_CSV = OUTDIR / "prev_daily_rank.csv"
 REPORT_MD = OUTDIR / "daily_report.md"
 REPORT_HTML = OUTDIR / "daily_report.html"
+PORTFOLIO_REPORT_MD = OUTDIR / "portfolio_report.md"
+PORTFOLIO_REPORT_HTML = OUTDIR / "portfolio_report.html"
 ALERT_TRACK_CSV = OUTDIR / "alert_tracking.csv"
 FEEDBACK_SUMMARY_CSV = OUTDIR / "feedback_summary.csv"
 SUCCESS_FILE = OUTDIR / "last_success_date.txt"
@@ -1762,7 +1764,6 @@ def build_daily_report_markdown(df_rank: pd.DataFrame, market_regime: dict, bt_s
 
     special_etf_candidates = select_special_etf_candidates(df_rank)
     gem_candidates = select_early_gem_candidates(df_rank)
-    portfolio_review = build_portfolio_review_df(df_rank)
     lines.extend(["", "## ETF / 債券觀察", ""])
     if special_etf_candidates.empty:
         lines.append("- None")
@@ -1788,21 +1789,6 @@ def build_daily_report_markdown(df_rank: pd.DataFrame, market_regime: dict, bt_s
                 f"setup {r['setup_score']} risk {r['risk_score']} | "
                 f"5D {r['ret5_pct']}% 20D {r['ret20_pct']}% | 投機 {r['spec_risk_label']} | "
                 f"{r['signals']} | 理由 {early_gem_reason(r)}"
-            )
-
-    lines.extend(["", "## Portfolio Review", ""])
-    if portfolio_review.empty:
-        lines.append("- None")
-    else:
-        for _, r in portfolio_review.iterrows():
-            current_close = r.get("current_close")
-            if pd.isna(current_close):
-                lines.append(f"- {r['ticker'].split('.')[0]} | {r['advice']} | 尚未抓到行情，已同步加入觀察清單")
-                continue
-            lines.append(
-                f"- {r['name']} ({r['ticker'].split('.')[0]}) | 現價 {round(float(current_close), 2)} | "
-                f"成本 {round(float(r['avg_cost']), 2)} | 報酬 {r['unrealized_pnl_pct']}% | "
-                f"目標 {r['target_profit_pct']}% | 建議 {r['advice']}"
             )
 
     lines.extend(["", "## Prediction Feedback", ""])
@@ -1893,8 +1879,6 @@ def build_daily_report_html(df_rank: pd.DataFrame, market_regime: dict, bt_stead
     special_etf_html = "<p>None</p>" if special_etf_candidates.empty else dataframe_to_html(special_etf_candidates)
     gem_candidates = select_early_gem_candidates(df_rank)
     gem_html = "<p>None</p>" if gem_candidates.empty else dataframe_to_html(gem_candidates)
-    portfolio_review = build_portfolio_review_df(df_rank)
-    portfolio_html = "<p>None</p>" if portfolio_review.empty else dataframe_to_html(portfolio_review)
     feedback_summary = build_feedback_summary()
     feedback_html = "<p>None</p>" if feedback_summary.empty else dataframe_to_html(feedback_summary)
     return f"""<!doctype html>
@@ -1914,7 +1898,6 @@ th {{ background: #f4f4f4; }}
 <h2>Mid-Long Backups</h2>{midlong_backup_html}
 <h2>ETF / 債券觀察</h2>{special_etf_html}
 <h2>Early Gem Watch</h2>{gem_html}
-<h2>Portfolio Review</h2>{portfolio_html}
 <h2>Prediction Feedback</h2>{feedback_html}
 <h2>Steady Backtest</h2>{steady_html}
 <h2>Attack Backtest</h2>{attack_html}
@@ -1924,6 +1907,65 @@ th {{ background: #f4f4f4; }}
 def save_reports(df_rank: pd.DataFrame, market_regime: dict, bt_steady: Optional[pd.DataFrame], bt_attack: Optional[pd.DataFrame]) -> None:
     REPORT_MD.write_text(build_daily_report_markdown(df_rank, market_regime, bt_steady, bt_attack), encoding="utf-8")
     REPORT_HTML.write_text(build_daily_report_html(df_rank, market_regime, bt_steady, bt_attack), encoding="utf-8")
+
+
+def build_portfolio_report_markdown(df_rank: pd.DataFrame, market_regime: dict, us_market: dict) -> str:
+    review = build_portfolio_review_df(df_rank)
+    today = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    lines = [
+        "# Portfolio Review",
+        f"- Generated: {today}",
+        f"- Market Regime: {market_regime['comment']}",
+        f"- US Summary: {us_market['summary']}",
+        "",
+    ]
+    if AUTO_ADDED_TICKERS:
+        lines.append(f"- Auto-added to watchlist: {', '.join(AUTO_ADDED_TICKERS)}")
+        lines.append("")
+
+    lines.extend(["## Holdings", ""])
+    if review.empty:
+        lines.append("- None")
+        return "\n".join(lines)
+
+    for _, r in review.iterrows():
+        current_close = r.get("current_close")
+        if pd.isna(current_close):
+            lines.append(f"- {r['ticker'].split('.')[0]} | {r['advice']} | 尚未抓到行情，已同步加入觀察清單")
+            continue
+        lines.append(
+            f"- {r['name']} ({r['ticker'].split('.')[0]}) | 現價 {round(float(current_close), 2)} | "
+            f"成本 {round(float(r['avg_cost']), 2)} | 報酬 {r['unrealized_pnl_pct']}% | "
+            f"目標 {r['target_profit_pct']}% | 建議 {r['advice']}"
+        )
+    return "\n".join(lines)
+
+
+def build_portfolio_report_html(df_rank: pd.DataFrame, market_regime: dict, us_market: dict) -> str:
+    review = build_portfolio_review_df(df_rank)
+    review_html = "<p>None</p>" if review.empty else dataframe_to_html(review)
+    auto_added_html = ""
+    if AUTO_ADDED_TICKERS:
+        auto_added_html = f"<p><strong>Auto-added to watchlist:</strong> {', '.join(AUTO_ADDED_TICKERS)}</p>"
+    return f"""<!doctype html>
+<html><head><meta charset="utf-8"><title>Portfolio Review</title>
+<style>
+body {{ font-family: Arial, sans-serif; margin: 24px; }}
+table {{ border-collapse: collapse; width: 100%; margin-bottom: 24px; }}
+th, td {{ border: 1px solid #ddd; padding: 8px; font-size: 14px; }}
+th {{ background: #f4f4f4; }}
+</style></head><body>
+<h1>Portfolio Review</h1>
+<p><strong>Market:</strong> {market_regime['comment']}</p>
+<p><strong>US Summary:</strong> {us_market['summary']}</p>
+{auto_added_html}
+<h2>Holdings</h2>{review_html}
+</body></html>"""
+
+
+def save_portfolio_reports(df_rank: pd.DataFrame, market_regime: dict, us_market: dict) -> None:
+    PORTFOLIO_REPORT_MD.write_text(build_portfolio_report_markdown(df_rank, market_regime, us_market), encoding="utf-8")
+    PORTFOLIO_REPORT_HTML.write_text(build_portfolio_report_html(df_rank, market_regime, us_market), encoding="utf-8")
 
 
 def split_message(text: str, limit: int) -> List[str]:
@@ -1988,7 +2030,6 @@ def main() -> int:
             send_telegram_message(build_early_gem_message(df_rank, market_regime, us_market))
             send_telegram_message(build_midlong_message(df_rank, market_regime, us_market))
             send_telegram_message(build_special_etf_message(df_rank, market_regime, us_market))
-            send_telegram_message(build_portfolio_message(df_rank))
             logger.info("Notification sent.")
         else:
             logger.info("No notification sent.")

@@ -15,6 +15,7 @@ from daily_theme_watchlist import (
     build_early_gem_message,
     build_macro_message,
     build_portfolio_message,
+    build_portfolio_report_markdown,
     build_special_etf_message,
     build_midlong_message,
     build_short_term_message,
@@ -186,6 +187,46 @@ class PortfolioTests(unittest.TestCase):
         self.assertIn("持股檢查", message)
         self.assertIn("2495", message)
         self.assertIn("報酬", message)
+
+    def test_portfolio_report_is_separate_from_daily_report(self) -> None:
+        df = pd.DataFrame(
+            [
+                {
+                    "rank": 1,
+                    "grade": "A",
+                    "ticker": "2330.TW",
+                    "name": "台積電",
+                    "group": "core",
+                    "layer": "midlong_core",
+                    "regime": "中段延續中",
+                    "ret5_pct": 3.0,
+                    "ret10_pct": 6.0,
+                    "ret20_pct": 12.0,
+                    "spec_risk_label": "正常",
+                    "signals": "TREND",
+                    "volume_ratio20": 1.1,
+                    "setup_score": 7,
+                    "risk_score": 2,
+                    "rank_change": 0,
+                    "setup_change": 0,
+                    "close": 950.0,
+                    "date": "2026-04-17",
+                }
+            ]
+        )
+        market_regime = {"comment": "盤勢中性偏多"}
+        us_market = {"summary": "Nasdaq 小漲"}
+
+        with patch(
+            "daily_theme_watchlist.PORTFOLIO",
+            pd.DataFrame([{"ticker": "2330.TW", "shares": 1000, "avg_cost": 900.0, "target_profit_pct": 15.0}]),
+        ):
+            daily_report = build_daily_report_markdown(df, market_regime, None, None)
+            portfolio_report = build_portfolio_report_markdown(df, market_regime, us_market)
+
+        self.assertNotIn("## Portfolio Review", daily_report)
+        self.assertIn("# Portfolio Review", portfolio_report)
+        self.assertIn("台積電", portfolio_report)
 
 
 class SelectPushCandidatesTests(unittest.TestCase):

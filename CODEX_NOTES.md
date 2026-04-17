@@ -41,6 +41,10 @@
   - 產生報表
   - 更新 alert tracking
   - 發送 Telegram
+- `portfolio_check.py`
+  - 持股檢查專用執行檔
+  - 共用 `daily_theme_watchlist.py` 的資料抓取、排行與判讀邏輯
+  - 只產生持股專用報表與通知
 - `backtest_runner.py`
   - 簡單的 CLI 包裝
   - 直接呼叫 `run_backtest_dual()`
@@ -58,7 +62,7 @@
   - `enabled=false` 的列會被略過
 - `portfolio.csv`
   - 本機個人持股檔
-  - 目前已接入每日持股檢查
+  - 目前由 `portfolio_check.py` 使用
   - 建議欄位：
     - `ticker`
     - `shares`
@@ -70,7 +74,7 @@
     - `00772B` -> `00772B.TWO`
   - 如果 `portfolio.csv` 裡的代碼不在 `watchlist.csv`
     - 程式會自動補進 `watchlist.csv`
-    - 之後 workflow 會一起 commit / push
+    - 日常維護時記得把更新 commit / push
 - `portfolio.csv.example`
   - repo 內提供的公開範例
   - 真正個人持股請放在本機 `portfolio.csv`
@@ -84,6 +88,8 @@
 - `prev_daily_rank.csv`
 - `daily_report.md`
 - `daily_report.html`
+- `portfolio_report.md`
+- `portfolio_report.html`
 - `alert_tracking.csv`
 - `feedback_summary.csv`
 - `backtest_events_steady.csv`
@@ -97,7 +103,7 @@
 
 ## 主流程
 
-`main()` 的高層執行順序如下：
+`daily_theme_watchlist.py` 的 `main()` 高層執行順序如下：
 
 1. `get_market_regime()`
 2. `run_watchlist()`
@@ -108,6 +114,16 @@
 7. `should_alert()`
 8. `send_telegram_message()`
 9. `save_last_state()`
+
+`portfolio_check.py` 的流程則是：
+
+1. 讀取本機 `portfolio.csv`
+2. `get_market_regime()`
+3. `get_us_market_reference()`
+4. `run_watchlist()`
+5. `save_portfolio_reports()`
+6. 發送大盤 / 美股摘要
+7. 發送 `持股檢查`
 
 ## 訊號與排序重點
 
@@ -131,9 +147,9 @@
 - 目前 config 的 `always_notify=true`
   - 代表 state 沒變也照樣送
   - 但訊息內容仍然只會從 `select_push_candidates()` 選出的標的組成
-- 現在另外也會多一則：
-  - `持股檢查`
-  - 來源是 `portfolio.csv`
+- `daily_theme_watchlist.py` 不再夾帶 `持股檢查`
+- `持股檢查` 改由 `portfolio_check.py` 單獨送出
+  - 來源是本機 `portfolio.csv`
   - 會根據成本、目標報酬、當前走勢給出簡單建議
 
 ## Alert Tracking 重點
@@ -271,6 +287,12 @@ workflow 檔案：
 3. 執行主程式
 4. commit 產出的 artifacts 並 push
 
+目前 workflow 只跑主程式：
+
+- `python daily_theme_watchlist.py`
+
+如果之後想把持股檢查也自動化，應另外加一個明確步驟或獨立 workflow，不要再混回主流程。
+
 GitHub 排程要注意：
 
 - GitHub cron 一律用 UTC
@@ -286,10 +308,11 @@ GitHub 排程要注意：
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-python3 -m py_compile daily_theme_watchlist.py backtest_runner.py tests/test_core.py
+python3 -m py_compile daily_theme_watchlist.py portfolio_check.py backtest_runner.py tests/test_core.py
 python3 -m unittest discover -s tests
 python3 backtest_runner.py
 python3 daily_theme_watchlist.py
+python3 portfolio_check.py
 ```
 
 依賴套件目前記在：

@@ -11,14 +11,25 @@
 - 排名偏重 setup、ret5、volume_ratio、ret20
 - 通知給前 3 檔
 
-你要放進 repo：
-- daily_theme_watchlist.py
-- config.json
-- watchlist.csv
-- .github/workflows/stock-watch.yml
+主要執行檔：
+- `daily_theme_watchlist.py`
+  - 每日觀察清單、排行、回測、主通知
+- `portfolio_check.py`
+  - 本機持股檢查專用
+  - 共用同一套資料抓取與判讀邏輯
+  - 但通知與報表獨立
+
+主要設定檔：
+- `config.json`
+- `watchlist.csv`
+- `portfolio.csv.example`
+- `.github/workflows/stock-watch.yml`
 
 
-補充：daily_report.md 現在會包含 Signals 對照表與 Regime 解釋，方便直接看報表判讀。
+補充：
+- `daily_report.md` 會包含 Signals 對照表與 Regime 解釋，方便直接看報表判讀
+- `portfolio.csv` 是本機私有檔，不進 git
+- `theme_watchlist_daily/portfolio_report.md` 與 `portfolio_report.html` 由 `portfolio_check.py` 產生
 
 新增：
 - daily_report.md 內含 Grade 對照表
