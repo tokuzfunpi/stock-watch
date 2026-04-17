@@ -60,11 +60,10 @@
   - 目前先提供本地記錄格式，之後可接每日持股檢查
   - 建議欄位：
     - `ticker`
-    - `name`
     - `shares`
     - `avg_cost`
     - `target_profit_pct`
-    - `note`
+  - `ticker` 建議只放股票代碼，例如 `2495`、`2330`
 
 ## 輸出產物
 
