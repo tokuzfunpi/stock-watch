@@ -48,6 +48,7 @@
 - `daily_report.md`
 - `daily_report.html`
 - `alert_tracking.csv`
+- `feedback_summary.csv`
 - `backtest_events_steady.csv`
 - `backtest_events_attack.csv`
 - `backtest_summary_steady.csv`
@@ -100,6 +101,116 @@
 - `alert_date` 必須使用市場資料日期，不能用電腦當下日期
 - 現在程式使用 `r["date"]`
   - 這樣週末、假日、盤後重跑時，之後的 forward return 才找得到對應資料列
+- 現在 `alert_tracking.csv` 也會一起記：
+  - `watch_type`
+  - `action_label`
+  - `feedback_score`
+  - `feedback_label`
+  - 目的是讓後面的自我校正邏輯可以回頭看「哪種建議最近比較有用」
+
+## 自我校正 / Feedback Loop
+
+這個 repo 現在已經有第一版的「自我校正」機制，目標不是做 ML，而是每天根據過去 alert 的實際結果，對排序做小幅調整。
+
+核心檔案：
+
+- `daily_theme_watchlist_20d_v22.py`
+
+核心輸出：
+
+- `theme_watchlist_daily/alert_tracking.csv`
+- `theme_watchlist_daily/feedback_summary.csv`
+- `daily_report.md` / `daily_report.html` 裡的 `Prediction Feedback`
+
+### 目前做法
+
+1. 每次送出通知時，`alert_tracking.csv` 會記下：
+- 這檔是 `short` 還是 `midlong`
+- 當時對它給的 `action_label`
+- 當時套用到的 `feedback_score` / `feedback_label`
+
+2. 之後每天重跑時，系統會回填 future return：
+- `short` 優先看 `5D`，沒有就退回 `1D`
+- `midlong` 優先看 `20D`，沒有就退回 `5D` / `1D`
+
+3. `build_feedback_summary()` 會把歷史資料整理成：
+- `watch_type`
+- `action_label`
+- `samples`
+- `win_rate_pct`
+- `avg_return_pct`
+- `feedback_score`
+- `feedback_label`
+
+4. `apply_feedback_adjustment()` 會在原本排序完成後，再根據：
+- `watch_type`
+- `action_label`
+去查最近這類建議的 `feedback_score`
+
+5. 排序只做「小幅前後調整」
+- 不會整個推翻原本技術面/風險邏輯
+- 目前是用 `feedback_score` 再做一次穩定排序
+- 原本的 base order 仍然保留，因此這是一層微調，不是完全重排
+
+### 公式概念
+
+目前 `feedback_score` 的想法很簡單：
+
+- 先看最近這種建議的勝率是否高於 50%
+- 再看平均報酬率是否為正
+- 樣本太少時，效果會被縮小
+
+目前程式裡的縮放概念是：
+
+- `((win_rate_pct - 50) / 10 + avg_return_pct / 5) * shrink`
+- `shrink = min(samples / 8, 1)`
+
+也就是：
+
+- 樣本少時，不要太相信
+- 樣本夠多時，再慢慢放大影響
+
+### Feedback Label 解讀
+
+- `樣本不足`
+- `中性`
+- `近期有效`
+- `近期偏弱`
+
+這個 label 目前主要用在：
+
+- `feedback_summary.csv`
+- `Prediction Feedback` 報表區塊
+
+### 很重要的維護原則
+
+- 這個 feedback loop 目前是「輕量輔助」，不是主策略
+- 不要一下子把 `feedback_score` 權重放太大
+- 不要讓它直接凌駕：
+  - `setup_score`
+  - `risk_score`
+  - `signals`
+  - `spec_risk_label`
+
+如果未來要調強，建議一小步一小步做。
+
+### 如果未來 AI 要接手，優先注意這幾點
+
+1. 先確認 `alert_tracking.csv` 欄位沒有被改壞
+2. 再確認 `history_target_return()` 對 `short` / `midlong` 的 horizon 選擇還合理
+3. 確認 `feedback_score` 仍然只是微調，而不是變成主排序
+4. 如果樣本很少，不要過度解讀 `feedback_summary.csv`
+5. 如果要升級成更進階模型，先把回測和 walk-forward 驗證補齊
+
+### 下一步如果要升級，建議方向
+
+- 把 `early_gem` 也納入獨立 feedback 類型
+- 除了 `action_label`，也一起看：
+  - `signals`
+  - `group`
+  - `layer`
+- 做近 20 筆 / 60 筆的滾動視窗，而不是全部歷史混在一起
+- 把 `feedback_score` 顯示進 Telegram 但先只做摘要，不要把訊息變吵
 
 ## GitHub Actions 重點
 
