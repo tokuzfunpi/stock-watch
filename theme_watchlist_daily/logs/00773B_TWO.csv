@@ -1,3 +1,4 @@
 ﻿date,ticker,name,group,layer,close,ret1_pct,ret5_pct,ret10_pct,ret20_pct,volume,avg_vol20,volume_ratio20,ma20,ma60,ma120,drawdown120_pct,bias20_pct,setup_score,risk_score,signals,score_band,regime,spec_risk_score,spec_risk_label
 2026-04-15,00773B.TWO,中信優先金融債,etf,defensive_watch,36.28,0.28,-0.3,1.88,1.04,1154000,1377000,0.84,35.99,36.28,36.06,-1.5,0.8,4,1,BASE,開始轉強,低檔慢慢墊高,0,正常
 2026-04-16,00773B.TWO,中信優先金融債,etf,defensive_watch,36.18,-0.28,-0.17,0.47,1.17,1185000,1356850,0.87,36.01,36.28,36.07,-1.77,0.47,4,1,BASE,開始轉強,低檔慢慢墊高,0,正常
+2026-04-17,00773B.TWO,中信優先金融債,etf,defensive_watch,35.95,-0.64,-0.83,-0.44,-0.55,617411,1329770,0.46,36.0,36.27,36.08,-2.39,-0.15,3,1,BASE,一般觀察,低檔慢慢墊高,0,正常
