@@ -30,6 +30,7 @@ PREV_RANK_CSV = OUTDIR / "prev_daily_rank.csv"
 REPORT_MD = OUTDIR / "daily_report.md"
 REPORT_HTML = OUTDIR / "daily_report.html"
 ALERT_TRACK_CSV = OUTDIR / "alert_tracking.csv"
+FEEDBACK_SUMMARY_CSV = OUTDIR / "feedback_summary.csv"
 SUCCESS_FILE = OUTDIR / "last_success_date.txt"
 LOG_DIR = OUTDIR / "logs"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
@@ -862,7 +863,7 @@ def select_short_term_candidates(df_rank: pd.DataFrame) -> pd.DataFrame:
     if df.empty:
         return df
     buyable_mask = df.apply(is_short_term_buyable, axis=1)
-    return df[buyable_mask].head(rule.top_n_short).copy()
+    return apply_feedback_adjustment(df[buyable_mask].copy(), "short").head(rule.top_n_short).copy()
 
 
 def select_short_term_backup_candidates(df_rank: pd.DataFrame, exclude_tickers: Optional[set[str]] = None) -> pd.DataFrame:
@@ -872,7 +873,7 @@ def select_short_term_backup_candidates(df_rank: pd.DataFrame, exclude_tickers: 
         df = df[~buyable_mask].copy()
     if exclude_tickers:
         df = df[~df["ticker"].astype(str).isin(exclude_tickers)].copy()
-    return df.head(5).copy()
+    return apply_feedback_adjustment(df.copy(), "short").head(5).copy()
 
 
 def select_midlong_candidates(df_rank: pd.DataFrame, exclude_tickers: Optional[set[str]] = None) -> pd.DataFrame:
@@ -883,7 +884,7 @@ def select_midlong_candidates(df_rank: pd.DataFrame, exclude_tickers: Optional[s
         df = df[buyable_mask].copy()
     if exclude_tickers:
         df = df[~df["ticker"].astype(str).isin(exclude_tickers)].copy()
-    return df.head(rule.top_n_midlong).copy()
+    return apply_feedback_adjustment(df.copy(), "midlong").head(rule.top_n_midlong).copy()
 
 
 def select_midlong_backup_candidates(df_rank: pd.DataFrame, exclude_tickers: Optional[set[str]] = None) -> pd.DataFrame:
@@ -893,7 +894,7 @@ def select_midlong_backup_candidates(df_rank: pd.DataFrame, exclude_tickers: Opt
         df = df[~buyable_mask].copy()
     if exclude_tickers:
         df = df[~df["ticker"].astype(str).isin(exclude_tickers)].copy()
-    return df.head(5).copy()
+    return apply_feedback_adjustment(df.copy(), "midlong").head(5).copy()
 
 
 def select_push_candidates(df_rank: pd.DataFrame) -> pd.DataFrame:
@@ -1146,6 +1147,7 @@ def should_alert(df_rank: pd.DataFrame, current_state: str, last_state: str, mar
     if current_state == last_state:
         return False
     short_candidates, short_backups, midlong_candidates, midlong_backups = build_candidate_sets(df_rank)
+    feedback_summary = build_feedback_summary()
     candidates = pd.concat([short_candidates, short_backups, midlong_candidates, midlong_backups], ignore_index=True)
     if candidates.empty:
         return False
@@ -1240,6 +1242,124 @@ def build_macro_message(market_regime: dict, us_market: dict) -> str:
     return "\n".join(lines).strip()
 
 
+def history_target_return(row: pd.Series) -> tuple[Optional[float], str]:
+    watch_type = str(row.get("watch_type", ""))
+    if watch_type == "short":
+        for col, label in [("ret5_future_pct", "5D"), ("ret1_future_pct", "1D")]:
+            value = row.get(col)
+            if pd.notna(value):
+                return float(value), label
+    if watch_type == "midlong":
+        for col, label in [("ret20_future_pct", "20D"), ("ret5_future_pct", "5D"), ("ret1_future_pct", "1D")]:
+            value = row.get(col)
+            if pd.notna(value):
+                return float(value), label
+    return None, ""
+
+
+def feedback_action_label(row: pd.Series, watch_type: str) -> str:
+    if watch_type == "short":
+        return short_term_action_label(row)
+    return midlong_action_label(row)
+
+
+def feedback_label_from_score(score: float, samples: int) -> str:
+    if samples < 3:
+        return "樣本不足"
+    if score >= 1.2:
+        return "近期有效"
+    if score <= -1.2:
+        return "近期偏弱"
+    return "中性"
+
+
+def build_feedback_summary() -> pd.DataFrame:
+    if not ALERT_TRACK_CSV.exists():
+        return pd.DataFrame()
+    try:
+        hist = pd.read_csv(ALERT_TRACK_CSV)
+    except Exception:
+        return pd.DataFrame()
+    if hist.empty or "watch_type" not in hist.columns:
+        return pd.DataFrame()
+
+    rows = []
+    working = hist.copy()
+    for watch_type in ["short", "midlong"]:
+        subset = working[working["watch_type"].astype(str) == watch_type].copy()
+        if subset.empty:
+            continue
+        if "action_label" not in subset.columns:
+            subset["action_label"] = ""
+        subset["target_return"] = subset.apply(lambda r: history_target_return(r)[0], axis=1)
+        subset = subset[subset["target_return"].notna()].copy()
+        if subset.empty:
+            continue
+
+        for action_label in ["__all__"] + sorted(set(subset["action_label"].astype(str))):
+            action_df = subset if action_label == "__all__" else subset[subset["action_label"].astype(str) == action_label].copy()
+            if action_df.empty:
+                continue
+            samples = int(action_df.shape[0])
+            win_rate_pct = round(float(action_df["target_return"].gt(0).mean()) * 100, 2)
+            avg_return_pct = round(float(action_df["target_return"].mean()), 2)
+            shrink = min(samples / 8.0, 1.0)
+            feedback_score = round((((win_rate_pct - 50.0) / 10.0) + (avg_return_pct / 5.0)) * shrink, 2)
+            rows.append(
+                {
+                    "watch_type": watch_type,
+                    "action_label": action_label,
+                    "samples": samples,
+                    "win_rate_pct": win_rate_pct,
+                    "avg_return_pct": avg_return_pct,
+                    "feedback_score": feedback_score,
+                    "feedback_label": feedback_label_from_score(feedback_score, samples),
+                }
+            )
+    summary = pd.DataFrame(rows)
+    if not summary.empty:
+        summary.to_csv(FEEDBACK_SUMMARY_CSV, index=False, encoding="utf-8-sig")
+    return summary
+
+
+def feedback_score_lookup(summary: pd.DataFrame, watch_type: str, action_label: str) -> tuple[float, str]:
+    if summary is None or summary.empty:
+        return 0.0, "樣本不足"
+    exact = summary[
+        (summary["watch_type"].astype(str) == watch_type)
+        & (summary["action_label"].astype(str) == action_label)
+    ]
+    if not exact.empty:
+        row = exact.iloc[0]
+        return float(row["feedback_score"]), str(row["feedback_label"])
+    fallback = summary[
+        (summary["watch_type"].astype(str) == watch_type)
+        & (summary["action_label"].astype(str) == "__all__")
+    ]
+    if not fallback.empty:
+        row = fallback.iloc[0]
+        return float(row["feedback_score"]), str(row["feedback_label"])
+    return 0.0, "樣本不足"
+
+
+def apply_feedback_adjustment(df: pd.DataFrame, watch_type: str) -> pd.DataFrame:
+    if df.empty:
+        return df
+    summary = build_feedback_summary()
+    out = df.copy().reset_index(drop=True)
+    out["_base_order"] = range(len(out))
+    out["action_label"] = out.apply(lambda row: feedback_action_label(row, watch_type), axis=1)
+    lookups = out["action_label"].apply(lambda action: feedback_score_lookup(summary, watch_type, action))
+    out["feedback_score"] = [score for score, _ in lookups]
+    out["feedback_label"] = [label for _, label in lookups]
+    out = out.sort_values(
+        by=["feedback_score", "_base_order"],
+        ascending=[False, True],
+        kind="mergesort",
+    ).reset_index(drop=True)
+    return out.drop(columns=["_base_order"])
+
+
 def dataframe_to_html(df: pd.DataFrame) -> str:
     return df.to_html(index=False, border=0, justify="center")
 
@@ -1265,8 +1385,8 @@ def summarize_events(events_df: pd.DataFrame, horizons: List[int]) -> pd.DataFra
 def upsert_alert_tracking(short_candidates: pd.DataFrame, midlong_candidates: pd.DataFrame) -> None:
     cols = [
         "alert_date", "watch_type", "ticker", "name", "group", "grade", "rank", "setup_score", "risk_score",
-        "layer", "signals", "regime", "alert_close", "ret1_future_pct", "ret5_future_pct", "ret20_future_pct",
-        "status"
+        "layer", "signals", "regime", "action_label", "feedback_score", "feedback_label",
+        "alert_close", "ret1_future_pct", "ret5_future_pct", "ret20_future_pct", "status"
     ]
 
     if ALERT_TRACK_CSV.exists():
@@ -1305,6 +1425,9 @@ def upsert_alert_tracking(short_candidates: pd.DataFrame, midlong_candidates: pd
                 "risk_score": int(r["risk_score"]),
                 "signals": r["signals"],
                 "regime": r["regime"],
+                "action_label": feedback_action_label(r, watch_type),
+                "feedback_score": float(r.get("feedback_score", 0.0)),
+                "feedback_label": str(r.get("feedback_label", "樣本不足")),
                 "alert_close": float(r["close"]),
                 "ret1_future_pct": None,
                 "ret5_future_pct": None,
@@ -1527,6 +1650,20 @@ def build_daily_report_markdown(df_rank: pd.DataFrame, market_regime: dict, bt_s
                 f"{r['signals']} | 理由 {early_gem_reason(r)}"
             )
 
+    lines.extend(["", "## Prediction Feedback", ""])
+    if feedback_summary.empty:
+        lines.append("- None")
+    else:
+        lines.append("| 類型 | 操作 | 樣本 | 勝率 | 平均報酬 | 回饋分數 | 判讀 |")
+        lines.append("| --- | --- | --- | --- | --- | --- | --- |")
+        for _, r in feedback_summary.iterrows():
+            action_label = "整體" if str(r["action_label"]) == "__all__" else str(r["action_label"])
+            watch_type = "短線" if str(r["watch_type"]) == "short" else "中長線"
+            lines.append(
+                f"| {watch_type} | {action_label} | {int(r['samples'])} | {r['win_rate_pct']}% | "
+                f"{r['avg_return_pct']}% | {r['feedback_score']} | {r['feedback_label']} |"
+            )
+
     lines.extend([
         "",
         "## Grade 對照表",
@@ -1601,6 +1738,8 @@ def build_daily_report_html(df_rank: pd.DataFrame, market_regime: dict, bt_stead
     special_etf_html = "<p>None</p>" if special_etf_candidates.empty else dataframe_to_html(special_etf_candidates)
     gem_candidates = select_early_gem_candidates(df_rank)
     gem_html = "<p>None</p>" if gem_candidates.empty else dataframe_to_html(gem_candidates)
+    feedback_summary = build_feedback_summary()
+    feedback_html = "<p>None</p>" if feedback_summary.empty else dataframe_to_html(feedback_summary)
     return f"""<!doctype html>
 <html><head><meta charset="utf-8"><title>Daily 20D v2.2 Attack Report</title>
 <style>
@@ -1618,6 +1757,7 @@ th {{ background: #f4f4f4; }}
 <h2>Mid-Long Backups</h2>{midlong_backup_html}
 <h2>ETF / 債券觀察</h2>{special_etf_html}
 <h2>Early Gem Watch</h2>{gem_html}
+<h2>Prediction Feedback</h2>{feedback_html}
 <h2>Steady Backtest</h2>{steady_html}
 <h2>Attack Backtest</h2>{attack_html}
 </body></html>"""

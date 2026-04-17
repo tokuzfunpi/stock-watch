@@ -1,11 +1,16 @@
 from __future__ import annotations
 
+import tempfile
 import unittest
+from pathlib import Path
+from unittest.mock import patch
 
 import pandas as pd
 
 from daily_theme_watchlist_20d_v22 import (
     add_indicators,
+    apply_feedback_adjustment,
+    build_feedback_summary,
     build_early_gem_message,
     build_macro_message,
     build_special_etf_message,
@@ -88,6 +93,41 @@ class SpeculativeRiskTests(unittest.TestCase):
 
         self.assertGreaterEqual(score, 6)
         self.assertEqual(speculative_risk_label(score), "疑似炒作風險高")
+
+
+class FeedbackTests(unittest.TestCase):
+    def test_feedback_summary_and_adjustment_use_history(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            alert_csv = Path(tmpdir) / "alert_tracking.csv"
+            feedback_csv = Path(tmpdir) / "feedback_summary.csv"
+            pd.DataFrame(
+                [
+                    {"watch_type": "short", "action_label": "可追", "ret1_future_pct": 2.0, "ret5_future_pct": 6.0},
+                    {"watch_type": "short", "action_label": "可追", "ret1_future_pct": 1.0, "ret5_future_pct": 4.0},
+                    {"watch_type": "short", "action_label": "等拉回", "ret1_future_pct": -1.0, "ret5_future_pct": -2.0},
+                    {"watch_type": "short", "action_label": "等拉回", "ret1_future_pct": 0.5, "ret5_future_pct": -1.0},
+                ]
+            ).to_csv(alert_csv, index=False)
+
+            with patch("daily_theme_watchlist_20d_v22.ALERT_TRACK_CSV", alert_csv), patch(
+                "daily_theme_watchlist_20d_v22.FEEDBACK_SUMMARY_CSV", feedback_csv
+            ):
+                summary = build_feedback_summary()
+
+                self.assertFalse(summary.empty)
+                self.assertIn("feedback_score", summary.columns)
+
+                candidates = pd.DataFrame(
+                    [
+                        {"ticker": "PULL.TW", "risk_score": 2, "ret5_pct": 10.0, "volume_ratio20": 1.1, "signals": "", "setup_change": 0, "rank_change": 0},
+                        {"ticker": "CHASE.TW", "risk_score": 2, "ret5_pct": 6.0, "volume_ratio20": 1.4, "signals": "ACCEL", "setup_change": 0, "rank_change": 0},
+                    ]
+                )
+
+                adjusted = apply_feedback_adjustment(candidates, "short")
+
+                self.assertEqual(adjusted.iloc[0]["ticker"], "CHASE.TW")
+                self.assertIn("feedback_label", adjusted.columns)
 
 
 class SelectPushCandidatesTests(unittest.TestCase):
