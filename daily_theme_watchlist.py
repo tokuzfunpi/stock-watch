@@ -200,13 +200,34 @@ def normalize_ticker_symbol(raw_ticker: str) -> str:
     return f"{ticker}.TW"
 
 
-def infer_watchlist_row(ticker: str) -> dict:
+def is_placeholder_name(name: str, ticker: str) -> bool:
     base = ticker.split(".")[0]
+    cleaned = str(name or "").strip()
+    return not cleaned or cleaned == base
+
+
+def resolve_security_name(ticker: str) -> str:
+    base = ticker.split(".")[0]
+    try:
+        info = yf.Ticker(ticker).get_info()
+    except Exception:
+        return base
+
+    for key in ["shortName", "longName", "displayName"]:
+        value = str(info.get(key, "")).strip()
+        if value:
+            return value
+    return base
+
+
+def infer_watchlist_row(ticker: str, name: Optional[str] = None) -> dict:
+    base = ticker.split(".")[0]
+    resolved_name = (name or "").strip() or resolve_security_name(ticker)
     if ticker.endswith(".TWO") and base.endswith("B"):
-        return {"ticker": ticker, "name": base, "group": "etf", "layer": "defensive_watch", "enabled": "true"}
+        return {"ticker": ticker, "name": resolved_name, "group": "etf", "layer": "defensive_watch", "enabled": "true"}
     if base.startswith("00"):
-        return {"ticker": ticker, "name": base, "group": "etf", "layer": "midlong_core", "enabled": "true"}
-    return {"ticker": ticker, "name": base, "group": "core", "layer": "midlong_core", "enabled": "true"}
+        return {"ticker": ticker, "name": resolved_name, "group": "etf", "layer": "midlong_core", "enabled": "true"}
+    return {"ticker": ticker, "name": resolved_name, "group": "core", "layer": "midlong_core", "enabled": "true"}
 
 
 def sync_watchlist_with_portfolio(watchlist_csv: Path, portfolio_csv: Path) -> list[str]:
@@ -217,20 +238,30 @@ def sync_watchlist_with_portfolio(watchlist_csv: Path, portfolio_csv: Path) -> l
         rows = list(csv.DictReader(f))
         fieldnames = list(rows[0].keys()) if rows else ["ticker", "name", "group", "layer", "enabled"]
 
-    known = {str(row.get("ticker", "")).strip().upper() for row in rows}
+    row_by_ticker = {str(row.get("ticker", "")).strip().upper(): row for row in rows}
+    known = set(row_by_ticker)
     additions: list[dict] = []
     added_tickers: list[str] = []
+    rows_changed = False
 
     with portfolio_csv.open("r", encoding="utf-8-sig", newline="") as f:
         for row in csv.DictReader(f):
             ticker = normalize_ticker_symbol(row.get("ticker", ""))
-            if not ticker or ticker in known:
+            if not ticker:
+                continue
+            if ticker in known:
+                existing_row = row_by_ticker[ticker]
+                if is_placeholder_name(existing_row.get("name", ""), ticker):
+                    resolved_name = resolve_security_name(ticker)
+                    if resolved_name and resolved_name != existing_row.get("name", ""):
+                        existing_row["name"] = resolved_name
+                        rows_changed = True
                 continue
             additions.append(infer_watchlist_row(ticker))
             added_tickers.append(ticker)
             known.add(ticker)
 
-    if additions:
+    if additions or rows_changed:
         rows.extend(additions)
         with watchlist_csv.open("w", encoding="utf-8-sig", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=fieldnames)

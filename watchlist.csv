@@ -1,4 +1,4 @@
-ticker,name,group,layer,enabled
+﻿ticker,name,group,layer,enabled
 3057.TW,喬鼎,theme,short_attack,true
 2495.TW,普安,theme,short_attack,true
 2399.TW,映泰,theme,short_attack,true
@@ -45,3 +45,4 @@ ticker,name,group,layer,enabled
 00687B.TWO,國泰20年美債,etf,defensive_watch,true
 00772B.TWO,中信高評級公司債,etf,defensive_watch,true
 00773B.TWO,中信優先金融債,etf,defensive_watch,true
+2412.TW,CHUNGHWA TELECOM,core,midlong_core,true

@@ -77,6 +77,8 @@
   - 如果 `portfolio.csv` 裡的代碼不在 `watchlist.csv`
     - 程式會自動補進 `watchlist.csv`
     - 日常維護時記得把更新 commit / push
+  - 自動補進或已存在但還是 placeholder 名稱時，程式會盡量用 Yahoo Finance metadata 補正式名稱
+    - 例如 `2412` 不再只顯示 `2412`
 - `portfolio.csv.example`
   - repo 內提供的公開範例
   - 真正個人持股請放在本機 `portfolio.csv`

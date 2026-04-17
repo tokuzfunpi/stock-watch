@@ -16,6 +16,8 @@ from daily_theme_watchlist import (
     build_macro_message,
     build_portfolio_message,
     build_portfolio_report_markdown,
+    is_placeholder_name,
+    resolve_security_name,
     portfolio_advice_label,
     build_special_etf_message,
     build_midlong_message,
@@ -151,12 +153,31 @@ class PortfolioTests(unittest.TestCase):
             watchlist_csv.write_text("ticker,name,group,layer,enabled\n2495.TW,2495,core,midlong_core,true\n", encoding="utf-8")
             portfolio_csv.write_text("ticker,shares,avg_cost,target_profit_pct\n2330,1000,950,15\n00772B,1000,35,10\n", encoding="utf-8")
 
-            added = sync_watchlist_with_portfolio(watchlist_csv, portfolio_csv)
+            with patch("daily_theme_watchlist.resolve_security_name", side_effect=lambda ticker: {"2330.TW": "台積電", "00772B.TWO": "中信高評級公司債"}[ticker]):
+                added = sync_watchlist_with_portfolio(watchlist_csv, portfolio_csv)
 
             self.assertEqual(added, ["2330.TW", "00772B.TWO"])
             content = watchlist_csv.read_text(encoding="utf-8")
             self.assertIn("2330.TW", content)
             self.assertIn("00772B.TWO", content)
+            self.assertIn("台積電", content)
+
+    def test_sync_watchlist_with_portfolio_refreshes_placeholder_name(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            watchlist_csv = Path(tmpdir) / "watchlist.csv"
+            portfolio_csv = Path(tmpdir) / "portfolio.csv"
+            watchlist_csv.write_text("ticker,name,group,layer,enabled\n2412.TW,2412,core,midlong_core,true\n", encoding="utf-8")
+            portfolio_csv.write_text("ticker,shares,avg_cost,target_profit_pct\n2412,1000,10,20\n", encoding="utf-8")
+
+            with patch("daily_theme_watchlist.resolve_security_name", return_value="中華電"):
+                added = sync_watchlist_with_portfolio(watchlist_csv, portfolio_csv)
+
+            self.assertEqual(added, [])
+            self.assertIn("中華電", watchlist_csv.read_text(encoding="utf-8"))
+
+    def test_placeholder_name_detection(self) -> None:
+        self.assertTrue(is_placeholder_name("2412", "2412.TW"))
+        self.assertFalse(is_placeholder_name("中華電", "2412.TW"))
 
     def test_load_portfolio_and_build_message(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
