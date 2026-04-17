@@ -25,6 +25,17 @@
 - `portfolio.csv.example`
 - `.github/workflows/stock-watch.yml`
 
+安裝與執行：
+- `python3 -m venv .venv`
+- `source .venv/bin/activate`
+- `pip install -r requirements.txt`
+- `python3 -m unittest discover -s tests`
+- `python3 daily_theme_watchlist.py`
+
+如果要跑持股檢查：
+- 複製 `portfolio.csv.example` 成本機的 `portfolio.csv`
+- 填入自己的持股資料
+- `python3 portfolio_check.py`
 
 補充：
 - `daily_report.md` 會包含 Signals 對照表與 Regime 解釋，方便直接看報表判讀

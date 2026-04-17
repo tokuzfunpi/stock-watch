@@ -321,6 +321,12 @@ python3 portfolio_check.py
 requirements.txt
 ```
 
+目前 `requirements.txt` 的定位是：
+
+- 新環境安裝入口
+- 給 workflow 與其他人 clone repo 後直接安裝
+- 只保留實際執行需要的核心依賴，避免放太多暫時性套件
+
 ## 環境變數
 
 程式目前會使用的 env var：
