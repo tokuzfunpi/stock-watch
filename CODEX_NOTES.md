@@ -45,6 +45,7 @@
   - 持股檢查專用執行檔
   - 共用 `daily_theme_watchlist.py` 的資料抓取、排行與判讀邏輯
   - 只產生持股專用報表與 CLI 輸出
+  - 成功結尾訊息目前降為 `debug`，避免 CLI 多一行狀態字樣
 - `backtest_runner.py`
   - 簡單的 CLI 包裝
   - 直接呼叫 `run_backtest_dual()`

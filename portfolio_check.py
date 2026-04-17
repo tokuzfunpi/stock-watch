@@ -32,7 +32,7 @@ def main() -> int:
         print(macro_message)
         print()
         print(portfolio_message)
-        logger.info("Portfolio review printed to CLI and reports saved.")
+        logger.debug("Portfolio review printed to CLI and reports saved.")
         return 0
     except Exception as exc:
         err_msg = f"Portfolio check failed: {exc}"
