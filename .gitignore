@@ -196,6 +196,7 @@ cython_debug/
 
 # Local personal portfolio data
 portfolio.csv
+chat_ids
 theme_watchlist_daily/portfolio_report.md
 theme_watchlist_daily/portfolio_report.html
 theme_watchlist_daily/.yfinance_cache/

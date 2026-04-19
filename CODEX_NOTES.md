@@ -84,6 +84,9 @@
   - repo 內提供的公開範例
   - 真正個人持股請放在本機 `portfolio.csv`
   - `portfolio.csv` 已加入 `.gitignore`，避免再被 push
+  - `chat_ids`
+    - 本機保留的 Telegram chat id 筆記
+    - 已加入 `.gitignore`
   - `theme_watchlist_daily/portfolio_report.md`
   - `theme_watchlist_daily/portfolio_report.html`
   - `theme_watchlist_daily/.yfinance_cache/`
