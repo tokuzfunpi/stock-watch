@@ -91,6 +91,9 @@
     - 本機保留的 `chat_id` 和使用者對照表
     - repo 內有 `chat_id_map.csv.example` 作為格式範本
     - 已加入 `.gitignore`
+  - `telegram_getupdates_url`
+    - 本機保留的 Telegram `getUpdates` URL
+    - 已加入 `.gitignore`
   - `theme_watchlist_daily/portfolio_report.md`
   - `theme_watchlist_daily/portfolio_report.html`
   - `theme_watchlist_daily/.yfinance_cache/`
@@ -169,6 +172,12 @@
 - `chat_ids` 檔案格式可用：
   - 一行一個 id
   - 或逗號分隔
+- `update_chat_id_map.py`
+  - 本機小工具，用 Telegram `getUpdates` 自動更新 `chat_id_map.csv`
+  - 來源優先順序：
+    - `TELEGRAM_GETUPDATES_URL`
+    - `TELEGRAM_TOKEN`
+    - 本機 `telegram_getupdates_url`
 - 目前 config 的 `always_notify=true`
   - 代表 state 沒變也照樣送
   - 但訊息內容仍然只會從 `select_push_candidates()` 選出的標的組成

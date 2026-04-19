@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+from importlib import util
 from pathlib import Path
 from unittest.mock import patch
 
@@ -39,6 +40,12 @@ from daily_theme_watchlist import (
     split_message,
     sync_watchlist_with_portfolio,
 )
+
+UPDATE_CHAT_ID_MAP_PATH = Path(__file__).resolve().parent.parent / "update_chat_id_map.py"
+UPDATE_CHAT_ID_MAP_SPEC = util.spec_from_file_location("update_chat_id_map", UPDATE_CHAT_ID_MAP_PATH)
+update_chat_id_map = util.module_from_spec(UPDATE_CHAT_ID_MAP_SPEC)
+assert UPDATE_CHAT_ID_MAP_SPEC and UPDATE_CHAT_ID_MAP_SPEC.loader
+UPDATE_CHAT_ID_MAP_SPEC.loader.exec_module(update_chat_id_map)
 
 
 class DetectRowTests(unittest.TestCase):
@@ -231,6 +238,36 @@ class TelegramChatIdTests(unittest.TestCase):
             chat_ids_path.write_text("123456789\n-1001111111111\n", encoding="utf-8")
             with patch.dict("os.environ", {"TELEGRAM_CHAT_IDS": ""}, clear=False):
                 self.assertEqual(load_telegram_chat_ids(chat_ids_path), [123456789, -1001111111111])
+
+
+class ChatIdMapUpdateTests(unittest.TestCase):
+    def test_extract_chat_rows_deduplicates_by_chat_id(self) -> None:
+        rows = update_chat_id_map.extract_chat_rows(
+            [
+                {"message": {"chat": {"id": 1, "first_name": "A", "type": "private"}}},
+                {"message": {"chat": {"id": 1, "first_name": "A2", "type": "private"}}},
+                {"message": {"chat": {"id": 2, "first_name": "B", "type": "private"}}},
+            ]
+        )
+
+        self.assertEqual(len(rows), 2)
+        self.assertEqual({row["chat_id"] for row in rows}, {"1", "2"})
+        latest = next(row for row in rows if row["chat_id"] == "1")
+        self.assertEqual(latest["first_name"], "A2")
+
+    def test_merge_rows_counts_added_and_updated(self) -> None:
+        existing = {
+            "1": {"chat_id": "1", "first_name": "Old", "last_name": "", "username": "", "chat_type": "private", "source": "telegram getUpdates"}
+        }
+        incoming = [
+            {"chat_id": "1", "first_name": "New", "last_name": "", "username": "", "chat_type": "private", "source": "telegram getUpdates"},
+            {"chat_id": "2", "first_name": "Two", "last_name": "", "username": "", "chat_type": "private", "source": "telegram getUpdates"},
+        ]
+
+        rows, added, updated = update_chat_id_map.merge_rows(existing, incoming)
+
+        self.assertEqual((added, updated), (1, 1))
+        self.assertEqual(len(rows), 2)
 
     def test_load_portfolio_and_build_message(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
