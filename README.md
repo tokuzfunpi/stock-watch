@@ -48,6 +48,11 @@ Telegram chat id 也支援本機 fallback：
   - 一行一個 id
   - 或逗號分隔
 
+如果你想保留 `chat_id` 和使用者對照表：
+- repo 內有 `chat_id_map.csv.example`
+- 本機可維護 `chat_id_map.csv`
+- `chat_id_map.csv` 已加入 `.gitignore`，不會被 push
+
 補充：
 - `daily_report.md` 會包含 Signals 對照表與 Regime 解釋，方便直接看報表判讀
 - `portfolio.csv` 是本機私有檔，不進 git

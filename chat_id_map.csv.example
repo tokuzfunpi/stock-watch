@@ -1,0 +1,3 @@
+chat_id,first_name,last_name,username,chat_type,source
+123456789,Alice,Chen,,private,telegram getUpdates
+-1001234567890,My Group,,,group,telegram getUpdates

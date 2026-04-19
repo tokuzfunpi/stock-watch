@@ -87,6 +87,10 @@
   - `chat_ids`
     - 本機保留的 Telegram chat id 筆記
     - 已加入 `.gitignore`
+  - `chat_id_map.csv`
+    - 本機保留的 `chat_id` 和使用者對照表
+    - repo 內有 `chat_id_map.csv.example` 作為格式範本
+    - 已加入 `.gitignore`
   - `theme_watchlist_daily/portfolio_report.md`
   - `theme_watchlist_daily/portfolio_report.html`
   - `theme_watchlist_daily/.yfinance_cache/`
