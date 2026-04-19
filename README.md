@@ -41,6 +41,13 @@
   - 更新 `theme_watchlist_daily/portfolio_report.html`
   - 直接在 CLI 印出大盤摘要與持股建議
 
+Telegram chat id 也支援本機 fallback：
+- 優先讀 `TELEGRAM_CHAT_IDS`
+- 如果 env 沒設，會改讀本機 `chat_ids`
+- `chat_ids` 可用：
+  - 一行一個 id
+  - 或逗號分隔
+
 補充：
 - `daily_report.md` 會包含 Signals 對照表與 Regime 解釋，方便直接看報表判讀
 - `portfolio.csv` 是本機私有檔，不進 git

@@ -23,6 +23,7 @@ BASE_DIR = Path(__file__).resolve().parent
 CONFIG_PATH = Path(os.getenv("CONFIG_PATH", BASE_DIR / "config.json"))
 WATCHLIST_CSV = Path(os.getenv("WATCHLIST_CSV", BASE_DIR / "watchlist.csv"))
 PORTFOLIO_CSV = Path(os.getenv("PORTFOLIO_CSV", BASE_DIR / "portfolio.csv"))
+CHAT_IDS_PATH = Path(os.getenv("CHAT_IDS_PATH", BASE_DIR / "chat_ids"))
 OUTDIR = Path(os.getenv("OUTDIR", BASE_DIR / "theme_watchlist_daily"))
 OUTDIR.mkdir(parents=True, exist_ok=True)
 
@@ -48,12 +49,33 @@ LOG_DIR = OUTDIR / "logs"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "").strip()
-TELEGRAM_CHAT_IDS = [int(x.strip()) for x in os.getenv("TELEGRAM_CHAT_IDS", "").split(",") if x.strip()]
 HTTP_TIMEOUT = int(os.getenv("HTTP_TIMEOUT", "20"))
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 FORCE_RUN = os.getenv("FORCE_RUN", "").strip().lower() in {"1", "true", "yes", "y"}
 LOCAL_TZ = ZoneInfo(os.getenv("LOCAL_TZ", "Asia/Taipei"))
 TWSE_NAME_CACHE: dict[str, str] = {}
+
+
+def parse_chat_ids(raw: str) -> list[int]:
+    tokens = re.split(r"[\s,]+", str(raw or "").strip())
+    chat_ids: list[int] = []
+    for token in tokens:
+        if not token:
+            continue
+        chat_ids.append(int(token))
+    return chat_ids
+
+
+def load_telegram_chat_ids(chat_ids_path: Path) -> list[int]:
+    env_value = os.getenv("TELEGRAM_CHAT_IDS", "").strip()
+    if env_value:
+        return parse_chat_ids(env_value)
+    if not chat_ids_path.exists():
+        return []
+    return parse_chat_ids(chat_ids_path.read_text(encoding="utf-8-sig"))
+
+
+TELEGRAM_CHAT_IDS = load_telegram_chat_ids(CHAT_IDS_PATH)
 
 
 @dataclass

@@ -159,6 +159,12 @@
 - Telegram 只有在下面兩個 env var 都存在時才會真的送：
   - `TELEGRAM_TOKEN`
   - `TELEGRAM_CHAT_IDS`
+- `TELEGRAM_CHAT_IDS` 目前支援雙來源：
+  - 先讀 env
+  - env 沒設時，再讀本機 `chat_ids`
+- `chat_ids` 檔案格式可用：
+  - 一行一個 id
+  - 或逗號分隔
 - 目前 config 的 `always_notify=true`
   - 代表 state 沒變也照樣送
   - 但訊息內容仍然只會從 `select_push_candidates()` 選出的標的組成

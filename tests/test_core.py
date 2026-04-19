@@ -27,8 +27,10 @@ from daily_theme_watchlist import (
     build_short_term_message,
     detect_row,
     grade_signal,
+    load_telegram_chat_ids,
     load_portfolio,
     normalize_ticker_symbol,
+    parse_chat_ids,
     speculative_risk_label,
     speculative_risk_score,
     select_midlong_candidates,
@@ -210,6 +212,25 @@ class PortfolioTests(unittest.TestCase):
 
         with patch("daily_theme_watchlist.HTTP.get", return_value=FakeResponse()):
             self.assertEqual(lookup_yahoo_tw_name("2412.TW"), "中華電")
+
+
+class TelegramChatIdTests(unittest.TestCase):
+    def test_parse_chat_ids_supports_commas_and_newlines(self) -> None:
+        self.assertEqual(parse_chat_ids("123,-1001\n-1002"), [123, -1001, -1002])
+
+    def test_load_telegram_chat_ids_prefers_env(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            chat_ids_path = Path(tmpdir) / "chat_ids"
+            chat_ids_path.write_text("111\n222\n", encoding="utf-8")
+            with patch.dict("os.environ", {"TELEGRAM_CHAT_IDS": "333,444"}, clear=False):
+                self.assertEqual(load_telegram_chat_ids(chat_ids_path), [333, 444])
+
+    def test_load_telegram_chat_ids_reads_local_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            chat_ids_path = Path(tmpdir) / "chat_ids"
+            chat_ids_path.write_text("123456789\n-1001111111111\n", encoding="utf-8")
+            with patch.dict("os.environ", {"TELEGRAM_CHAT_IDS": ""}, clear=False):
+                self.assertEqual(load_telegram_chat_ids(chat_ids_path), [123456789, -1001111111111])
 
     def test_load_portfolio_and_build_message(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
