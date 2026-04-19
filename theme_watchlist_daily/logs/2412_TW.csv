@@ -1,2 +1,2 @@
 ﻿date,ticker,name,group,layer,close,ret1_pct,ret5_pct,ret10_pct,ret20_pct,volume,avg_vol20,volume_ratio20,ma20,ma60,ma120,drawdown120_pct,bias20_pct,setup_score,risk_score,signals,score_band,regime,spec_risk_score,spec_risk_label
-2026-04-17,2412.TW,CHUNGHWA TELECOM,core,midlong_core,137.0,0.37,1.11,2.24,-0.36,3044289,9278820,0.33,134.65,134.53,132.96,-0.72,1.75,8,1,BASE,進攻優勢區,低檔慢慢墊高,0,正常
+2026-04-17,2412.TW,中華電,core,midlong_core,137.5,0.73,1.48,2.61,0.0,9301214,9591666,0.97,134.68,134.53,132.97,-0.36,2.1,8,1,BASE,進攻優勢區,低檔慢慢墊高,0,正常

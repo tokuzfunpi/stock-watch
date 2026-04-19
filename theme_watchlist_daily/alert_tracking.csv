@@ -65,7 +65,7 @@
 2026-04-16,3017.TW,奇鋐,theme,B,6,12,3,TREND,中段延續中,2475.0,-0.2,,,OPEN,short,short_attack,,,
 2026-04-16,5274.TWO,信驊,satellite,B,12,9,3,TREND,中段延續中,14180.0,-1.52,,,OPEN,short,midlong_core,,,
 2026-04-16,2330.TW,台積電,core,B,23,6,2,TREND,中段延續中,2085.0,-2.16,,,OPEN,midlong,midlong_core,續抱,3.27,近期有效
-2026-04-16,0050.TW,元大台灣50,etf,B,28,5,2,TREND,中段延續中,84.6,,,,OPEN,midlong,midlong_core,,,
+2026-04-16,0050.TW,元大台灣50,etf,B,28,5,2,TREND,中段延續中,84.6,-1.0,,,OPEN,midlong,midlong_core,,,
 2026-04-16,3661.TW,世芯-KY,satellite,B,18,7,3,NONE,還在觀察,3470.0,1.73,,,OPEN,midlong,midlong_core,,,
 2026-04-16,2886.TW,兆豐金,core,X,17,8,0,BASE,低檔慢慢墊高,39.8,-1.63,,,OPEN,midlong,midlong_core,,,
 2026-04-16,00772B.TWO,中信高評級公司債,etf,X,27,6,1,BASE,低檔慢慢墊高,34.21,-0.7,,,OPEN,midlong,defensive_watch,,,
@@ -84,3 +84,9 @@
 2026-04-17,00878.TW,國泰永續高股息,etf,B,21,7,2,NONE,還在觀察,24.05,,,,OPEN,midlong,midlong_core,可分批,3.27,近期有效
 2026-04-17,0050.TW,元大台灣50,etf,X,35,4,2,TREND,中段延續中,84.05,,,,OPEN,midlong,midlong_core,續抱,3.27,近期有效
 2026-04-17,0052.TW,富邦科技,etf,X,34,4,1,"TREND,PULLBACK",中段延續中,50.05,,,,OPEN,midlong,midlong_core,續抱,3.27,近期有效
+2026-04-17,3711.TW,日月光投控,core,A,15,8,3,"TREND,ACCEL",轉強速度有出來,442.0,,,,OPEN,short,midlong_core,等拉回,2.06,近期有效
+2026-04-17,3661.TW,世芯-KY,satellite,A,21,7,2,ACCEL,轉強速度有出來,3515.0,,,,OPEN,midlong,midlong_core,可分批,1.99,近期有效
+2026-04-17,3014.TW,聯陽,satellite,B,17,8,0,NONE,還在觀察,124.0,,,,OPEN,midlong,midlong_core,可分批,1.99,近期有效
+2026-04-17,2881.TW,富邦金,core,B,35,5,0,NONE,還在觀察,88.0,,,,OPEN,midlong,midlong_core,可分批,1.99,近期有效
+2026-04-17,2882.TW,國泰金,core,X,32,5,0,NONE,還在觀察,75.0,,,,OPEN,midlong,midlong_core,可分批,1.99,近期有效
+2026-04-17,2891.TW,中信金,core,X,37,4,0,NONE,還在觀察,53.1,,,,OPEN,midlong,midlong_core,可分批,1.99,近期有效
