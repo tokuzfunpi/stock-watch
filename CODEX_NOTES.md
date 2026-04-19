@@ -156,6 +156,9 @@
 - Telegram 只有在下面兩個 env var 都存在時才會真的送：
   - `TELEGRAM_TOKEN`
   - `TELEGRAM_CHAT_IDS`
+- 目前主程式在實際發通知前，會先印一行：
+  - `Telegram chat IDs: ...`
+  - 主要是方便本機查回目前生效中的 chat_id
 - 目前 config 的 `always_notify=true`
   - 代表 state 沒變也照樣送
   - 但訊息內容仍然只會從 `select_push_candidates()` 選出的標的組成

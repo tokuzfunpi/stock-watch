@@ -2140,6 +2140,7 @@ def main() -> int:
         last_state = load_last_state()
 
         if should_alert(df_rank, current_state, last_state, market_regime):
+            logger.info("Telegram chat IDs: %s", ",".join(str(chat_id) for chat_id in TELEGRAM_CHAT_IDS))
             send_telegram_message(build_macro_message(market_regime, us_market))
             send_telegram_message(build_short_term_message(df_rank, market_regime, us_market))
             send_telegram_message(build_early_gem_message(df_rank, market_regime, us_market))
