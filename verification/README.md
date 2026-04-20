@@ -32,6 +32,9 @@ python3.11 verification/verify_recommendations.py
 # 2) 收盤後回填 outcomes（horizons 預設 1,5,20）
 python3.11 verification/evaluate_recommendations.py --horizons 1,5,20
 
+# yfinance 偶爾不穩時，可提高穩定性（分批 + retry + backoff + 拉長 period）
+python3.11 verification/evaluate_recommendations.py --horizons 1,5,20 --period 180d --batch-size 25 --retries 3 --backoff-seconds 1
+
 # 3) 彙整 outcomes
 python3.11 verification/summarize_outcomes.py
 ```

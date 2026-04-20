@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime
 import re
 import sys
+import time
 from pathlib import Path
 
 import pandas as pd
@@ -20,7 +21,10 @@ from daily_theme_watchlist import LOCAL_TZ, logger
 
 @dataclass(frozen=True)
 class EvalConfig:
-    period: str = "60d"
+    period: str = "180d"
+    batch_size: int = 25
+    retries: int = 3
+    backoff_seconds: float = 1.0
 
 
 def compute_forward_return_pct(
@@ -55,46 +59,116 @@ def compute_forward_return_pct(
     return ret_pct, out_close, "ok"
 
 
-def fetch_close_series(tickers: list[str], cfg: EvalConfig) -> dict[str, pd.Series]:
+def _chunked(items: list[str], size: int) -> list[list[str]]:
+    if size <= 0:
+        return [items]
+    return [items[i : i + size] for i in range(0, len(items), size)]
+
+
+def _download_prices(
+    tickers: list[str],
+    cfg: EvalConfig,
+    *,
+    group_by_ticker: bool,
+) -> tuple[pd.DataFrame | None, str]:
+    last_err = ""
+    tickers = [t for t in tickers if t]
+    if not tickers:
+        return None, "empty_ticker_list"
+
+    for attempt in range(max(int(cfg.retries), 1)):
+        try:
+            df = yf.download(
+                " ".join(tickers),
+                period=cfg.period,
+                interval="1d",
+                auto_adjust=True,
+                progress=False,
+                threads=False,
+                group_by="ticker" if group_by_ticker else None,
+            )
+            if df is None or getattr(df, "empty", True):
+                raise RuntimeError("empty_dataframe")
+            return df, ""
+        except Exception as exc:
+            last_err = str(exc) or exc.__class__.__name__
+            if attempt < max(int(cfg.retries), 1) - 1:
+                time.sleep(float(cfg.backoff_seconds) * (2**attempt))
+            continue
+    return None, last_err or "download_failed"
+
+
+def fetch_close_series(tickers: list[str], cfg: EvalConfig) -> tuple[dict[str, pd.Series], dict[str, str]]:
     uniq = [str(t).strip() for t in tickers if str(t).strip()]
     seen: set[str] = set()
     uniq = [t for t in uniq if not (t in seen or seen.add(t))]
     if not uniq:
-        return {}
-
-    try:
-        df = yf.download(
-            " ".join(uniq),
-            period=cfg.period,
-            interval="1d",
-            auto_adjust=True,
-            progress=False,
-            threads=False,
-            group_by="ticker",
-        )
-    except Exception as exc:
-        logger.info("Outcome price fetch failed (best effort): %s", exc)
-        return {}
-
-    if df is None or getattr(df, "empty", True):
-        return {}
+        return {}, {}
 
     out: dict[str, pd.Series] = {}
-    if isinstance(df.columns, pd.MultiIndex):
-        for ticker in uniq:
-            try:
-                if ticker not in df.columns.get_level_values(0):
+    errors: dict[str, str] = {}
+
+    # 1) Bulk (chunked) download for speed; may still miss some tickers.
+    for chunk in _chunked(uniq, int(cfg.batch_size)):
+        df, err = _download_prices(chunk, cfg, group_by_ticker=True)
+        if df is None:
+            for t in chunk:
+                errors.setdefault(t, err)
+            continue
+
+        if isinstance(df.columns, pd.MultiIndex):
+            for ticker in chunk:
+                try:
+                    if ticker not in df.columns.get_level_values(0):
+                        continue
+                    sub = df[ticker]
+                    if "Close" not in sub.columns:
+                        continue
+                    series = sub["Close"].copy()
+                    if getattr(series, "empty", True):
+                        continue
+                    out[ticker] = series
+                except Exception as exc:
+                    errors.setdefault(ticker, str(exc) or exc.__class__.__name__)
                     continue
-                sub = df[ticker]
-                if "Close" not in sub.columns:
-                    continue
-                out[ticker] = sub["Close"].copy()
-            except Exception:
+        else:
+            # Single ticker may return a normal dataframe.
+            if len(chunk) == 1 and "Close" in df.columns:
+                series = df["Close"].copy()
+                if not getattr(series, "empty", True):
+                    out[chunk[0]] = series
+
+    missing = [t for t in uniq if t not in out]
+    if missing:
+        logger.info(
+            "Bulk download missing %s/%s tickers. Falling back to per-ticker downloads.",
+            len(missing),
+            len(uniq),
+        )
+
+    # 2) Fallback: per-ticker download for whatever bulk missed.
+    for ticker in missing:
+        df, err = _download_prices([ticker], cfg, group_by_ticker=False)
+        if df is None:
+            errors.setdefault(ticker, err)
+            continue
+        try:
+            if "Close" not in df.columns:
+                errors.setdefault(ticker, "missing_close_column")
                 continue
-    else:
-        if "Close" in df.columns and len(uniq) == 1:
-            out[uniq[0]] = df["Close"].copy()
-    return out
+            series = df["Close"].copy()
+            if getattr(series, "empty", True):
+                errors.setdefault(ticker, "empty_series")
+                continue
+            out[ticker] = series
+        except Exception as exc:
+            errors.setdefault(ticker, str(exc) or exc.__class__.__name__)
+            continue
+
+    # If a ticker succeeded, clear its error.
+    for t in out.keys():
+        errors.pop(t, None)
+    return out, errors
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -104,7 +178,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--outcomes-csv", default=str(out_dir / "reco_outcomes.csv"))
     parser.add_argument("--signal-date", default="", help="Evaluate snapshots for this signal date (YYYY-MM-DD).")
     parser.add_argument("--horizons", default="1,5,20", help="Comma-separated horizons in trading days.")
-    parser.add_argument("--period", default="90d", help="yfinance period to fetch (e.g. 60d, 6mo).")
+    parser.add_argument("--period", default="180d", help="yfinance period to fetch (e.g. 90d, 6mo).")
+    parser.add_argument("--batch-size", type=int, default=25, help="Batch size for bulk yfinance download.")
+    parser.add_argument("--retries", type=int, default=3, help="Retries per download attempt.")
+    parser.add_argument("--backoff-seconds", type=float, default=1.0, help="Base backoff seconds between retries.")
     return parser.parse_args(argv)
 
 
@@ -203,7 +280,12 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     snapshot_csv = Path(args.snapshot_csv)
     outcomes_csv = Path(args.outcomes_csv)
-    cfg = EvalConfig(period=str(args.period))
+    cfg = EvalConfig(
+        period=str(args.period),
+        batch_size=int(args.batch_size),
+        retries=int(args.retries),
+        backoff_seconds=float(args.backoff_seconds),
+    )
 
     if not snapshot_csv.exists():
         print(f"No snapshot file: {snapshot_csv}")
@@ -281,7 +363,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     tickers = snapshots["ticker"].dropna().astype(str).tolist()
-    series_map = fetch_close_series(tickers, cfg)
+    series_map, series_errors = fetch_close_series(tickers, cfg)
 
     now_local = datetime.now(LOCAL_TZ).strftime("%Y-%m-%d %H:%M:%S %Z")
     rows: list[dict] = []
@@ -291,7 +373,12 @@ def main(argv: list[str] | None = None) -> int:
         name = str(getattr(r, "name", ""))
         for h in horizons:
             close_series = series_map.get(ticker)
-            ret_pct, out_close, reason = compute_forward_return_pct(close_series, str(getattr(r, "signal_date")), h) if close_series is not None else (None, None, "no_price_series")
+            status_detail = ""
+            if close_series is None:
+                ret_pct, out_close, reason = None, None, "no_price_series"
+                status_detail = series_errors.get(ticker, "")
+            else:
+                ret_pct, out_close, reason = compute_forward_return_pct(close_series, str(getattr(r, "signal_date")), h)
             rows.append(
                 {
                     "evaluated_at": now_local,
@@ -311,6 +398,7 @@ def main(argv: list[str] | None = None) -> int:
                     "out_close": out_close,
                     "realized_ret_pct": ret_pct,
                     "status": reason,
+                    "status_detail": status_detail,
                 }
             )
 

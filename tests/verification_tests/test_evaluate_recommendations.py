@@ -6,12 +6,16 @@ import pandas as pd
 
 from verification.evaluate_recommendations import compute_forward_return_pct
 from verification.evaluate_recommendations import is_valid_signal_date
+from verification.evaluate_recommendations import _chunked
 
 
 class EvaluateRecommendationsTests(unittest.TestCase):
     def test_is_valid_signal_date_accepts_yyyy_mm_dd(self) -> None:
         self.assertTrue(is_valid_signal_date("2026-04-17"))
         self.assertFalse(is_valid_signal_date("2026/04/17"))
+
+    def test_chunked_splits(self) -> None:
+        self.assertEqual(_chunked(["a", "b", "c"], 2), [["a", "b"], ["c"]])
 
     def test_compute_forward_return_pct_ok(self) -> None:
         s = pd.Series(
