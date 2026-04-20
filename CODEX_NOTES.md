@@ -356,6 +356,8 @@ python3 -m unittest discover -s tests
 python3 backtest_runner.py
 python3 daily_theme_watchlist.py
 python3 portfolio_check.py
+python3 verify_recommendations.py
+python3 evaluate_recommendations.py
 ```
 
 依賴套件目前記在：

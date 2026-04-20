@@ -51,7 +51,8 @@ jobs:
         run: |
           python verify_recommendations.py \
             --rank-csv theme_watchlist_daily/daily_rank.csv \
-            --out theme_watchlist_daily/verification_report.md
+            --out theme_watchlist_daily/verification_report.md \
+            --snapshot-csv theme_watchlist_daily/reco_snapshots.csv
 
       - name: Upload verification artifacts
         uses: actions/upload-artifact@v4
@@ -60,3 +61,4 @@ jobs:
           path: |
             theme_watchlist_daily/verification_report.md
             theme_watchlist_daily/daily_rank.csv
+            theme_watchlist_daily/reco_snapshots.csv

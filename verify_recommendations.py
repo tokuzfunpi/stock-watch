@@ -224,6 +224,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Best-effort verification for daily recommendations.")
     parser.add_argument("--rank-csv", default=str(Path("theme_watchlist_daily") / "daily_rank.csv"))
     parser.add_argument("--out", default=str(Path("theme_watchlist_daily") / "verification_report.md"))
+    parser.add_argument("--snapshot-csv", default=str(Path("theme_watchlist_daily") / "reco_snapshots.csv"))
+    parser.add_argument("--no-snapshot", action="store_true", help="Do not append recommendation snapshots to CSV.")
     return parser.parse_args(argv)
 
 
@@ -231,6 +233,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     rank_csv = Path(args.rank_csv)
     out_path = Path(args.out)
+    snapshot_csv = Path(args.snapshot_csv)
 
     if not rank_csv.exists():
         report = build_verification_report_markdown(
@@ -242,12 +245,54 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     df_rank = pd.read_csv(rank_csv)
+    now_local = datetime.now(LOCAL_TZ)
     report = build_verification_report_markdown(
         df_rank,
         source=str(rank_csv),
+        now_local=now_local,
     )
     out_path.write_text(report, encoding="utf-8")
     print(report)
+
+    if not args.no_snapshot:
+        asof_date = _maybe_date_from_rank(df_rank)
+        short_candidates = select_short_term_candidates(df_rank).copy()
+        midlong_candidates = select_midlong_candidates(df_rank).copy()
+        if not short_candidates.empty:
+            short_candidates["watch_type"] = "short"
+            short_candidates["action"] = short_candidates.apply(short_term_action_label, axis=1)
+        if not midlong_candidates.empty:
+            midlong_candidates["watch_type"] = "midlong"
+            midlong_candidates["action"] = midlong_candidates.apply(midlong_action_label, axis=1)
+
+        combined = pd.concat([short_candidates, midlong_candidates], ignore_index=True)
+        if not combined.empty:
+            combined = combined.copy()
+            combined["generated_at"] = now_local.strftime("%Y-%m-%d %H:%M:%S %Z")
+            combined["signal_date"] = asof_date
+            combined["source"] = str(rank_csv)
+            keep = [
+                "generated_at",
+                "signal_date",
+                "source",
+                "watch_type",
+                "rank",
+                "ticker",
+                "name",
+                "grade",
+                "setup_score",
+                "risk_score",
+                "ret5_pct",
+                "ret20_pct",
+                "volume_ratio20",
+                "signals",
+                "action",
+            ]
+            combined = combined[[c for c in keep if c in combined.columns]].copy()
+            snapshot_csv.parent.mkdir(parents=True, exist_ok=True)
+            write_header = not snapshot_csv.exists()
+            with snapshot_csv.open("a", encoding="utf-8", newline="") as f:
+                combined.to_csv(f, index=False, header=write_header)
     return 0
 
 
