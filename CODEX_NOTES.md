@@ -318,10 +318,10 @@ workflow 檔案：
 
 - `.github/workflows/stock-watch.yml`
 
-目前排程：
+目前排程（UTC）：
 
-- `37 0 * * 1-5`
-- 對應台灣時間平日 `08:37`
+- `45 0 * * 1-5`（台灣時間平日 `08:45`）
+- `0 6 * * 1-5`（台灣時間平日 `14:00`）
 
 目前 workflow 會做的事：
 
@@ -413,6 +413,6 @@ requirements.txt
 - `backtest_runner.py` 已改成匯入正確的 module 與 backtest function
 - 通知候選條件已把 `ACCEL` 和 attack backtest 對齊
 - alert tracking 已改成使用 row 的市場日期
-- workflow 排程已調整為台灣時間 `08:37`
+- workflow 排程已調整為台灣時間 `08:45` 與 `14:00`
 - config 已改成固定發 Telegram 通知
 - workflow 已改成使用 `requirements.txt` 並先跑測試

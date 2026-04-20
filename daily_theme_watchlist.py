@@ -395,7 +395,7 @@ SPECIAL_ETF_TICKERS = [
     "0050.TW",
     "00878.TW",
 ]
-SCHEDULE_TARGET_TIMES = ["08:37", "08:52"]
+SCHEDULE_TARGET_TIMES = ["08:45", "14:00"]
 
 
 def yf_download_one(ticker: str, period: str) -> pd.DataFrame:
