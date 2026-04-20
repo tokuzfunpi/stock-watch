@@ -1213,6 +1213,8 @@ def short_term_action_label(row: pd.Series) -> str:
     vol_ratio = float(row["volume_ratio20"])
     signals = str(row["signals"])
     spec_label = str(row.get("spec_risk_label", "正常"))
+    setup_score = float(row.get("setup_score", 0.0)) if pd.notna(row.get("setup_score")) else 0.0
+    ret20 = float(row.get("ret20_pct", 0.0)) if pd.notna(row.get("ret20_pct")) else 0.0
 
     if spec_label == "疑似炒作風險高":
         return "只觀察不追"
@@ -1220,7 +1222,15 @@ def short_term_action_label(row: pd.Series) -> str:
         return "分批落袋"
     if ret5 >= 15 or (risk >= 4 and ret5 >= 10):
         return "開高不追"
-    if "ACCEL" in signals and vol_ratio >= 1.3 and ret5 <= 12:
+    if (
+        "ACCEL" in signals
+        and "SURGE" not in signals
+        and vol_ratio >= 1.4
+        and ret5 <= 12
+        and ret20 >= 0
+        and setup_score >= 6
+        and risk <= 3
+    ):
         return "可追"
     if ret5 >= 10:
         return "等拉回"
