@@ -144,10 +144,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--path", default="theme_watchlist_daily/daily_rank.csv")
     parser.add_argument("--since", default="", help="YYYY-MM-DD (inclusive)")
     parser.add_argument("--until", default="", help="YYYY-MM-DD (inclusive)")
-    parser.add_argument("--limit", type=int, default=30, help="Max number of days to backfill")
+    parser.add_argument("--limit", type=int, default=30, help="Max number of days to backfill (0=unlimited)")
     parser.add_argument("--out-dir", default=str(Path("verification") / "watchlist_daily" / "backfill_reports"))
     parser.add_argument("--snapshot-csv", default=str(Path("verification") / "watchlist_daily" / "reco_snapshots.csv"))
     parser.add_argument("--no-snapshot", action="store_true", help="Do not append to reco_snapshots.csv")
+    parser.add_argument(
+        "--rebuild-snapshot",
+        action="store_true",
+        help="Overwrite reco_snapshots.csv from scratch (makes a .bak copy if file exists).",
+    )
     return parser.parse_args(argv)
 
 
@@ -161,7 +166,9 @@ def main(argv: list[str] | None = None) -> int:
         items = [x for x in items if x.signal_date >= args.since]
     if args.until:
         items = [x for x in items if x.signal_date <= args.until]
-    items = items[: max(int(args.limit), 0)]
+    limit = int(args.limit)
+    if limit > 0:
+        items = items[:limit]
 
     if not items:
         print("No backfill items.")
@@ -169,6 +176,13 @@ def main(argv: list[str] | None = None) -> int:
 
     now_local = datetime.now(LOCAL_TZ)
     out_dir.mkdir(parents=True, exist_ok=True)
+
+    if not args.no_snapshot and args.rebuild_snapshot:
+        if snapshot_csv.exists():
+            bak = snapshot_csv.with_suffix(snapshot_csv.suffix + f".bak.{now_local.strftime('%Y%m%d_%H%M%S')}")
+            snapshot_csv.replace(bak)
+            print(f"Backed up snapshot CSV to: {bak}")
+        snapshot_csv.parent.mkdir(parents=True, exist_ok=True)
 
     total_reports = 0
     total_snapshots = 0
@@ -205,4 +219,3 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

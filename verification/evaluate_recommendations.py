@@ -25,6 +25,7 @@ class EvalConfig:
     batch_size: int = 25
     retries: int = 3
     backoff_seconds: float = 1.0
+    cache_dir: Path | None = None
 
 
 def compute_forward_return_pct(
@@ -108,8 +109,51 @@ def fetch_close_series(tickers: list[str], cfg: EvalConfig) -> tuple[dict[str, p
     out: dict[str, pd.Series] = {}
     errors: dict[str, str] = {}
 
+    cache_dir = cfg.cache_dir
+    if cache_dir is not None:
+        cache_dir.mkdir(parents=True, exist_ok=True)
+
+    def cache_path(ticker: str) -> Path | None:
+        if cache_dir is None:
+            return None
+        safe = re.sub(r"[^0-9A-Za-z]+", "_", str(ticker).strip())
+        return cache_dir / f"{safe}.csv"
+
+    def load_cached(ticker: str) -> pd.Series | None:
+        p = cache_path(ticker)
+        if p is None or not p.exists():
+            return None
+        try:
+            df = pd.read_csv(p)
+            if "Date" not in df.columns or "Close" not in df.columns:
+                return None
+            s = pd.Series(df["Close"].values, index=pd.to_datetime(df["Date"], errors="coerce"))
+            s = s.dropna()
+            return s if not s.empty else None
+        except Exception:
+            return None
+
+    def save_cached(ticker: str, series: pd.Series) -> None:
+        p = cache_path(ticker)
+        if p is None:
+            return
+        try:
+            s = series.dropna().copy()
+            s.index = pd.to_datetime(s.index).tz_localize(None)
+            df = pd.DataFrame({"Date": s.index.strftime("%Y-%m-%d"), "Close": s.values})
+            df.to_csv(p, index=False)
+        except Exception:
+            return
+
+    # 0) Load cached data first (helps when network is flaky/unavailable).
+    for ticker in uniq:
+        s = load_cached(ticker)
+        if s is not None:
+            out[ticker] = s
+
     # 1) Bulk (chunked) download for speed; may still miss some tickers.
-    for chunk in _chunked(uniq, int(cfg.batch_size)):
+    need_download = [t for t in uniq if t not in out]
+    for chunk in _chunked(need_download, int(cfg.batch_size)):
         df, err = _download_prices(chunk, cfg, group_by_ticker=True)
         if df is None:
             for t in chunk:
@@ -128,6 +172,7 @@ def fetch_close_series(tickers: list[str], cfg: EvalConfig) -> tuple[dict[str, p
                     if getattr(series, "empty", True):
                         continue
                     out[ticker] = series
+                    save_cached(ticker, series)
                 except Exception as exc:
                     errors.setdefault(ticker, str(exc) or exc.__class__.__name__)
                     continue
@@ -137,6 +182,7 @@ def fetch_close_series(tickers: list[str], cfg: EvalConfig) -> tuple[dict[str, p
                 series = df["Close"].copy()
                 if not getattr(series, "empty", True):
                     out[chunk[0]] = series
+                    save_cached(chunk[0], series)
 
     missing = [t for t in uniq if t not in out]
     if missing:
@@ -161,6 +207,7 @@ def fetch_close_series(tickers: list[str], cfg: EvalConfig) -> tuple[dict[str, p
                 errors.setdefault(ticker, "empty_series")
                 continue
             out[ticker] = series
+            save_cached(ticker, series)
         except Exception as exc:
             errors.setdefault(ticker, str(exc) or exc.__class__.__name__)
             continue
@@ -186,6 +233,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--batch-size", type=int, default=25, help="Batch size for bulk yfinance download.")
     parser.add_argument("--retries", type=int, default=3, help="Retries per download attempt.")
     parser.add_argument("--backoff-seconds", type=float, default=1.0, help="Base backoff seconds between retries.")
+    parser.add_argument("--cache-dir", default=str(out_dir / "yfinance_cache"), help="Local cache dir for Close series.")
     return parser.parse_args(argv)
 
 
@@ -289,6 +337,7 @@ def main(argv: list[str] | None = None) -> int:
         batch_size=int(args.batch_size),
         retries=int(args.retries),
         backoff_seconds=float(args.backoff_seconds),
+        cache_dir=Path(str(args.cache_dir)) if str(args.cache_dir) else None,
     )
 
     if not snapshot_csv.exists():

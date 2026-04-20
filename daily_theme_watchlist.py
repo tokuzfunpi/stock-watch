@@ -1213,8 +1213,6 @@ def short_term_action_label(row: pd.Series) -> str:
     vol_ratio = float(row["volume_ratio20"])
     signals = str(row["signals"])
     spec_label = str(row.get("spec_risk_label", "正常"))
-    setup_score = float(row.get("setup_score", 0.0)) if pd.notna(row.get("setup_score")) else 0.0
-    ret20 = float(row.get("ret20_pct", 0.0)) if pd.notna(row.get("ret20_pct")) else 0.0
 
     if spec_label == "疑似炒作風險高":
         return "只觀察不追"
@@ -1222,15 +1220,7 @@ def short_term_action_label(row: pd.Series) -> str:
         return "分批落袋"
     if ret5 >= 15 or (risk >= 4 and ret5 >= 10):
         return "開高不追"
-    if (
-        "ACCEL" in signals
-        and "SURGE" not in signals
-        and vol_ratio >= 1.4
-        and ret5 <= 12
-        and ret20 >= 0
-        and setup_score >= 6
-        and risk <= 3
-    ):
+    if is_strict_short_chase(row):
         return "可追"
     if ret5 >= 10:
         return "等拉回"
@@ -1239,8 +1229,43 @@ def short_term_action_label(row: pd.Series) -> str:
     return "續追蹤"
 
 
+def is_strict_short_chase(row: pd.Series) -> bool:
+    try:
+        risk = int(row["risk_score"])
+        ret5 = float(row["ret5_pct"])
+        vol_ratio = float(row["volume_ratio20"])
+        signals = str(row["signals"])
+        setup_score = float(row.get("setup_score", 0.0)) if pd.notna(row.get("setup_score")) else 0.0
+        ret20 = float(row.get("ret20_pct", 0.0)) if pd.notna(row.get("ret20_pct")) else 0.0
+    except Exception:
+        return False
+
+    if "ACCEL" not in signals:
+        return False
+    if "TREND" not in signals:
+        return False
+    if "SURGE" in signals:
+        return False
+    if risk > 2:
+        return False
+    if vol_ratio < 1.4:
+        return False
+    if ret5 < 0.5:
+        return False
+    if ret5 > 10:
+        return False
+    if ret20 < 5:
+        return False
+    if setup_score < 7:
+        return False
+    return True
+
+
 def is_short_term_buyable(row: pd.Series) -> bool:
-    return short_term_action_label(row) in {"可追", "等拉回"}
+    action = short_term_action_label(row)
+    if action == "可追":
+        return is_strict_short_chase(row)
+    return action == "等拉回"
 
 
 def midlong_action_label(row: pd.Series) -> str:
