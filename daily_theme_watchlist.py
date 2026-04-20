@@ -1881,7 +1881,17 @@ def run_watchlist() -> pd.DataFrame:
         except Exception as exc:
             logger.exception("FAILED: %s %s -> %s", ticker, name, exc)
     if not rows:
-        raise RuntimeError("No stock data available from watchlist.")
+        for fallback in [RANK_CSV, PREV_RANK_CSV]:
+            if not fallback.exists():
+                continue
+            try:
+                df = pd.read_csv(fallback)
+                if not df.empty:
+                    logger.warning("No fresh stock data; fallback to cached rank CSV: %s", fallback)
+                    return df
+            except Exception:
+                continue
+        raise RuntimeError("No stock data available from watchlist (and no cached daily_rank.csv to fallback).")
     return save_daily_rank(rows, prev_rank)
 
 
@@ -2271,8 +2281,21 @@ def main() -> int:
             logger.info("Already completed successfully for %s with same code/config. Skip duplicate run.", today_local_str())
             return 0
 
-        market_regime = get_market_regime()
-        us_market = get_us_market_reference()
+        warnings: list[str] = []
+        try:
+            market_regime = get_market_regime()
+        except Exception as exc:
+            warnings.append(f"market_regime: {exc}")
+            logger.exception("Market regime fetch failed (best effort): %s", exc)
+            market_regime = {"comment": "加權指數資料抓不到（best effort）", "is_bullish": True}
+
+        try:
+            us_market = get_us_market_reference()
+        except Exception as exc:
+            warnings.append(f"us_market: {exc}")
+            logger.exception("US market reference failed (best effort): %s", exc)
+            us_market = {"summary": "美股參考暫時抓不到（best effort）。", "rows": []}
+
         df_rank = run_watchlist()
         bt_steady, bt_attack = run_backtest_dual()
 
@@ -2298,6 +2321,9 @@ def main() -> int:
 
         save_last_state(current_state)
         save_last_success_date(today_local_str())
+
+        if warnings:
+            logger.warning("Best effort warnings: %s", " | ".join(warnings))
         return 0
     except Exception as exc:
         err_msg = f"Watchlist job failed: {exc}"
