@@ -279,10 +279,12 @@ def main(argv: list[str] | None = None) -> int:
             combined["generated_at"] = now_local.strftime("%Y-%m-%d %H:%M:%S %Z")
             combined["signal_date"] = asof_date
             combined["source"] = str(rank_csv)
+            combined["source_sha"] = ""
             keep = [
                 "generated_at",
                 "signal_date",
                 "source",
+                "source_sha",
                 "watch_type",
                 "rank",
                 "ticker",

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 from dataclasses import dataclass
 from datetime import datetime
 import sys
@@ -106,6 +107,51 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def _normalize_snapshot_csv_inplace(path: Path) -> None:
+    if not path.exists():
+        return
+    raw = path.read_text(encoding="utf-8", errors="replace")
+    reader = csv.reader(raw.splitlines())
+    rows = list(reader)
+    if not rows:
+        return
+
+    header = list(rows[0])
+    body = rows[1:]
+    if not header:
+        return
+
+    max_len = max((len(r) for r in body), default=len(header))
+    if max_len == len(header) + 1 and "source_sha" not in header:
+        header.append("source_sha")
+
+    normalized: list[list[str]] = [header]
+    for r in body:
+        if not r:
+            continue
+        if len(r) < len(header):
+            r = r + [""] * (len(header) - len(r))
+        elif len(r) > len(header):
+            r = r[: len(header)]
+        normalized.append(r)
+
+    bak = path.with_suffix(path.suffix + ".bak")
+    if not bak.exists():
+        bak.write_text(raw, encoding="utf-8")
+
+    with path.open("w", encoding="utf-8", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerows(normalized)
+
+
+def load_snapshots_csv(path: Path) -> pd.DataFrame:
+    try:
+        return pd.read_csv(path)
+    except pd.errors.ParserError:
+        _normalize_snapshot_csv_inplace(path)
+        return pd.read_csv(path)
+
+
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     snapshot_csv = Path(args.snapshot_csv)
@@ -116,7 +162,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"No snapshot file: {snapshot_csv}")
         return 0
 
-    snapshots = pd.read_csv(snapshot_csv)
+    snapshots = load_snapshots_csv(snapshot_csv)
     if snapshots.empty:
         print("Snapshot file is empty.")
         return 0
