@@ -16,11 +16,9 @@ if str(REPO_ROOT) not in sys.path:
 
 from daily_theme_watchlist import LOCAL_TZ
 from verification.verify_recommendations import (
+    append_csv_with_existing_header,
     build_verification_report_markdown,
-    select_midlong_candidates,
-    select_short_term_candidates,
-    midlong_action_label,
-    short_term_action_label,
+    select_forced_recommendations,
     _maybe_date_from_rank,  # type: ignore[attr-defined]
 )
 
@@ -93,16 +91,14 @@ def append_snapshot_rows(
     source_sha: str,
     snapshot_csv: Path,
 ) -> int:
-    short_candidates = select_short_term_candidates(df_rank).copy()
-    midlong_candidates = select_midlong_candidates(df_rank).copy()
-    if not short_candidates.empty:
-        short_candidates["watch_type"] = "short"
-        short_candidates["action"] = short_candidates.apply(short_term_action_label, axis=1)
-    if not midlong_candidates.empty:
-        midlong_candidates["watch_type"] = "midlong"
-        midlong_candidates["action"] = midlong_candidates.apply(midlong_action_label, axis=1)
+    short_forced = select_forced_recommendations(df_rank, watch_type="short", top_n=5).copy()
+    midlong_forced = select_forced_recommendations(df_rank, watch_type="midlong", top_n=5).copy()
+    if not short_forced.empty:
+        short_forced["watch_type"] = "short"
+    if not midlong_forced.empty:
+        midlong_forced["watch_type"] = "midlong"
 
-    combined = pd.concat([short_candidates, midlong_candidates], ignore_index=True)
+    combined = pd.concat([short_forced, midlong_forced], ignore_index=True)
     if combined.empty:
         return 0
 
@@ -129,13 +125,10 @@ def append_snapshot_rows(
         "volume_ratio20",
         "signals",
         "action",
+        "reco_status",
     ]
     combined = combined[[c for c in keep if c in combined.columns]].copy()
-
-    snapshot_csv.parent.mkdir(parents=True, exist_ok=True)
-    write_header = not snapshot_csv.exists()
-    with snapshot_csv.open("a", encoding="utf-8", newline="") as f:
-        combined.to_csv(f, index=False, header=write_header)
+    append_csv_with_existing_header(snapshot_csv, combined)
     return int(len(combined))
 
 

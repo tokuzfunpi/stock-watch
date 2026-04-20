@@ -19,7 +19,7 @@
 
 ## 建議執行時機（台灣時間）
 
-- 08:45：`verify_recommendations.py`（把「今天早上推薦」定格成快照）
+- 08:45：`verify_recommendations.py`（把「今天早上推薦」定格成快照；會強制補滿短線/中線各 5 檔，低於門檻會標示 `below_threshold`）
 - 14:00（收盤後）：`evaluate_recommendations.py`（回填 1/5/20 天等 horizon 的結果）
 - 任何時候：`summarize_outcomes.py`（產出彙整報告）
 
@@ -28,6 +28,9 @@
 ```bash
 # 1) 早上產生驗算報告 + 快照
 python3.11 verification/verify_recommendations.py
+
+# 若想調整「強制補滿」的數量（預設 5）
+python3.11 verification/verify_recommendations.py --top-n-short 5 --top-n-midlong 5
 
 # 2) 收盤後回填 outcomes（horizons 預設 1,5,20）
 python3.11 verification/evaluate_recommendations.py --horizons 1,5,20

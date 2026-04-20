@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 from dataclasses import dataclass
 from datetime import datetime
 import sys
@@ -15,6 +16,8 @@ if str(REPO_ROOT) not in sys.path:
 from daily_theme_watchlist import (
     LOCAL_TZ,
     CONFIG,
+    is_midlong_buyable,
+    is_short_term_buyable,
     rank_midlong_pool,
     rank_short_term_pool,
     select_midlong_backup_candidates,
@@ -31,6 +34,66 @@ class VerificationHeuristics:
     warn_overheated_ret5_pct: float = 18.0
     warn_high_risk_score: int = 5
     warn_low_volume_ratio: float = 0.9
+
+
+def select_forced_recommendations(
+    df_rank: pd.DataFrame,
+    *,
+    watch_type: str,
+    top_n: int = 5,
+) -> pd.DataFrame:
+    if df_rank is None or df_rank.empty:
+        return pd.DataFrame()
+
+    watch_type = str(watch_type or "").strip().lower()
+    if watch_type == "short":
+        pool = rank_short_term_pool(df_rank).copy()
+        if pool.empty:
+            return pool
+        pool["action"] = pool.apply(short_term_action_label, axis=1)
+        pool["_ok"] = pool.apply(is_short_term_buyable, axis=1)
+    elif watch_type == "midlong":
+        pool = rank_midlong_pool(df_rank).copy()
+        if pool.empty:
+            return pool
+        pool["action"] = pool.apply(midlong_action_label, axis=1)
+        pool["_ok"] = pool.apply(is_midlong_buyable, axis=1)
+    else:
+        raise ValueError(f"Unknown watch_type: {watch_type}")
+
+    pool["_rank"] = pd.to_numeric(pool.get("rank"), errors="coerce")
+    pool = pool.sort_values(by=["_ok", "_rank"], ascending=[False, True]).copy()
+    if int(top_n) > 0:
+        pool = pool.head(int(top_n)).copy()
+    pool["reco_status"] = pool["_ok"].map(lambda v: "ok" if bool(v) else "below_threshold")
+    pool = pool.drop(columns=["_ok", "_rank"], errors="ignore")
+    return pool
+
+
+def append_csv_with_existing_header(path: Path, rows: pd.DataFrame) -> None:
+    if rows is None or rows.empty:
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    if not path.exists():
+        rows.to_csv(path, index=False, encoding="utf-8")
+        return
+
+    with path.open("r", encoding="utf-8", newline="") as f:
+        reader = csv.reader(f)
+        header = next(reader, [])
+
+    if not header:
+        rows.to_csv(path, index=False, encoding="utf-8")
+        return
+
+    aligned = rows.copy()
+    for col in header:
+        if col not in aligned.columns:
+            aligned[col] = ""
+    aligned = aligned[[c for c in header if c in aligned.columns]].copy()
+    with path.open("a", encoding="utf-8", newline="") as f:
+        aligned.to_csv(f, index=False, header=False)
 
 
 def _format_table(df: pd.DataFrame, cols: list[str]) -> str:
@@ -81,6 +144,8 @@ def build_verification_report_markdown(
     source: str,
     now_local: datetime | None = None,
     heuristics: VerificationHeuristics | None = None,
+    top_n_short: int = 5,
+    top_n_midlong: int = 5,
 ) -> str:
     now_local = now_local or datetime.now(LOCAL_TZ)
     heuristics = heuristics or VerificationHeuristics()
@@ -88,24 +153,18 @@ def build_verification_report_markdown(
 
     short_pool = rank_short_term_pool(df_rank) if not df_rank.empty else df_rank.head(0).copy()
     midlong_pool = rank_midlong_pool(df_rank) if not df_rank.empty else df_rank.head(0).copy()
-    short_candidates = select_short_term_candidates(df_rank) if not df_rank.empty else df_rank.head(0).copy()
-    midlong_candidates = select_midlong_candidates(df_rank) if not df_rank.empty else df_rank.head(0).copy()
+    short_forced = select_forced_recommendations(df_rank, watch_type="short", top_n=top_n_short) if not df_rank.empty else df_rank.head(0).copy()
+    midlong_forced = select_forced_recommendations(df_rank, watch_type="midlong", top_n=top_n_midlong) if not df_rank.empty else df_rank.head(0).copy()
 
     short_backups = select_short_term_backup_candidates(
         df_rank,
-        exclude_tickers=set(short_candidates["ticker"].astype(str)) if not short_candidates.empty else None,
+        exclude_tickers=set(short_forced["ticker"].astype(str)) if not short_forced.empty else None,
     ) if not df_rank.empty else df_rank.head(0).copy()
     midlong_backups = select_midlong_backup_candidates(
         df_rank,
-        exclude_tickers=set(midlong_candidates["ticker"].astype(str)) if not midlong_candidates.empty else None,
+        exclude_tickers=set(midlong_forced["ticker"].astype(str)) if not midlong_forced.empty else None,
     ) if not df_rank.empty else df_rank.head(0).copy()
 
-    if not short_candidates.empty:
-        short_candidates = short_candidates.copy()
-        short_candidates["action"] = short_candidates.apply(short_term_action_label, axis=1)
-    if not midlong_candidates.empty:
-        midlong_candidates = midlong_candidates.copy()
-        midlong_candidates["action"] = midlong_candidates.apply(midlong_action_label, axis=1)
     if not short_backups.empty:
         short_backups = short_backups.copy()
         short_backups["action"] = short_backups.apply(short_term_action_label, axis=1)
@@ -114,20 +173,29 @@ def build_verification_report_markdown(
         midlong_backups["action"] = midlong_backups.apply(midlong_action_label, axis=1)
 
     overlap = sorted(
-        set(short_candidates.get("ticker", pd.Series(dtype=str)).astype(str))
-        & set(midlong_candidates.get("ticker", pd.Series(dtype=str)).astype(str))
+        set(short_forced.get("ticker", pd.Series(dtype=str)).astype(str))
+        & set(midlong_forced.get("ticker", pd.Series(dtype=str)).astype(str))
     )
 
-    short_action_counts = _action_counts(short_candidates, "action")
-    midlong_action_counts = _action_counts(midlong_candidates, "action")
+    short_action_counts = _action_counts(short_forced, "action")
+    midlong_action_counts = _action_counts(midlong_forced, "action")
 
     warnings: list[str] = []
-    if short_candidates.empty:
+    if short_forced.empty:
         warnings.append("短線推薦為空：可能條件過嚴或資料不足。")
-    if midlong_candidates.empty:
+    if midlong_forced.empty:
         warnings.append("中線推薦為空：可能條件過嚴或資料不足。")
     if overlap:
         warnings.append(f"短線/中線推薦重疊 {len(overlap)} 檔：{', '.join(overlap)}")
+
+    def _scan_below_threshold(df: pd.DataFrame, label: str) -> None:
+        if df.empty or "reco_status" not in df.columns:
+            return
+        below = df[df["reco_status"].astype(str) != "ok"].copy()
+        if below.empty:
+            return
+        names = ", ".join(below["ticker"].astype(str).head(5).tolist())
+        warnings.append(f"{label} 補滿用（低於原本可買門檻）{len(below)} 檔：{names}")
 
     def _scan_overheated(df: pd.DataFrame, label: str) -> None:
         if df.empty:
@@ -148,21 +216,24 @@ def build_verification_report_markdown(
             names = ", ".join(low_vol["ticker"].astype(str).head(5).tolist())
             warnings.append(f"{label} 含量比偏低標的（< {heuristics.warn_low_volume_ratio}）：{names}")
 
-    _scan_overheated(short_candidates, "短線推薦")
-    _scan_overheated(midlong_candidates, "中線推薦")
-    _scan_liquidity(short_candidates, "短線推薦")
-    _scan_liquidity(midlong_candidates, "中線推薦")
+    _scan_below_threshold(short_forced, "短線推薦")
+    _scan_below_threshold(midlong_forced, "中線推薦")
+    _scan_overheated(short_forced, "短線推薦")
+    _scan_overheated(midlong_forced, "中線推薦")
+    _scan_liquidity(short_forced, "短線推薦")
+    _scan_liquidity(midlong_forced, "中線推薦")
 
     lines: list[str] = [
         "# Recommendation Verification (pre-09:00 best-effort)",
         f"- Generated: {now_local.strftime('%Y-%m-%d %H:%M:%S %Z')}",
         f"- As-of market date: {asof_date}",
         f"- Source: {source}",
+        f"- Forced top N: short={top_n_short} midlong={top_n_midlong}",
         f"- Notify config: short={CONFIG.notify.top_n_short} midlong={CONFIG.notify.top_n_midlong}",
         "",
         "## Summary",
-        f"- Short pool size: {len(short_pool)} | candidates: {len(short_candidates)} | backups: {len(short_backups)}",
-        f"- Midlong pool size: {len(midlong_pool)} | candidates: {len(midlong_candidates)} | backups: {len(midlong_backups)}",
+        f"- Short pool size: {len(short_pool)} | forced: {len(short_forced)} | ok: {int((short_forced.get('reco_status','')=='ok').sum()) if not short_forced.empty else 0} | backups: {len(short_backups)}",
+        f"- Midlong pool size: {len(midlong_pool)} | forced: {len(midlong_forced)} | ok: {int((midlong_forced.get('reco_status','')=='ok').sum()) if not midlong_forced.empty else 0} | backups: {len(midlong_backups)}",
         f"- Overlap candidates: {len(overlap)}",
         "",
         "## Warnings",
@@ -177,7 +248,7 @@ def build_verification_report_markdown(
             "",
             "## Short-Term Candidates",
             _format_table(
-                short_candidates,
+                short_forced,
                 [
                     "rank",
                     "ticker",
@@ -190,12 +261,13 @@ def build_verification_report_markdown(
                     "volume_ratio20",
                     "signals",
                     "action",
+                    "reco_status",
                 ],
             ).rstrip(),
             "",
             "## Mid-Long Candidates",
             _format_table(
-                midlong_candidates,
+                midlong_forced,
                 [
                     "rank",
                     "ticker",
@@ -208,6 +280,7 @@ def build_verification_report_markdown(
                     "volume_ratio20",
                     "signals",
                     "action",
+                    "reco_status",
                 ],
             ).rstrip(),
             "",
@@ -231,6 +304,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     out_dir = Path("verification") / "watchlist_daily"
     parser.add_argument("--out", default=str(out_dir / "verification_report.md"))
     parser.add_argument("--snapshot-csv", default=str(out_dir / "reco_snapshots.csv"))
+    parser.add_argument("--top-n-short", type=int, default=5, help="Force this many short recommendations into snapshot/report.")
+    parser.add_argument("--top-n-midlong", type=int, default=5, help="Force this many midlong recommendations into snapshot/report.")
     parser.add_argument("--no-snapshot", action="store_true", help="Do not append recommendation snapshots to CSV.")
     return parser.parse_args(argv)
 
@@ -257,6 +332,8 @@ def main(argv: list[str] | None = None) -> int:
         df_rank,
         source=str(rank_csv),
         now_local=now_local,
+        top_n_short=int(args.top_n_short),
+        top_n_midlong=int(args.top_n_midlong),
     )
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(report, encoding="utf-8")
@@ -264,16 +341,14 @@ def main(argv: list[str] | None = None) -> int:
 
     if not args.no_snapshot:
         asof_date = _maybe_date_from_rank(df_rank)
-        short_candidates = select_short_term_candidates(df_rank).copy()
-        midlong_candidates = select_midlong_candidates(df_rank).copy()
-        if not short_candidates.empty:
-            short_candidates["watch_type"] = "short"
-            short_candidates["action"] = short_candidates.apply(short_term_action_label, axis=1)
-        if not midlong_candidates.empty:
-            midlong_candidates["watch_type"] = "midlong"
-            midlong_candidates["action"] = midlong_candidates.apply(midlong_action_label, axis=1)
+        short_forced = select_forced_recommendations(df_rank, watch_type="short", top_n=int(args.top_n_short)).copy()
+        midlong_forced = select_forced_recommendations(df_rank, watch_type="midlong", top_n=int(args.top_n_midlong)).copy()
+        if not short_forced.empty:
+            short_forced["watch_type"] = "short"
+        if not midlong_forced.empty:
+            midlong_forced["watch_type"] = "midlong"
 
-        combined = pd.concat([short_candidates, midlong_candidates], ignore_index=True)
+        combined = pd.concat([short_forced, midlong_forced], ignore_index=True)
         if not combined.empty:
             combined = combined.copy()
             combined["generated_at"] = now_local.strftime("%Y-%m-%d %H:%M:%S %Z")
@@ -297,12 +372,10 @@ def main(argv: list[str] | None = None) -> int:
                 "volume_ratio20",
                 "signals",
                 "action",
+                "reco_status",
             ]
             combined = combined[[c for c in keep if c in combined.columns]].copy()
-            snapshot_csv.parent.mkdir(parents=True, exist_ok=True)
-            write_header = not snapshot_csv.exists()
-            with snapshot_csv.open("a", encoding="utf-8", newline="") as f:
-                combined.to_csv(f, index=False, header=write_header)
+            append_csv_with_existing_header(snapshot_csv, combined)
     return 0
 
 
