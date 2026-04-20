@@ -360,6 +360,12 @@ python3 verify_recommendations.py
 python3 evaluate_recommendations.py
 ```
 
+驗算檢查輸出（本機）：
+
+- `watchlist_daily/verification_report.md`
+- `watchlist_daily/reco_snapshots.csv`
+- `watchlist_daily/reco_outcomes.csv`（需另外跑 evaluate）
+
 依賴套件目前記在：
 
 ```bash

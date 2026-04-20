@@ -92,8 +92,9 @@ def fetch_close_series(tickers: list[str], cfg: EvalConfig) -> dict[str, pd.Seri
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Evaluate recommendation snapshots vs future closes (best effort).")
-    parser.add_argument("--snapshot-csv", default=str(Path("theme_watchlist_daily") / "reco_snapshots.csv"))
-    parser.add_argument("--outcomes-csv", default=str(Path("theme_watchlist_daily") / "reco_outcomes.csv"))
+    out_dir = Path("watchlist_daily")
+    parser.add_argument("--snapshot-csv", default=str(out_dir / "reco_snapshots.csv"))
+    parser.add_argument("--outcomes-csv", default=str(out_dir / "reco_outcomes.csv"))
     parser.add_argument("--signal-date", default="", help="Evaluate snapshots for this signal date (YYYY-MM-DD).")
     parser.add_argument("--horizons", default="1,5,20", help="Comma-separated horizons in trading days.")
     parser.add_argument("--period", default="90d", help="yfinance period to fetch (e.g. 60d, 6mo).")
@@ -206,4 +207,3 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
