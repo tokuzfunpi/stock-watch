@@ -177,6 +177,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--snapshot-csv", default=str(out_dir / "reco_snapshots.csv"))
     parser.add_argument("--outcomes-csv", default=str(out_dir / "reco_outcomes.csv"))
     parser.add_argument("--signal-date", default="", help="Evaluate snapshots for this signal date (YYYY-MM-DD).")
+    parser.add_argument("--all-dates", action="store_true", help="Evaluate all signal_date values in snapshots.")
+    parser.add_argument("--since", default="", help="YYYY-MM-DD (inclusive); only used with --all-dates.")
+    parser.add_argument("--until", default="", help="YYYY-MM-DD (inclusive); only used with --all-dates.")
+    parser.add_argument("--max-days", type=int, default=0, help="Limit number of signal_date days processed (0=unlimited).")
     parser.add_argument("--horizons", default="1,5,20", help="Comma-separated horizons in trading days.")
     parser.add_argument("--period", default="180d", help="yfinance period to fetch (e.g. 90d, 6mo).")
     parser.add_argument("--batch-size", type=int, default=25, help="Batch size for bulk yfinance download.")
@@ -352,11 +356,30 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     signal_date = str(args.signal_date).strip()
-    if not signal_date:
-        non_empty = snapshots["signal_date"].dropna().astype(str)
-        signal_date = non_empty.iloc[-1] if not non_empty.empty else ""
-    if signal_date:
-        snapshots = snapshots[snapshots["signal_date"].astype(str) == signal_date].copy()
+    if args.all_dates:
+        if "signal_date" not in snapshots.columns:
+            print("Snapshot file missing 'signal_date' column. Re-run verify/backfill to rebuild snapshots.")
+            return 0
+        dates = snapshots["signal_date"].dropna().astype(str).unique().tolist()
+        dates = [d for d in dates if is_valid_signal_date(d)]
+        dates.sort()
+        if args.since:
+            dates = [d for d in dates if d >= args.since]
+        if args.until:
+            dates = [d for d in dates if d <= args.until]
+        if int(args.max_days) > 0:
+            dates = dates[: int(args.max_days)]
+        if not dates:
+            print("No valid signal_date values matched filters.")
+            return 0
+        snapshots = snapshots[snapshots["signal_date"].astype(str).isin(dates)].copy()
+        print(f"Evaluating signal_date days: {len(dates)} (from {dates[0]} to {dates[-1]})")
+    else:
+        if not signal_date:
+            non_empty = snapshots["signal_date"].dropna().astype(str)
+            signal_date = non_empty.iloc[-1] if not non_empty.empty else ""
+        if signal_date:
+            snapshots = snapshots[snapshots["signal_date"].astype(str) == signal_date].copy()
 
     if snapshots.empty:
         print("No snapshots matched signal date.")

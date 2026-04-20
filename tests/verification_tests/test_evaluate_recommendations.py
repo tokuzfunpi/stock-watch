@@ -13,6 +13,7 @@ class EvaluateRecommendationsTests(unittest.TestCase):
     def test_is_valid_signal_date_accepts_yyyy_mm_dd(self) -> None:
         self.assertTrue(is_valid_signal_date("2026-04-17"))
         self.assertFalse(is_valid_signal_date("2026/04/17"))
+        self.assertFalse(is_valid_signal_date("2026-4-7"))
 
     def test_chunked_splits(self) -> None:
         self.assertEqual(_chunked(["a", "b", "c"], 2), [["a", "b"], ["c"]])

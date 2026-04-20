@@ -35,6 +35,12 @@ python3.11 verification/evaluate_recommendations.py --horizons 1,5,20
 # yfinance 偶爾不穩時，可提高穩定性（分批 + retry + backoff + 拉長 period）
 python3.11 verification/evaluate_recommendations.py --horizons 1,5,20 --period 180d --batch-size 25 --retries 3 --backoff-seconds 1
 
+# 一次把所有日期都補齊（會跑 snapshots 裡所有 signal_date）
+python3.11 verification/evaluate_recommendations.py --all-dates --horizons 1,5,20
+
+# 只補指定區間（需搭配 --all-dates）
+python3.11 verification/evaluate_recommendations.py --all-dates --since 2026-04-10 --until 2026-04-17 --horizons 1,5,20
+
 # 3) 彙整 outcomes
 python3.11 verification/summarize_outcomes.py
 ```
