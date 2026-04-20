@@ -32,6 +32,12 @@ python3.11 verification/verify_recommendations.py
 # 若想調整「強制補滿」的數量（預設 5）
 python3.11 verification/verify_recommendations.py --top-n-short 5 --top-n-midlong 5
 
+# （選用）加上 AI 改進建議（best effort；失敗會退回固定 heuristics）
+# OpenAI
+OPENAI_API_KEY=... python3.11 verification/verify_recommendations.py --ai-advice --ai-provider openai --ai-model <your-model>
+# Ollama（本機）
+python3.11 verification/verify_recommendations.py --ai-advice --ai-provider ollama --ai-model <your-model>
+
 # 2) 收盤後回填 outcomes（horizons 預設 1,5,20）
 python3.11 verification/evaluate_recommendations.py --horizons 1,5,20
 
