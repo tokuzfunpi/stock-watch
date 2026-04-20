@@ -36,6 +36,24 @@ python3.11 verification/evaluate_recommendations.py --horizons 1,5,20
 python3.11 verification/summarize_outcomes.py
 ```
 
+## 用 Git 歷史回填（補齊過去樣本）
+
+如果你之前沒有每天早上跑 `verify` 存快照，可以用 repo 裡歷史的
+`theme_watchlist_daily/daily_rank.csv`（artifact commits）來重建快照：
+
+```bash
+# 回填最近 30 天（每一天取最新一次 daily_rank.csv）
+python3.11 verification/backfill_from_git.py
+
+# 指定區間（YYYY-MM-DD）
+python3.11 verification/backfill_from_git.py --since 2026-04-15 --until 2026-04-19
+```
+
+會產生：
+
+- `verification/watchlist_daily/backfill_reports/verification_report_YYYY-MM-DD.md`
+- 並追加到 `verification/watchlist_daily/reco_snapshots.csv`
+
 ## 結果怎麼看
 
 - `verification_report.md`：當天短線/中線推薦清單 + warnings/diagnostics（偏「質檢」）
@@ -54,4 +72,3 @@ Repo 有一個手動 workflow 會跑 `verify_recommendations.py` 並上傳 artif
 ## 版本控制
 
 `verification/watchlist_daily/` 內是本機產出資料，預設已在 `.gitignore` 忽略，不會被 commit。
-
