@@ -358,6 +358,7 @@ python3 daily_theme_watchlist.py
 python3 portfolio_check.py
 python3 verify_recommendations.py
 python3 evaluate_recommendations.py
+python3 summarize_outcomes.py
 ```
 
 驗算檢查輸出（本機）：
