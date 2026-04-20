@@ -7,6 +7,7 @@ import logging
 import os
 import re
 import sys
+import time
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -54,6 +55,15 @@ LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 FORCE_RUN = os.getenv("FORCE_RUN", "").strip().lower() in {"1", "true", "yes", "y"}
 LOCAL_TZ = ZoneInfo(os.getenv("LOCAL_TZ", "Asia/Taipei"))
 TWSE_NAME_CACHE: dict[str, str] = {}
+REALTIME_QUOTE_INTERVAL = os.getenv("REALTIME_QUOTE_INTERVAL", "1m").strip()
+REALTIME_QUOTE_PERIOD = os.getenv("REALTIME_QUOTE_PERIOD", "1d").strip()
+
+
+def realtime_quotes_enabled() -> bool:
+    return os.getenv("REALTIME_QUOTES", "1").strip().lower() in {"1", "true", "yes", "y"}
+
+
+_REALTIME_QUOTE_CACHE: dict[tuple[str, str, tuple[str, ...]], tuple[float, dict[str, float]]] = {}
 
 
 def parse_chat_ids(raw: str) -> list[int]:
@@ -402,6 +412,71 @@ def yf_download_one(ticker: str, period: str) -> pd.DataFrame:
     if len(df) < 250:
         raise ValueError(f"Insufficient history for {ticker}: {len(df)} rows")
     return df
+
+
+def fetch_realtime_last_close(tickers: list[str]) -> dict[str, float]:
+    if not realtime_quotes_enabled():
+        return {}
+    uniq = [str(t).strip() for t in tickers if str(t).strip()]
+    seen: set[str] = set()
+    uniq = [t for t in uniq if not (t in seen or seen.add(t))]
+    if not uniq:
+        return {}
+
+    cache_key = (REALTIME_QUOTE_PERIOD, REALTIME_QUOTE_INTERVAL, tuple(sorted(uniq)))
+    cached = _REALTIME_QUOTE_CACHE.get(cache_key)
+    if cached:
+        ts, data = cached
+        if time.time() - ts <= 30:
+            return dict(data)
+
+    try:
+        df = yf.download(
+            " ".join(uniq),
+            period=REALTIME_QUOTE_PERIOD,
+            interval=REALTIME_QUOTE_INTERVAL,
+            auto_adjust=True,
+            progress=False,
+            threads=False,
+            group_by="ticker",
+        )
+    except Exception as exc:
+        logger.info("Realtime quote fetch failed: %s", exc)
+        _REALTIME_QUOTE_CACHE[cache_key] = (time.time(), {})
+        return {}
+
+    if df is None or getattr(df, "empty", True):
+        _REALTIME_QUOTE_CACHE[cache_key] = (time.time(), {})
+        return {}
+
+    out: dict[str, float] = {}
+    try:
+        if isinstance(df.columns, pd.MultiIndex):
+            for ticker in uniq:
+                try:
+                    if ticker not in df.columns.get_level_values(0):
+                        continue
+                    sub = df[ticker]
+                    if "Close" not in sub.columns:
+                        continue
+                    series = sub["Close"].dropna()
+                    if series.empty:
+                        continue
+                    out[ticker] = float(series.iloc[-1])
+                except Exception:
+                    continue
+        else:
+            if "Close" in df.columns and len(uniq) == 1:
+                series = df["Close"].dropna()
+                if not series.empty:
+                    out[uniq[0]] = float(series.iloc[-1])
+    except Exception as exc:
+        logger.info("Realtime quote parse failed: %s", exc)
+        _REALTIME_QUOTE_CACHE[cache_key] = (time.time(), {})
+        return {}
+
+    _REALTIME_QUOTE_CACHE[cache_key] = (time.time(), dict(out))
+    return out
 
 
 def add_indicators(df: pd.DataFrame, ma_period: int = 20) -> pd.DataFrame:
@@ -1489,7 +1564,18 @@ def build_portfolio_review_df(df_rank: pd.DataFrame) -> pd.DataFrame:
     market_df = df_rank[market_cols].copy() if not df_rank.empty else pd.DataFrame(columns=market_cols)
     review = PORTFOLIO.merge(market_df, on="ticker", how="left")
     review["name"] = review["name"].fillna(review["ticker"].str.split(".").str[0])
+
     review["current_close"] = pd.to_numeric(review["close"], errors="coerce")
+    review["quote_source"] = "close"
+    realtime = fetch_realtime_last_close(review["ticker"].tolist())
+    if realtime:
+        review["realtime_close"] = pd.to_numeric(review["ticker"].map(realtime), errors="coerce")
+        has_realtime = review["realtime_close"].notna()
+        review.loc[has_realtime, "current_close"] = review.loc[has_realtime, "realtime_close"]
+        review.loc[has_realtime, "quote_source"] = "realtime"
+    else:
+        review["realtime_close"] = pd.NA
+
     review["position_cost"] = (review["shares"] * review["avg_cost"]).round(2)
     review["position_value"] = (review["shares"] * review["current_close"]).round(2)
     review["unrealized_pnl"] = (review["position_value"] - review["position_cost"]).round(2)
@@ -2049,11 +2135,15 @@ def save_reports(df_rank: pd.DataFrame, market_regime: dict, bt_steady: Optional
 def build_portfolio_report_markdown(df_rank: pd.DataFrame, market_regime: dict, us_market: dict) -> str:
     review = build_portfolio_review_df(df_rank)
     today = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    quote_line = f"- Quote: realtime({REALTIME_QUOTE_INTERVAL}) if available, else daily close"
+    if not realtime_quotes_enabled():
+        quote_line = "- Quote: daily close (realtime disabled)"
     lines = [
         "# Portfolio Review",
         f"- Generated: {today}",
         f"- Market Regime: {market_regime['comment']}",
         f"- US Summary: {us_market['summary']}",
+        quote_line,
         "",
     ]
     if AUTO_ADDED_TICKERS:

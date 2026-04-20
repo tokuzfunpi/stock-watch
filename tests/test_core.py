@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import tempfile
 import unittest
 from importlib import util
@@ -302,7 +303,7 @@ class ChatIdMapUpdateTests(unittest.TestCase):
         with patch(
             "daily_theme_watchlist.PORTFOLIO",
             pd.DataFrame([{"ticker": "2495.TW", "shares": 4000, "avg_cost": 36.35, "target_profit_pct": 20.0}]),
-        ):
+        ), patch.dict(os.environ, {"REALTIME_QUOTES": "0"}):
             message = build_portfolio_message(df)
 
         self.assertIn("持股檢查", message)
@@ -341,7 +342,7 @@ class ChatIdMapUpdateTests(unittest.TestCase):
         with patch(
             "daily_theme_watchlist.PORTFOLIO",
             pd.DataFrame([{"ticker": "2330.TW", "shares": 1000, "avg_cost": 900.0, "target_profit_pct": 15.0}]),
-        ):
+        ), patch.dict(os.environ, {"REALTIME_QUOTES": "0"}):
             daily_report = build_daily_report_markdown(df, market_regime, None, None)
             portfolio_report = build_portfolio_report_markdown(df, market_regime, us_market)
 
