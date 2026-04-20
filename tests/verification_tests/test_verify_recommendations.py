@@ -6,7 +6,7 @@ from datetime import datetime
 import pandas as pd
 
 from daily_theme_watchlist import LOCAL_TZ
-from verify_recommendations import build_verification_report_markdown
+from verification.verify_recommendations import build_verification_report_markdown
 
 
 class VerifyRecommendationsTests(unittest.TestCase):
@@ -45,4 +45,3 @@ class VerifyRecommendationsTests(unittest.TestCase):
         self.assertIn("## Short-Term Candidates", report)
         self.assertIn("| ticker |", report)
         self.assertIn("2330.TW", report)
-

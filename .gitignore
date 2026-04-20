@@ -202,6 +202,7 @@ telegram_getupdates_url
 theme_watchlist_daily/portfolio_report.md
 theme_watchlist_daily/portfolio_report.html
 theme_watchlist_daily/.yfinance_cache/
+verification/watchlist_daily/
 
 # Cursor
 #  Cursor is an AI-powered code editor. `.cursorignore` specifies files/directories to

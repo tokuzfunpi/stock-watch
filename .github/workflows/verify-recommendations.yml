@@ -49,10 +49,10 @@ jobs:
         env:
           REALTIME_QUOTES: "0"
         run: |
-          python verify_recommendations.py \
+          python verification/verify_recommendations.py \
             --rank-csv theme_watchlist_daily/daily_rank.csv \
-            --out watchlist_daily/verification_report.md \
-            --snapshot-csv watchlist_daily/reco_snapshots.csv
+            --out verification/watchlist_daily/verification_report.md \
+            --snapshot-csv verification/watchlist_daily/reco_snapshots.csv
 
       - name: Upload verification artifacts
         uses: actions/upload-artifact@v4
@@ -60,5 +60,5 @@ jobs:
           name: verification-report
           path: |
             theme_watchlist_daily/daily_rank.csv
-            watchlist_daily/verification_report.md
-            watchlist_daily/reco_snapshots.csv
+            verification/watchlist_daily/verification_report.md
+            verification/watchlist_daily/reco_snapshots.csv

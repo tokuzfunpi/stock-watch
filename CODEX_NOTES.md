@@ -356,16 +356,17 @@ python3 -m unittest discover -s tests
 python3 backtest_runner.py
 python3 daily_theme_watchlist.py
 python3 portfolio_check.py
-python3 verify_recommendations.py
-python3 evaluate_recommendations.py
-python3 summarize_outcomes.py
+python3 verification/verify_recommendations.py
+python3 verification/evaluate_recommendations.py
+python3 verification/summarize_outcomes.py
 ```
 
 驗算檢查輸出（本機）：
 
-- `watchlist_daily/verification_report.md`
-- `watchlist_daily/reco_snapshots.csv`
-- `watchlist_daily/reco_outcomes.csv`（需另外跑 evaluate）
+- `verification/watchlist_daily/verification_report.md`
+- `verification/watchlist_daily/reco_snapshots.csv`
+- `verification/watchlist_daily/reco_outcomes.csv`（需另外跑 evaluate）
+- `verification/watchlist_daily/outcomes_summary.md`
 
 依賴套件目前記在：
 

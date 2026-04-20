@@ -4,7 +4,7 @@ import unittest
 
 import pandas as pd
 
-from evaluate_recommendations import compute_forward_return_pct
+from verification.evaluate_recommendations import compute_forward_return_pct
 
 
 class EvaluateRecommendationsTests(unittest.TestCase):
@@ -29,4 +29,3 @@ class EvaluateRecommendationsTests(unittest.TestCase):
         self.assertIsNone(ret_pct)
         self.assertIsNone(out_close)
         self.assertEqual(status, "signal_date_missing")
-

@@ -223,7 +223,7 @@ def build_verification_report_markdown(
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Best-effort verification for daily recommendations.")
     parser.add_argument("--rank-csv", default=str(Path("theme_watchlist_daily") / "daily_rank.csv"))
-    out_dir = Path("watchlist_daily")
+    out_dir = Path("verification") / "watchlist_daily"
     parser.add_argument("--out", default=str(out_dir / "verification_report.md"))
     parser.add_argument("--snapshot-csv", default=str(out_dir / "reco_snapshots.csv"))
     parser.add_argument("--no-snapshot", action="store_true", help="Do not append recommendation snapshots to CSV.")

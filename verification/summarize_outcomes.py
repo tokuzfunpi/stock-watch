@@ -122,7 +122,7 @@ def build_summary_markdown(outcomes: pd.DataFrame, source: str, now_local: datet
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Summarize reco outcomes (win rate / average returns).")
-    out_dir = Path("watchlist_daily")
+    out_dir = Path("verification") / "watchlist_daily"
     parser.add_argument("--outcomes-csv", default=str(out_dir / "reco_outcomes.csv"))
     parser.add_argument("--out", default=str(out_dir / "outcomes_summary.md"))
     return parser.parse_args(argv)
@@ -149,4 +149,3 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
