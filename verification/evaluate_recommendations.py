@@ -180,7 +180,7 @@ def load_snapshots_csv(path: Path) -> pd.DataFrame:
 
 
 _VALID_TICKER_RE = re.compile(r"^[0-9A-Z^][0-9A-Z^.\-]*$", re.IGNORECASE)
-_VALID_DATE_RE = re.compile(r"^\\d{4}-\\d{2}-\\d{2}$")
+_VALID_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _VALID_WATCH_TYPES = {"short", "midlong"}
 
 

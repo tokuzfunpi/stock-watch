@@ -5,9 +5,14 @@ import unittest
 import pandas as pd
 
 from verification.evaluate_recommendations import compute_forward_return_pct
+from verification.evaluate_recommendations import is_valid_signal_date
 
 
 class EvaluateRecommendationsTests(unittest.TestCase):
+    def test_is_valid_signal_date_accepts_yyyy_mm_dd(self) -> None:
+        self.assertTrue(is_valid_signal_date("2026-04-17"))
+        self.assertFalse(is_valid_signal_date("2026/04/17"))
+
     def test_compute_forward_return_pct_ok(self) -> None:
         s = pd.Series(
             [100.0, 110.0, 105.0],
