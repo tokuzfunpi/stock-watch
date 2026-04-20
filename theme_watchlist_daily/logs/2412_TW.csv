@@ -1,2 +1,3 @@
 ﻿date,ticker,name,group,layer,close,ret1_pct,ret5_pct,ret10_pct,ret20_pct,volume,avg_vol20,volume_ratio20,ma20,ma60,ma120,drawdown120_pct,bias20_pct,setup_score,risk_score,signals,score_band,regime,spec_risk_score,spec_risk_label
 2026-04-17,2412.TW,中華電,core,midlong_core,137.5,0.73,1.48,2.61,0.0,9301214,9591666,0.97,134.68,134.53,132.97,-0.36,2.1,8,1,BASE,進攻優勢區,低檔慢慢墊高,0,正常
+2026-04-20,2412.TW,中華電,core,midlong_core,137.0,-0.36,1.86,2.24,1.11,12475802,9626999,1.3,134.75,134.59,133.01,-0.72,1.67,8,1,NONE,進攻優勢區,還在觀察,0,正常
