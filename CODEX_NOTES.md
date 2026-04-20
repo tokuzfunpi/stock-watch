@@ -317,6 +317,7 @@
 workflow 檔案：
 
 - `.github/workflows/stock-watch.yml`
+- `.github/workflows/verify-recommendations.yml`（驗算檢查：手動跑）
 
 目前執行方式：
 

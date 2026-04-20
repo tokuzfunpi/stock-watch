@@ -1,0 +1,62 @@
+name: verify-recommendations
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_watchlist_first:
+        description: "Run daily_theme_watchlist.py to refresh daily_rank.csv first"
+        required: false
+        default: "true"
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run tests
+        run: |
+          python -m unittest discover -s tests
+
+      - name: Refresh daily watchlist artifacts (best effort)
+        if: ${{ inputs.run_watchlist_first == 'true' }}
+        env:
+          TELEGRAM_TOKEN: ""
+          TELEGRAM_CHAT_IDS: ""
+          LOG_LEVEL: INFO
+          CONFIG_PATH: config.json
+          WATCHLIST_CSV: watchlist.csv
+          REALTIME_QUOTES: "0"
+        run: |
+          python daily_theme_watchlist.py || true
+
+      - name: Verify recommendations from daily_rank.csv
+        env:
+          REALTIME_QUOTES: "0"
+        run: |
+          python verify_recommendations.py \
+            --rank-csv theme_watchlist_daily/daily_rank.csv \
+            --out theme_watchlist_daily/verification_report.md
+
+      - name: Upload verification artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: verification-report
+          path: |
+            theme_watchlist_daily/verification_report.md
+            theme_watchlist_daily/daily_rank.csv
