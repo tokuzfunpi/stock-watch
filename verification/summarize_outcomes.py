@@ -45,21 +45,21 @@ def _table_markdown(df: pd.DataFrame) -> str:
 def summarize_outcomes(outcomes: pd.DataFrame) -> dict[str, pd.DataFrame]:
     if outcomes.empty:
         empty = pd.DataFrame()
-        return {"by_action": empty, "by_signal": empty}
+        return {"by_action": empty, "by_signal": empty, "overall_by_action": empty, "overall_by_signal": empty}
 
     df = outcomes.copy()
     df["status"] = df.get("status", "").astype(str)
     df = df[df["status"] == "ok"].copy()
     if df.empty:
         empty = pd.DataFrame()
-        return {"by_action": empty, "by_signal": empty}
+        return {"by_action": empty, "by_signal": empty, "overall_by_action": empty, "overall_by_signal": empty}
 
     if "watch_type" in df.columns:
         df["watch_type"] = df["watch_type"].astype(str).str.strip().str.lower()
         df = df[df["watch_type"].isin(["short", "midlong"])].copy()
         if df.empty:
             empty = pd.DataFrame()
-            return {"by_action": empty, "by_signal": empty}
+            return {"by_action": empty, "by_signal": empty, "overall_by_action": empty, "overall_by_signal": empty}
 
     df["realized_ret_pct"] = pd.to_numeric(df["realized_ret_pct"], errors="coerce")
     df["horizon_days"] = pd.to_numeric(df["horizon_days"], errors="coerce").astype("Int64")
@@ -98,7 +98,44 @@ def summarize_outcomes(outcomes: pd.DataFrame) -> dict[str, pd.DataFrame]:
     for c in ["avg_ret", "med_ret"]:
         by_signal[c] = by_signal[c].round(2)
 
-    return {"by_action": by_action, "by_signal": by_signal}
+    overall_by_action = (
+        df.groupby(["horizon_days", "watch_type", "action"], dropna=False)
+        .agg(
+            n=("realized_ret_pct", "count"),
+            win_rate=("win", "mean"),
+            avg_ret=("realized_ret_pct", "mean"),
+            med_ret=("realized_ret_pct", "median"),
+            min_ret=("realized_ret_pct", "min"),
+            max_ret=("realized_ret_pct", "max"),
+        )
+        .reset_index()
+        .sort_values(by=["horizon_days", "watch_type", "n", "avg_ret"], ascending=[True, True, False, False])
+    )
+    overall_by_action["win_rate"] = (overall_by_action["win_rate"] * 100).round(1)
+    for c in ["avg_ret", "med_ret", "min_ret", "max_ret"]:
+        overall_by_action[c] = overall_by_action[c].round(2)
+
+    overall_by_signal = (
+        df.groupby(["horizon_days", "watch_type"], dropna=False)
+        .agg(
+            n=("realized_ret_pct", "count"),
+            win_rate=("win", "mean"),
+            avg_ret=("realized_ret_pct", "mean"),
+            med_ret=("realized_ret_pct", "median"),
+        )
+        .reset_index()
+        .sort_values(by=["horizon_days", "watch_type"], ascending=[True, True])
+    )
+    overall_by_signal["win_rate"] = (overall_by_signal["win_rate"] * 100).round(1)
+    for c in ["avg_ret", "med_ret"]:
+        overall_by_signal[c] = overall_by_signal[c].round(2)
+
+    return {
+        "by_action": by_action,
+        "by_signal": by_signal,
+        "overall_by_action": overall_by_action,
+        "overall_by_signal": overall_by_signal,
+    }
 
 
 def build_summary_markdown(outcomes: pd.DataFrame, source: str, now_local: datetime | None = None) -> str:
@@ -126,6 +163,8 @@ def build_summary_markdown(outcomes: pd.DataFrame, source: str, now_local: datet
         ]
     )
 
+    lines.extend(["## Overall By Signal (all dates)", _table_markdown(parts["overall_by_signal"]).rstrip(), ""])
+    lines.extend(["## Overall By Action (all dates, top 80)", _table_markdown(parts["overall_by_action"].head(80)).rstrip(), ""])
     lines.extend(["## By Signal (watch_type)", _table_markdown(parts["by_signal"].head(30)).rstrip(), ""])
     lines.extend(["## By Action (top 50)", _table_markdown(parts["by_action"].head(50)).rstrip(), ""])
     lines.append("")
