@@ -4,6 +4,7 @@ import argparse
 import csv
 from dataclasses import dataclass
 from datetime import datetime
+import re
 import sys
 from pathlib import Path
 
@@ -146,10 +147,50 @@ def _normalize_snapshot_csv_inplace(path: Path) -> None:
 
 def load_snapshots_csv(path: Path) -> pd.DataFrame:
     try:
-        return pd.read_csv(path)
+        return pd.read_csv(
+            path,
+            dtype={
+                "ticker": "string",
+                "signal_date": "string",
+                "watch_type": "string",
+                "name": "string",
+                "action": "string",
+                "signals": "string",
+                "grade": "string",
+                "source": "string",
+                "source_sha": "string",
+            },
+        )
     except pd.errors.ParserError:
         _normalize_snapshot_csv_inplace(path)
-        return pd.read_csv(path)
+        return pd.read_csv(
+            path,
+            dtype={
+                "ticker": "string",
+                "signal_date": "string",
+                "watch_type": "string",
+                "name": "string",
+                "action": "string",
+                "signals": "string",
+                "grade": "string",
+                "source": "string",
+                "source_sha": "string",
+            },
+        )
+
+
+_VALID_TICKER_RE = re.compile(r"^[0-9A-Z^][0-9A-Z^.\-]*$", re.IGNORECASE)
+
+
+def is_valid_snapshot_ticker(raw: str) -> bool:
+    t = str(raw or "").strip().upper()
+    if not t or not _VALID_TICKER_RE.match(t):
+        return False
+    if "." in t or t.startswith("^"):
+        return True
+    if t.isalpha() and len(t) >= 2:
+        return True
+    return False
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -166,6 +207,27 @@ def main(argv: list[str] | None = None) -> int:
     if snapshots.empty:
         print("Snapshot file is empty.")
         return 0
+
+    if "ticker" not in snapshots.columns:
+        print("Snapshot file missing 'ticker' column. Re-run verify/backfill to rebuild snapshots.")
+        return 0
+
+    snapshots["ticker"] = snapshots["ticker"].astype(str).str.strip()
+    invalid_mask = ~snapshots["ticker"].map(is_valid_snapshot_ticker)
+    if invalid_mask.any():
+        invalid = snapshots.loc[invalid_mask, "ticker"].astype(str).head(10).tolist()
+        print(
+            f"WARNING: Dropping {int(invalid_mask.sum())} snapshot rows with invalid tickers "
+            f"(example: {', '.join(invalid)})."
+        )
+        snapshots = snapshots.loc[~invalid_mask].copy()
+        if snapshots.empty:
+            print(
+                "No valid tickers left after filtering. "
+                "Your reco_snapshots.csv is likely corrupted; consider regenerating via "
+                "`python3.11 verification/backfill_from_git.py` then re-run evaluate."
+            )
+            return 0
 
     horizons = [int(x.strip()) for x in str(args.horizons).split(",") if x.strip()]
     horizons = sorted({h for h in horizons if h >= 1})
