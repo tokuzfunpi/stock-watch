@@ -54,6 +54,13 @@ def summarize_outcomes(outcomes: pd.DataFrame) -> dict[str, pd.DataFrame]:
         empty = pd.DataFrame()
         return {"by_action": empty, "by_signal": empty}
 
+    if "watch_type" in df.columns:
+        df["watch_type"] = df["watch_type"].astype(str).str.strip().str.lower()
+        df = df[df["watch_type"].isin(["short", "midlong"])].copy()
+        if df.empty:
+            empty = pd.DataFrame()
+            return {"by_action": empty, "by_signal": empty}
+
     df["realized_ret_pct"] = pd.to_numeric(df["realized_ret_pct"], errors="coerce")
     df["horizon_days"] = pd.to_numeric(df["horizon_days"], errors="coerce").astype("Int64")
     df["win"] = df["realized_ret_pct"] > 0

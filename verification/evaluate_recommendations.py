@@ -180,6 +180,8 @@ def load_snapshots_csv(path: Path) -> pd.DataFrame:
 
 
 _VALID_TICKER_RE = re.compile(r"^[0-9A-Z^][0-9A-Z^.\-]*$", re.IGNORECASE)
+_VALID_DATE_RE = re.compile(r"^\\d{4}-\\d{2}-\\d{2}$")
+_VALID_WATCH_TYPES = {"short", "midlong"}
 
 
 def is_valid_snapshot_ticker(raw: str) -> bool:
@@ -191,6 +193,10 @@ def is_valid_snapshot_ticker(raw: str) -> bool:
     if t.isalpha() and len(t) >= 2:
         return True
     return False
+
+
+def is_valid_signal_date(raw: str) -> bool:
+    return bool(_VALID_DATE_RE.match(str(raw or "").strip()))
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -228,6 +234,34 @@ def main(argv: list[str] | None = None) -> int:
                 "`python3.11 verification/backfill_from_git.py` then re-run evaluate."
             )
             return 0
+
+    if "signal_date" in snapshots.columns:
+        snapshots["signal_date"] = snapshots["signal_date"].astype(str).str.strip()
+        invalid_date_mask = ~snapshots["signal_date"].map(is_valid_signal_date)
+        if invalid_date_mask.any():
+            invalid_dates = snapshots.loc[invalid_date_mask, "signal_date"].astype(str).head(10).tolist()
+            print(
+                f"WARNING: Dropping {int(invalid_date_mask.sum())} snapshot rows with invalid signal_date "
+                f"(example: {', '.join(invalid_dates)})."
+            )
+            snapshots = snapshots.loc[~invalid_date_mask].copy()
+            if snapshots.empty:
+                print("No valid snapshots left after signal_date filtering. Re-run verify/backfill.")
+                return 0
+
+    if "watch_type" in snapshots.columns:
+        snapshots["watch_type"] = snapshots["watch_type"].astype(str).str.strip().str.lower()
+        invalid_watch_mask = ~snapshots["watch_type"].isin(_VALID_WATCH_TYPES)
+        if invalid_watch_mask.any():
+            invalid_watch = snapshots.loc[invalid_watch_mask, "watch_type"].astype(str).head(10).tolist()
+            print(
+                f"WARNING: Dropping {int(invalid_watch_mask.sum())} snapshot rows with invalid watch_type "
+                f"(example: {', '.join(invalid_watch)})."
+            )
+            snapshots = snapshots.loc[~invalid_watch_mask].copy()
+            if snapshots.empty:
+                print("No valid snapshots left after watch_type filtering. Re-run verify/backfill.")
+                return 0
 
     horizons = [int(x.strip()) for x in str(args.horizons).split(",") if x.strip()]
     horizons = sorted({h for h in horizons if h >= 1})
