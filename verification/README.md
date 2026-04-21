@@ -47,6 +47,10 @@ python3.11 verification/verify_recommendations.py
 # 若要關掉 AI picks：
 python3.11 verification/verify_recommendations.py --no-ai-recommend
 #
+# 若遇到 429 Too Many Requests：
+# - 等幾分鐘再跑，或降低跑的頻率（本工具會把上次 AI 結果 cache 在 verification/watchlist_daily/ai_reco_cache.json）
+# - 或改用較小模型：--ai-model gpt-4.1-mini
+#
 # 若要指定模型/價格偏好（如果你看到 400 Bad Request，多半是 model 名稱不在你的 API 帳號可用範圍）：
 python3.11 verification/verify_recommendations.py --ai-model gpt-5.1
 python3.11 verification/verify_recommendations.py --ai-model gpt-5-mini

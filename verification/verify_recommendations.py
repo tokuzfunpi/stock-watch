@@ -4,9 +4,11 @@ import argparse
 import csv
 from dataclasses import dataclass
 from datetime import datetime
+import hashlib
 import json
 import os
 import sys
+import time
 from pathlib import Path
 
 import pandas as pd
@@ -52,6 +54,7 @@ OPENAI_FALLBACK_MODELS = [
 ]
 
 LOCAL_API_KEY_FILE = REPO_ROOT / "local_api_key"
+AI_RECO_CACHE_PATH = Path("verification") / "watchlist_daily" / "ai_reco_cache.json"
 
 
 def load_local_api_key(path: Path = LOCAL_API_KEY_FILE) -> str:
@@ -196,6 +199,48 @@ def _extract_json_object(text: str) -> dict:
             return {}
     return {}
 
+def _read_json_file(path: Path) -> dict:
+    try:
+        if not path.exists():
+            return {}
+        return json.loads(path.read_text(encoding="utf-8", errors="replace"))
+    except Exception:
+        return {}
+
+
+def _write_json_file(path: Path, obj: dict) -> None:
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(obj, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+    except Exception:
+        return
+
+
+def cache_key_for_context(ctx: dict) -> str:
+    raw = json.dumps(ctx, ensure_ascii=False, sort_keys=True)
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def load_ai_reco_cache(key: str, *, path: Path = AI_RECO_CACHE_PATH) -> dict | None:
+    data = _read_json_file(path)
+    if not data:
+        return None
+    if str(data.get("key", "")) != str(key):
+        return None
+    reco = data.get("reco")
+    return reco if isinstance(reco, dict) else None
+
+
+def save_ai_reco_cache(key: str, reco: dict, *, path: Path = AI_RECO_CACHE_PATH) -> None:
+    _write_json_file(
+        path,
+        {
+            "key": key,
+            "saved_at": datetime.now(LOCAL_TZ).strftime("%Y-%m-%d %H:%M:%S %Z"),
+            "reco": reco,
+        },
+    )
+
 
 def generate_ai_recommendations(
     context: dict,
@@ -205,6 +250,8 @@ def generate_ai_recommendations(
     base_url: str,
     api_key: str,
     timeout_seconds: int = 25,
+    retries: int = 2,
+    backoff_seconds: float = 2.0,
 ) -> dict:
     provider = (provider or "").strip().lower()
     model = (model or "").strip()
@@ -255,45 +302,63 @@ def generate_ai_recommendations(
         url = f"{base_url}/responses"
         headers = {"Authorization": f"Bearer {api_key}"}
         tried: list[str] = []
+        last_rate_limit: str | None = None
         for attempt_model in [model, *[m for m in OPENAI_FALLBACK_MODELS if m != model]]:
             tried.append(attempt_model)
-            payload = {
-                "model": attempt_model,
-                "input": [
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "input_text", "text": prompt},
-                            {"type": "input_text", "text": json.dumps(context, ensure_ascii=False)},
-                        ],
-                    }
-                ],
-                "temperature": 0.2,
-            }
-            r = requests.post(url, headers=headers, json=payload, timeout=timeout_seconds)
-            if r.status_code >= 400:
-                # If the model name is invalid/unavailable, try fallbacks. Otherwise, raise immediately.
-                try:
-                    err = r.json().get("error", {})
-                    code = str(err.get("code", "")).lower()
-                    msg = str(err.get("message", "")).lower()
-                except Exception:
-                    code, msg = "", ""
-                if r.status_code in {400, 404} and ("model" in msg or "model_not_found" in code or "invalid_model" in code):
-                    continue
-                r.raise_for_status()
+            for attempt in range(max(int(retries), 0) + 1):
+                payload = {
+                    "model": attempt_model,
+                    "input": [
+                        {
+                            "role": "user",
+                            "content": [
+                                {"type": "input_text", "text": prompt},
+                                {"type": "input_text", "text": json.dumps(context, ensure_ascii=False)},
+                            ],
+                        }
+                    ],
+                    "temperature": 0.2,
+                }
+                r = requests.post(url, headers=headers, json=payload, timeout=timeout_seconds)
 
-            data = r.json()
-            text = ""
-            for item in data.get("output", []) or []:
-                for c in item.get("content", []) or []:
-                    if c.get("type") == "output_text":
-                        text += str(c.get("text", ""))
-            text = text.strip() or str(data.get("text", "")).strip()
-            obj = _extract_json_object(text)
-            if obj:
-                obj["_meta"] = {"provider": "openai", "model": attempt_model, "tried": tried}
-            return obj
+                if r.status_code == 429:
+                    try:
+                        err = r.json().get("error", {})
+                        msg = str(err.get("message", "")).strip()
+                    except Exception:
+                        msg = r.text.strip()[:200]
+                    last_rate_limit = msg or "rate_limited"
+                    retry_after = r.headers.get("retry-after")
+                    sleep_s = float(retry_after) if retry_after and str(retry_after).strip().isdigit() else float(backoff_seconds) * (2**attempt)
+                    time.sleep(min(sleep_s, 30.0))
+                    continue
+
+                if r.status_code >= 400:
+                    # If the model name is invalid/unavailable, try fallbacks. Otherwise, raise immediately.
+                    try:
+                        err = r.json().get("error", {})
+                        code = str(err.get("code", "")).lower()
+                        msg = str(err.get("message", "")).lower()
+                    except Exception:
+                        code, msg = "", ""
+                    if r.status_code in {400, 404} and ("model" in msg or "model_not_found" in code or "invalid_model" in code):
+                        break
+                    r.raise_for_status()
+
+                data = r.json()
+                text = ""
+                for item in data.get("output", []) or []:
+                    for c in item.get("content", []) or []:
+                        if c.get("type") == "output_text":
+                            text += str(c.get("text", ""))
+                text = text.strip() or str(data.get("text", "")).strip()
+                obj = _extract_json_object(text)
+                if obj:
+                    obj["_meta"] = {"provider": "openai", "model": attempt_model, "tried": tried}
+                return obj
+
+        if last_rate_limit:
+            raise RuntimeError(f"Rate limited (429): {last_rate_limit}")
 
         raise RuntimeError(f"OpenAI request failed for models: {', '.join(tried)}")
 
@@ -655,6 +720,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--ai-model", default="gpt-5.4", help="Model name for provider.")
     parser.add_argument("--ai-base-url", default="", help="Override base URL (e.g. https://api.openai.com/v1 or http://localhost:11434).")
     parser.add_argument("--ai-api-key", default="", help="OpenAI API key (defaults to OPENAI_API_KEY env var).")
+    parser.add_argument("--ai-refresh", action="store_true", help="Ignore local AI cache and call provider again.")
+    parser.add_argument("--ai-retries", type=int, default=2, help="Retries on rate limit (429).")
+    parser.add_argument("--ai-backoff-seconds", type=float, default=2.0, help="Base backoff seconds on 429.")
     parser.add_argument("--no-snapshot", action="store_true", help="Do not append recommendation snapshots to CSV.")
     return parser.parse_args(argv)
 
@@ -726,6 +794,16 @@ def main(argv: list[str] | None = None) -> int:
             "midlong_pool_top": midlong_pool[[c for c in keep_cols if c in midlong_pool.columns]].head(40).to_dict(orient="records") if not midlong_pool.empty else [],
         }
         try:
+            key = cache_key_for_context(ctx)
+            if not args.ai_refresh:
+                cached = load_ai_reco_cache(key)
+                if isinstance(cached, dict) and cached:
+                    ai_reco = cached
+                else:
+                    cached = None
+            else:
+                cached = None
+
             # Avoid polluting the report with an "AI unavailable" section when the user hasn't configured a key.
             if str(args.ai_provider).strip().lower() == "openai":
                 api_key = (
@@ -740,16 +818,24 @@ def main(argv: list[str] | None = None) -> int:
 
             if str(args.ai_provider).strip().lower() == "openai" and not api_key:
                 ai_reco = None
-            else:
+            elif ai_reco is None:
                 ai_reco = generate_ai_recommendations(
                     ctx,
                     provider=str(args.ai_provider),
                     model=str(args.ai_model),
                     base_url=str(args.ai_base_url),
                     api_key=api_key,
+                    retries=int(args.ai_retries),
+                    backoff_seconds=float(args.ai_backoff_seconds),
                 )
+                if isinstance(ai_reco, dict) and ai_reco:
+                    save_ai_reco_cache(key, ai_reco)
         except Exception as exc:
-            ai_reco = {"short": [{"ticker": "", "reason": f"AI picks unavailable: {exc}"}], "midlong": []}
+            ai_reco = {
+                "_meta": {"provider": str(args.ai_provider), "model": str(args.ai_model)},
+                "short": [{"ticker": "", "reason": f"AI picks unavailable: {exc}"}],
+                "midlong": [],
+            }
 
     report = build_verification_report_markdown(
         df_rank,
