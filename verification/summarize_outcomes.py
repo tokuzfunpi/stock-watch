@@ -52,6 +52,7 @@ def summarize_outcomes(outcomes: pd.DataFrame) -> dict[str, pd.DataFrame]:
             "overall_by_signal": empty,
             "overall_by_signal_status": empty,
             "overall_by_action_status": empty,
+            "delta_ok_minus_below": empty,
         }
 
     df = outcomes.copy()
@@ -66,6 +67,7 @@ def summarize_outcomes(outcomes: pd.DataFrame) -> dict[str, pd.DataFrame]:
             "overall_by_signal": empty,
             "overall_by_signal_status": empty,
             "overall_by_action_status": empty,
+            "delta_ok_minus_below": empty,
         }
 
     if "watch_type" in df.columns:
@@ -80,6 +82,7 @@ def summarize_outcomes(outcomes: pd.DataFrame) -> dict[str, pd.DataFrame]:
                 "overall_by_signal": empty,
                 "overall_by_signal_status": empty,
                 "overall_by_action_status": empty,
+                "delta_ok_minus_below": empty,
             }
 
     # Split analysis: ok vs below_threshold (forced-fill).
@@ -190,6 +193,35 @@ def summarize_outcomes(outcomes: pd.DataFrame) -> dict[str, pd.DataFrame]:
     for c in ["avg_ret", "med_ret", "min_ret", "max_ret"]:
         overall_by_action_status[c] = overall_by_action_status[c].round(2)
 
+    delta_ok_minus_below = pd.DataFrame()
+    try:
+        delta_base = overall_by_signal_status.copy()
+        delta_base = delta_base[delta_base["reco_status"].isin(["ok", "below_threshold"])].copy()
+        if not delta_base.empty:
+            ok = delta_base[delta_base["reco_status"] == "ok"].copy()
+            below = delta_base[delta_base["reco_status"] == "below_threshold"].copy()
+            merge_cols = ["horizon_days", "watch_type"]
+            merged = ok.merge(
+                below,
+                on=merge_cols,
+                how="inner",
+                suffixes=("_ok", "_below"),
+            )
+            if not merged.empty:
+                delta_ok_minus_below = pd.DataFrame(
+                    {
+                        "horizon_days": merged["horizon_days"],
+                        "watch_type": merged["watch_type"],
+                        "ok_n": merged["n_ok"],
+                        "below_n": merged["n_below"],
+                        "delta_win_rate": (pd.to_numeric(merged["win_rate_ok"], errors="coerce") - pd.to_numeric(merged["win_rate_below"], errors="coerce")).round(1),
+                        "delta_avg_ret": (pd.to_numeric(merged["avg_ret_ok"], errors="coerce") - pd.to_numeric(merged["avg_ret_below"], errors="coerce")).round(2),
+                        "delta_med_ret": (pd.to_numeric(merged["med_ret_ok"], errors="coerce") - pd.to_numeric(merged["med_ret_below"], errors="coerce")).round(2),
+                    }
+                ).sort_values(by=["horizon_days", "watch_type"])
+    except Exception:
+        delta_ok_minus_below = pd.DataFrame()
+
     return {
         "by_action": by_action,
         "by_signal": by_signal,
@@ -197,6 +229,7 @@ def summarize_outcomes(outcomes: pd.DataFrame) -> dict[str, pd.DataFrame]:
         "overall_by_signal": overall_by_signal,
         "overall_by_signal_status": overall_by_signal_status,
         "overall_by_action_status": overall_by_action_status,
+        "delta_ok_minus_below": delta_ok_minus_below,
     }
 
 
@@ -250,6 +283,8 @@ def build_summary_markdown(outcomes: pd.DataFrame, source: str, now_local: datet
     lines.extend(["## Overall By Signal (all dates)", _table_markdown(parts["overall_by_signal"]).rstrip(), ""])
     if not parts["overall_by_signal_status"].empty:
         lines.extend(["## Overall By Signal + reco_status (all dates)", _table_markdown(parts["overall_by_signal_status"]).rstrip(), ""])
+    if not parts["delta_ok_minus_below"].empty:
+        lines.extend(["## Delta (ok - below_threshold) By Signal (all dates)", _table_markdown(parts["delta_ok_minus_below"]).rstrip(), ""])
     lines.extend(["## Overall By Action (all dates, top 80)", _table_markdown(parts["overall_by_action"].head(80)).rstrip(), ""])
     if not parts["overall_by_action_status"].empty:
         lines.extend(["## Overall By Action + reco_status (all dates, top 80)", _table_markdown(parts["overall_by_action_status"].head(80)).rstrip(), ""])

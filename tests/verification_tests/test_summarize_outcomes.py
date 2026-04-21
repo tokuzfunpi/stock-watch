@@ -17,6 +17,7 @@ class SummarizeOutcomesTests(unittest.TestCase):
                     "signal_date": "2026-04-17",
                     "horizon_days": 1,
                     "watch_type": "short",
+                    "reco_status": "ok",
                     "action": "等拉回",
                     "realized_ret_pct": 1.2,
                     "status": "ok",
@@ -25,6 +26,7 @@ class SummarizeOutcomesTests(unittest.TestCase):
                     "signal_date": "2026-04-17",
                     "horizon_days": 1,
                     "watch_type": "short",
+                    "reco_status": "below_threshold",
                     "action": "等拉回",
                     "realized_ret_pct": -0.5,
                     "status": "no_price_series",
@@ -33,6 +35,34 @@ class SummarizeOutcomesTests(unittest.TestCase):
         )
         parts = summarize_outcomes(df)
         self.assertEqual(int(parts["by_action"].iloc[0]["n"]), 1)
+
+    def test_delta_ok_minus_below_is_computed(self) -> None:
+        df = pd.DataFrame(
+            [
+                {
+                    "signal_date": "2026-04-17",
+                    "horizon_days": 1,
+                    "watch_type": "short",
+                    "reco_status": "ok",
+                    "action": "等拉回",
+                    "realized_ret_pct": 1.0,
+                    "status": "ok",
+                },
+                {
+                    "signal_date": "2026-04-17",
+                    "horizon_days": 1,
+                    "watch_type": "short",
+                    "reco_status": "below_threshold",
+                    "action": "等拉回",
+                    "realized_ret_pct": 0.0,
+                    "status": "ok",
+                },
+            ]
+        )
+        parts = summarize_outcomes(df)
+        delta = parts["delta_ok_minus_below"]
+        self.assertFalse(delta.empty)
+        self.assertIn("delta_avg_ret", delta.columns)
 
     def test_build_summary_markdown_renders_sections(self) -> None:
         df = pd.DataFrame(
