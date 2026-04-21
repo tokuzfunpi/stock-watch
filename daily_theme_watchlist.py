@@ -1262,7 +1262,10 @@ def short_term_action_label(row: pd.Series) -> str:
         return "開高不追"
     if is_strict_short_chase(row):
         return "可追"
-    if ret5 >= 10:
+    # 非嚴格可追的加速型，預設以「等拉回」處理（收斂追價、偏 5D/20D 延續）
+    if ("ACCEL" in signals and "TREND" in signals) and risk <= 3 and vol_ratio >= 1.0 and float(row.get("ret20_pct", 0.0) or 0.0) >= 0 and ret5 >= 4:
+        return "等拉回"
+    if ret5 >= 8:
         return "等拉回"
     if row["setup_change"] > 0 or row["rank_change"] > 0:
         return "續抱觀察"
@@ -1288,15 +1291,19 @@ def is_strict_short_chase(row: pd.Series) -> bool:
         return False
     if risk > 2:
         return False
-    if vol_ratio < 1.4:
+    # "可追" 盡量偏向 5D/20D 的延續，而不是 1D 的追價衝動：
+    # - 需要更強的量能確認
+    # - ret20 要夠大（代表中期趨勢有料）
+    # - ret5 不要過熱（避免隔日回檔造成 1D 表現差）
+    if vol_ratio < 1.6:
         return False
     if ret5 < 0.5:
         return False
-    if ret5 > 10:
+    if ret5 > 8:
         return False
-    if ret20 < 5:
+    if ret20 < 10:
         return False
-    if setup_score < 7:
+    if setup_score < 9:
         return False
     return True
 
