@@ -45,6 +45,27 @@ DEFAULT_IMPROVEMENT_NOTES = [
     "- 若短/中線重疊過多，可考慮讓短線池排除 `midlong_core` 或在推播層做去重。",
 ]
 
+LOCAL_API_KEY_FILE = REPO_ROOT / "local_api_key"
+
+
+def load_local_api_key(path: Path = LOCAL_API_KEY_FILE) -> str:
+    if not path.exists():
+        return ""
+    try:
+        raw = path.read_text(encoding="utf-8", errors="replace")
+    except Exception:
+        return ""
+    for line in raw.splitlines():
+        s = line.strip()
+        if not s or s.startswith("#"):
+            continue
+        if "=" in s:
+            s = s.split("=", 1)[1].strip()
+        if (s.startswith('"') and s.endswith('"')) or (s.startswith("'") and s.endswith("'")):
+            s = s[1:-1].strip()
+        return s
+    return ""
+
 
 def select_forced_recommendations(
     df_rank: pd.DataFrame,
@@ -191,7 +212,9 @@ def generate_ai_improvement_notes(
         text = str(r.json().get("response", "")).strip()
     elif provider == "openai":
         if not api_key:
-            raise ValueError("openai requires OPENAI_API_KEY or --ai-api-key")
+            api_key = load_local_api_key()
+        if not api_key:
+            raise ValueError("openai requires OPENAI_API_KEY, --ai-api-key, or ./local_api_key")
         if not model:
             raise ValueError("openai requires --ai-model")
         if not base_url:

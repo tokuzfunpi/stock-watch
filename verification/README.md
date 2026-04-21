@@ -35,6 +35,8 @@ python3.11 verification/verify_recommendations.py --top-n-short 5 --top-n-midlon
 # （選用）加上 AI 改進建議（best effort；失敗會退回固定 heuristics）
 # OpenAI
 OPENAI_API_KEY=... python3.11 verification/verify_recommendations.py --ai-advice --ai-provider openai --ai-model <your-model>
+# 或把 key 放在 repo root 的 `local_api_key`（已在 `.gitignore`，避免誤推到 GitHub）
+python3.11 verification/verify_recommendations.py --ai-advice --ai-provider openai --ai-model <your-model>
 # Ollama（本機）
 python3.11 verification/verify_recommendations.py --ai-advice --ai-provider ollama --ai-model <your-model>
 
