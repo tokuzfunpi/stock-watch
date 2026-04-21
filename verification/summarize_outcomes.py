@@ -42,6 +42,14 @@ def _table_markdown(df: pd.DataFrame) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _confidence_label(min_n: int) -> str:
+    if min_n >= 10:
+        return "high"
+    if min_n >= 5:
+        return "medium"
+    return "low"
+
+
 def summarize_outcomes(outcomes: pd.DataFrame) -> dict[str, pd.DataFrame]:
     if outcomes.empty:
         empty = pd.DataFrame()
@@ -53,6 +61,7 @@ def summarize_outcomes(outcomes: pd.DataFrame) -> dict[str, pd.DataFrame]:
             "overall_by_signal_status": empty,
             "overall_by_action_status": empty,
             "delta_ok_minus_below": empty,
+            "delta_ok_minus_below_by_date": empty,
         }
 
     df = outcomes.copy()
@@ -68,6 +77,7 @@ def summarize_outcomes(outcomes: pd.DataFrame) -> dict[str, pd.DataFrame]:
             "overall_by_signal_status": empty,
             "overall_by_action_status": empty,
             "delta_ok_minus_below": empty,
+            "delta_ok_minus_below_by_date": empty,
         }
 
     if "watch_type" in df.columns:
@@ -83,6 +93,7 @@ def summarize_outcomes(outcomes: pd.DataFrame) -> dict[str, pd.DataFrame]:
                 "overall_by_signal_status": empty,
                 "overall_by_action_status": empty,
                 "delta_ok_minus_below": empty,
+                "delta_ok_minus_below_by_date": empty,
             }
 
     # Split analysis: ok vs below_threshold (forced-fill).
@@ -194,6 +205,7 @@ def summarize_outcomes(outcomes: pd.DataFrame) -> dict[str, pd.DataFrame]:
         overall_by_action_status[c] = overall_by_action_status[c].round(2)
 
     delta_ok_minus_below = pd.DataFrame()
+    delta_ok_minus_below_by_date = pd.DataFrame()
     try:
         delta_base = overall_by_signal_status.copy()
         delta_base = delta_base[delta_base["reco_status"].isin(["ok", "below_threshold"])].copy()
@@ -208,19 +220,59 @@ def summarize_outcomes(outcomes: pd.DataFrame) -> dict[str, pd.DataFrame]:
                 suffixes=("_ok", "_below"),
             )
             if not merged.empty:
+                min_n = pd.concat([pd.to_numeric(merged["n_ok"], errors="coerce"), pd.to_numeric(merged["n_below"], errors="coerce")], axis=1).min(axis=1)
                 delta_ok_minus_below = pd.DataFrame(
                     {
                         "horizon_days": merged["horizon_days"],
                         "watch_type": merged["watch_type"],
                         "ok_n": merged["n_ok"],
                         "below_n": merged["n_below"],
+                        "min_n": min_n.astype("Int64"),
+                        "confidence": [ _confidence_label(int(x)) if pd.notna(x) else "low" for x in min_n.tolist() ],
                         "delta_win_rate": (pd.to_numeric(merged["win_rate_ok"], errors="coerce") - pd.to_numeric(merged["win_rate_below"], errors="coerce")).round(1),
                         "delta_avg_ret": (pd.to_numeric(merged["avg_ret_ok"], errors="coerce") - pd.to_numeric(merged["avg_ret_below"], errors="coerce")).round(2),
                         "delta_med_ret": (pd.to_numeric(merged["med_ret_ok"], errors="coerce") - pd.to_numeric(merged["med_ret_below"], errors="coerce")).round(2),
                     }
                 ).sort_values(by=["horizon_days", "watch_type"])
+
+        # By date: find which days forced-fill is helping/hurting.
+        date_base = by_signal.copy()
+        if not date_base.empty and "reco_status" in df.columns:
+            # rebuild by-signal with reco_status using raw df (not the aggregated by_signal which lacks reco_status)
+            tmp = df.groupby(["signal_date", "horizon_days", "watch_type", "reco_status"], dropna=False).agg(
+                n=("realized_ret_pct", "count"),
+                win_rate=("win", "mean"),
+                avg_ret=("realized_ret_pct", "mean"),
+                med_ret=("realized_ret_pct", "median"),
+            ).reset_index()
+            tmp["win_rate"] = (tmp["win_rate"] * 100).round(1)
+            for c in ["avg_ret", "med_ret"]:
+                tmp[c] = tmp[c].round(2)
+
+            tmp = tmp[tmp["reco_status"].isin(["ok", "below_threshold"])].copy()
+            okd = tmp[tmp["reco_status"] == "ok"].copy()
+            bd = tmp[tmp["reco_status"] == "below_threshold"].copy()
+            mcols = ["signal_date", "horizon_days", "watch_type"]
+            m = okd.merge(bd, on=mcols, how="inner", suffixes=("_ok", "_below"))
+            if not m.empty:
+                min_n2 = pd.concat([pd.to_numeric(m["n_ok"], errors="coerce"), pd.to_numeric(m["n_below"], errors="coerce")], axis=1).min(axis=1)
+                delta_ok_minus_below_by_date = pd.DataFrame(
+                    {
+                        "signal_date": m["signal_date"],
+                        "horizon_days": m["horizon_days"],
+                        "watch_type": m["watch_type"],
+                        "ok_n": m["n_ok"],
+                        "below_n": m["n_below"],
+                        "min_n": min_n2.astype("Int64"),
+                        "confidence": [ _confidence_label(int(x)) if pd.notna(x) else "low" for x in min_n2.tolist() ],
+                        "delta_win_rate": (pd.to_numeric(m["win_rate_ok"], errors="coerce") - pd.to_numeric(m["win_rate_below"], errors="coerce")).round(1),
+                        "delta_avg_ret": (pd.to_numeric(m["avg_ret_ok"], errors="coerce") - pd.to_numeric(m["avg_ret_below"], errors="coerce")).round(2),
+                        "delta_med_ret": (pd.to_numeric(m["med_ret_ok"], errors="coerce") - pd.to_numeric(m["med_ret_below"], errors="coerce")).round(2),
+                    }
+                ).sort_values(by=["signal_date", "horizon_days", "watch_type"], ascending=[False, True, True])
     except Exception:
         delta_ok_minus_below = pd.DataFrame()
+        delta_ok_minus_below_by_date = pd.DataFrame()
 
     return {
         "by_action": by_action,
@@ -230,6 +282,7 @@ def summarize_outcomes(outcomes: pd.DataFrame) -> dict[str, pd.DataFrame]:
         "overall_by_signal_status": overall_by_signal_status,
         "overall_by_action_status": overall_by_action_status,
         "delta_ok_minus_below": delta_ok_minus_below,
+        "delta_ok_minus_below_by_date": delta_ok_minus_below_by_date,
     }
 
 
@@ -254,6 +307,15 @@ def build_summary_markdown(outcomes: pd.DataFrame, source: str, now_local: datet
             "## Coverage",
             f"- Total rows: {len(outcomes)}",
             f"- OK rows: {len(ok)}",
+            "",
+        ]
+    )
+
+    lines.extend(
+        [
+            "## Notes",
+            "- `pending`（insufficient_forward_data）代表還沒走滿 horizon 的交易日數，之後重跑 evaluate 會自動轉成 ok。",
+            "- `below_threshold` 是為了固定補滿 5 檔而納入的樣本；請優先看 `min_n/confidence`，避免小樣本誤判。",
             "",
         ]
     )
@@ -285,6 +347,8 @@ def build_summary_markdown(outcomes: pd.DataFrame, source: str, now_local: datet
         lines.extend(["## Overall By Signal + reco_status (all dates)", _table_markdown(parts["overall_by_signal_status"]).rstrip(), ""])
     if not parts["delta_ok_minus_below"].empty:
         lines.extend(["## Delta (ok - below_threshold) By Signal (all dates)", _table_markdown(parts["delta_ok_minus_below"]).rstrip(), ""])
+    if not parts["delta_ok_minus_below_by_date"].empty:
+        lines.extend(["## Delta (ok - below_threshold) By Signal Date (top 30)", _table_markdown(parts["delta_ok_minus_below_by_date"].head(30)).rstrip(), ""])
     lines.extend(["## Overall By Action (all dates, top 80)", _table_markdown(parts["overall_by_action"].head(80)).rstrip(), ""])
     if not parts["overall_by_action_status"].empty:
         lines.extend(["## Overall By Action + reco_status (all dates, top 80)", _table_markdown(parts["overall_by_action_status"].head(80)).rstrip(), ""])

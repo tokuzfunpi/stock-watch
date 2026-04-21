@@ -63,6 +63,8 @@ class SummarizeOutcomesTests(unittest.TestCase):
         delta = parts["delta_ok_minus_below"]
         self.assertFalse(delta.empty)
         self.assertIn("delta_avg_ret", delta.columns)
+        self.assertIn("confidence", delta.columns)
+        self.assertIn("min_n", delta.columns)
 
     def test_build_summary_markdown_renders_sections(self) -> None:
         df = pd.DataFrame(
@@ -81,6 +83,7 @@ class SummarizeOutcomesTests(unittest.TestCase):
         md = build_summary_markdown(df, source="verification/watchlist_daily/reco_outcomes.csv", now_local=datetime(2026, 4, 21, 8, 50, tzinfo=LOCAL_TZ))
         self.assertIn("# Recommendation Outcomes Summary", md)
         self.assertIn("## Coverage", md)
+        self.assertIn("## Notes", md)
         self.assertIn("## Overall By Action", md)
         self.assertIn("reco_status", md)
         self.assertIn("## By Action", md)
