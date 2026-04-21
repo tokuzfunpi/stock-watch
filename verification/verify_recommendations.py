@@ -599,10 +599,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--top-n-short", type=int, default=5, help="Force this many short recommendations into snapshot/report.")
     parser.add_argument("--top-n-midlong", type=int, default=5, help="Force this many midlong recommendations into snapshot/report.")
     parser.add_argument("--ai-advice", action="store_true", help="Add AI-generated improvement notes (best effort).")
-    parser.add_argument("--ai-recommend", action="store_true", help="Add AI-generated short/midlong picks (research only).")
+    parser.add_argument("--ai-recommend", action="store_true", default=True, help="Add AI-generated short/midlong picks (research only).")
+    parser.add_argument("--no-ai-recommend", action="store_true", help="Disable AI picks section.")
     parser.add_argument("--ai-price-max", type=float, default=200.0, help="Preference constraint for AI picks (close<=this).")
     parser.add_argument("--ai-provider", default="openai", help="openai|ollama")
-    parser.add_argument("--ai-model", default="", help="Model name for provider (required when --ai-advice).")
+    parser.add_argument("--ai-model", default="gpt-5.4", help="Model name for provider.")
     parser.add_argument("--ai-base-url", default="", help="Override base URL (e.g. https://api.openai.com/v1 or http://localhost:11434).")
     parser.add_argument("--ai-api-key", default="", help="OpenAI API key (defaults to OPENAI_API_KEY env var).")
     parser.add_argument("--no-snapshot", action="store_true", help="Do not append recommendation snapshots to CSV.")
@@ -651,7 +652,7 @@ def main(argv: list[str] | None = None) -> int:
             improvement_notes = list(DEFAULT_IMPROVEMENT_NOTES)
             improvement_notes.insert(0, f"- （AI 建議暫不可用：{exc}）")
 
-    if args.ai_recommend:
+    if bool(args.ai_recommend) and not bool(args.no_ai_recommend):
         short_pool = rank_short_term_pool(df_rank)
         midlong_pool = rank_midlong_pool(df_rank)
         keep_cols = [
@@ -676,13 +677,28 @@ def main(argv: list[str] | None = None) -> int:
             "midlong_pool_top": midlong_pool[[c for c in keep_cols if c in midlong_pool.columns]].head(40).to_dict(orient="records") if not midlong_pool.empty else [],
         }
         try:
-            ai_reco = generate_ai_recommendations(
-                ctx,
-                provider=str(args.ai_provider),
-                model=str(args.ai_model),
-                base_url=str(args.ai_base_url),
-                api_key=str(args.ai_api_key).strip() or os.getenv("OPENAI_API_KEY", "").strip(),
-            )
+            # Avoid polluting the report with an "AI unavailable" section when the user hasn't configured a key.
+            if str(args.ai_provider).strip().lower() == "openai":
+                api_key = (
+                    str(args.ai_api_key).strip()
+                    or os.getenv("OPENAI_API_KEY", "").strip()
+                    or load_local_api_key()
+                )
+                if not api_key:
+                    api_key = ""
+            else:
+                api_key = str(args.ai_api_key).strip() or os.getenv("OPENAI_API_KEY", "").strip()
+
+            if str(args.ai_provider).strip().lower() == "openai" and not api_key:
+                ai_reco = None
+            else:
+                ai_reco = generate_ai_recommendations(
+                    ctx,
+                    provider=str(args.ai_provider),
+                    model=str(args.ai_model),
+                    base_url=str(args.ai_base_url),
+                    api_key=api_key,
+                )
         except Exception as exc:
             ai_reco = {"short": [{"ticker": "", "reason": f"AI picks unavailable: {exc}"}], "midlong": []}
 

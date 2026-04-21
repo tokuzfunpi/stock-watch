@@ -41,7 +41,14 @@ python3.11 verification/verify_recommendations.py --ai-advice --ai-provider open
 python3.11 verification/verify_recommendations.py --ai-advice --ai-provider ollama --ai-model <your-model>
 
 # （選用）直接讓 AI 給 short/midlong 各 5 檔「追蹤/研究名單」（research only，不是買賣建議）
-python3.11 verification/verify_recommendations.py --ai-recommend --ai-provider openai --ai-model <your-model> --ai-price-max 200
+# 預設已開啟（provider=openai, model=gpt-5.4, ai-price-max=200），所以通常只要：
+python3.11 verification/verify_recommendations.py
+#
+# 若要關掉 AI picks：
+python3.11 verification/verify_recommendations.py --no-ai-recommend
+#
+# 若要指定模型/價格偏好：
+python3.11 verification/verify_recommendations.py --ai-model <your-model> --ai-price-max 200
 
 # 2) 收盤後回填 outcomes（horizons 預設 1,5,20）
 python3.11 verification/evaluate_recommendations.py --horizons 1,5,20
