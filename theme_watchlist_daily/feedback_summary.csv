@@ -1,9 +1,9 @@
 ﻿watch_type,action_label,samples,win_rate_pct,avg_return_pct,feedback_score,feedback_label
-short,__all__,38,73.68,2.04,2.78,近期有效
-short,nan,30,66.67,1.75,2.02,近期有效
+short,__all__,40,77.5,5.47,3.84,近期有效
+short,nan,30,70.0,6.32,3.26,近期有效
 short,可追,3,100.0,2.99,2.1,近期有效
-short,等拉回,5,100.0,3.23,3.53,近期有效
-midlong,__all__,43,62.79,1.7,1.62,近期有效
-midlong,nan,33,66.67,1.67,2.0,近期有效
-midlong,可分批,6,33.33,1.84,-0.97,中性
-midlong,續抱,4,75.0,1.81,1.43,近期有效
+short,等拉回,7,100.0,2.87,4.88,近期有效
+midlong,__all__,50,68.0,4.67,2.73,近期有效
+midlong,nan,33,69.7,6.08,3.19,近期有效
+midlong,可分批,11,54.55,2.15,0.88,中性
+midlong,續抱,6,83.33,1.53,2.73,近期有效
