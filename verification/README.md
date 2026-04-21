@@ -40,6 +40,9 @@ python3.11 verification/verify_recommendations.py --ai-advice --ai-provider open
 # Ollama（本機）
 python3.11 verification/verify_recommendations.py --ai-advice --ai-provider ollama --ai-model <your-model>
 
+# （選用）直接讓 AI 給 short/midlong 各 5 檔「追蹤/研究名單」（research only，不是買賣建議）
+python3.11 verification/verify_recommendations.py --ai-recommend --ai-provider openai --ai-model <your-model> --ai-price-max 200
+
 # 2) 收盤後回填 outcomes（horizons 預設 1,5,20）
 python3.11 verification/evaluate_recommendations.py --horizons 1,5,20
 

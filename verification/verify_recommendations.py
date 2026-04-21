@@ -173,6 +173,108 @@ def _load_outcomes_aggregate(outcomes_csv: Path) -> dict:
     return {"overall_by_signal": overall.to_dict(orient="records")}
 
 
+def _extract_json_object(text: str) -> dict:
+    s = str(text or "").strip()
+    if not s:
+        return {}
+    try:
+        return json.loads(s)
+    except Exception:
+        pass
+    start = s.find("{")
+    end = s.rfind("}")
+    if start >= 0 and end > start:
+        try:
+            return json.loads(s[start : end + 1])
+        except Exception:
+            return {}
+    return {}
+
+
+def generate_ai_recommendations(
+    context: dict,
+    *,
+    provider: str,
+    model: str,
+    base_url: str,
+    api_key: str,
+    timeout_seconds: int = 25,
+) -> dict:
+    provider = (provider or "").strip().lower()
+    model = (model or "").strip()
+    base_url = (base_url or "").strip().rstrip("/")
+
+    prompt = (
+        "你是台股 watchlist 的研究助手（不是投資顧問）。請只根據提供的 JSON（daily_rank pool 摘要），"
+        "給出短線(short)與中線(midlong)各 5 檔『值得進一步研究/追蹤』的標的。\n"
+        "要求：\n"
+        "- 以 `close<=price_max` 優先（若不足才用較高價格補齊，並在 reason 說明）。\n"
+        "- short 偏向 5D 動能/量價；midlong 偏向 20D 趨勢/可分批。\n"
+        "- 請避免選到 signals 完全為 NONE 且 setup_score 低的。\n"
+        "- 輸出必須是 JSON，格式：\n"
+        "{\n"
+        '  "short": [{"ticker": "...", "reason": "..."}],\n'
+        '  "midlong": [{"ticker": "...", "reason": "..."}]\n'
+        "}\n"
+        "不要輸出任何多餘文字。"
+    )
+
+    if provider == "ollama":
+        if not model:
+            raise ValueError("ollama requires --ai-model")
+        if not base_url:
+            base_url = os.getenv("OLLAMA_HOST", "").strip().rstrip("/") or "http://localhost:11434"
+        url = f"{base_url}/api/generate"
+        payload = {
+            "model": model,
+            "prompt": prompt + "\n\nJSON:\n" + json.dumps(context, ensure_ascii=False),
+            "stream": False,
+            "options": {"temperature": 0.2},
+        }
+        r = requests.post(url, json=payload, timeout=timeout_seconds)
+        r.raise_for_status()
+        text = str(r.json().get("response", "")).strip()
+        return _extract_json_object(text)
+
+    if provider == "openai":
+        if not api_key:
+            api_key = load_local_api_key()
+        if not api_key:
+            raise ValueError("openai requires OPENAI_API_KEY, --ai-api-key, or ./local_api_key")
+        if not model:
+            raise ValueError("openai requires --ai-model")
+        if not base_url:
+            base_url = os.getenv("OPENAI_BASE_URL", "").strip().rstrip("/") or "https://api.openai.com/v1"
+
+        url = f"{base_url}/responses"
+        headers = {"Authorization": f"Bearer {api_key}"}
+        payload = {
+            "model": model,
+            "input": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": prompt},
+                        {"type": "text", "text": json.dumps(context, ensure_ascii=False)},
+                    ],
+                }
+            ],
+            "temperature": 0.2,
+        }
+        r = requests.post(url, headers=headers, json=payload, timeout=timeout_seconds)
+        r.raise_for_status()
+        data = r.json()
+        text = ""
+        for item in data.get("output", []) or []:
+            for c in item.get("content", []) or []:
+                if c.get("type") == "output_text":
+                    text += str(c.get("text", ""))
+        text = text.strip() or str(data.get("text", "")).strip()
+        return _extract_json_object(text)
+
+    raise ValueError("Unknown provider; use --ai-provider openai|ollama")
+
+
 def generate_ai_improvement_notes(
     context: dict,
     *,
@@ -310,6 +412,7 @@ def build_verification_report_markdown(
     top_n_short: int = 5,
     top_n_midlong: int = 5,
     improvement_notes: list[str] | None = None,
+    ai_reco: dict | None = None,
 ) -> str:
     now_local = now_local or datetime.now(LOCAL_TZ)
     heuristics = heuristics or VerificationHeuristics()
@@ -456,6 +559,32 @@ def build_verification_report_markdown(
             "",
         ]
     )
+
+    if ai_reco:
+        def _coerce_reco_df(items: list[dict]) -> pd.DataFrame:
+            if not items:
+                return pd.DataFrame()
+            df = pd.DataFrame(items)
+            if "ticker" in df.columns:
+                df["ticker"] = df["ticker"].astype(str)
+            return df
+
+        short_ai = _coerce_reco_df(list(ai_reco.get("short") or []))
+        midlong_ai = _coerce_reco_df(list(ai_reco.get("midlong") or []))
+        lines.extend(
+            [
+                "## AI Picks (research only)",
+                "- 這一段是 AI 根據 daily_rank 摘要給的『追蹤/研究』名單，不是買賣建議。",
+                "",
+                "### AI Short (5)",
+                _format_table(short_ai, ["ticker", "reason"]).rstrip(),
+                "",
+                "### AI Midlong (5)",
+                _format_table(midlong_ai, ["ticker", "reason"]).rstrip(),
+                "",
+            ]
+        )
+
     lines.extend(_render_notes_section("## Improvement Notes (heuristic)", improvement_notes))
     lines.append("")
     return "\n".join(lines).strip() + "\n"
@@ -470,6 +599,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--top-n-short", type=int, default=5, help="Force this many short recommendations into snapshot/report.")
     parser.add_argument("--top-n-midlong", type=int, default=5, help="Force this many midlong recommendations into snapshot/report.")
     parser.add_argument("--ai-advice", action="store_true", help="Add AI-generated improvement notes (best effort).")
+    parser.add_argument("--ai-recommend", action="store_true", help="Add AI-generated short/midlong picks (research only).")
+    parser.add_argument("--ai-price-max", type=float, default=200.0, help="Preference constraint for AI picks (close<=this).")
     parser.add_argument("--ai-provider", default="openai", help="openai|ollama")
     parser.add_argument("--ai-model", default="", help="Model name for provider (required when --ai-advice).")
     parser.add_argument("--ai-base-url", default="", help="Override base URL (e.g. https://api.openai.com/v1 or http://localhost:11434).")
@@ -498,6 +629,7 @@ def main(argv: list[str] | None = None) -> int:
     now_local = datetime.now(LOCAL_TZ)
 
     improvement_notes: list[str] | None = None
+    ai_reco: dict | None = None
     if args.ai_advice:
         outcomes_csv = (Path("verification") / "watchlist_daily" / "reco_outcomes.csv")
         ctx = {
@@ -519,6 +651,41 @@ def main(argv: list[str] | None = None) -> int:
             improvement_notes = list(DEFAULT_IMPROVEMENT_NOTES)
             improvement_notes.insert(0, f"- （AI 建議暫不可用：{exc}）")
 
+    if args.ai_recommend:
+        short_pool = rank_short_term_pool(df_rank)
+        midlong_pool = rank_midlong_pool(df_rank)
+        keep_cols = [
+            "rank",
+            "ticker",
+            "name",
+            "grade",
+            "setup_score",
+            "risk_score",
+            "ret5_pct",
+            "ret20_pct",
+            "volume_ratio20",
+            "signals",
+            "close",
+            "layer",
+            "group",
+        ]
+        ctx = {
+            "asof_date": _maybe_date_from_rank(df_rank),
+            "price_max": float(args.ai_price_max),
+            "short_pool_top": short_pool[[c for c in keep_cols if c in short_pool.columns]].head(40).to_dict(orient="records") if not short_pool.empty else [],
+            "midlong_pool_top": midlong_pool[[c for c in keep_cols if c in midlong_pool.columns]].head(40).to_dict(orient="records") if not midlong_pool.empty else [],
+        }
+        try:
+            ai_reco = generate_ai_recommendations(
+                ctx,
+                provider=str(args.ai_provider),
+                model=str(args.ai_model),
+                base_url=str(args.ai_base_url),
+                api_key=str(args.ai_api_key).strip() or os.getenv("OPENAI_API_KEY", "").strip(),
+            )
+        except Exception as exc:
+            ai_reco = {"short": [{"ticker": "", "reason": f"AI picks unavailable: {exc}"}], "midlong": []}
+
     report = build_verification_report_markdown(
         df_rank,
         source=str(rank_csv),
@@ -526,6 +693,7 @@ def main(argv: list[str] | None = None) -> int:
         top_n_short=int(args.top_n_short),
         top_n_midlong=int(args.top_n_midlong),
         improvement_notes=improvement_notes,
+        ai_reco=ai_reco,
     )
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(report, encoding="utf-8")
