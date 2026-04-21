@@ -45,6 +45,12 @@ DEFAULT_IMPROVEMENT_NOTES = [
     "- 若短/中線重疊過多，可考慮讓短線池排除 `midlong_core` 或在推播層做去重。",
 ]
 
+OPENAI_FALLBACK_MODELS = [
+    "gpt-5.1",
+    "gpt-5-mini",
+    "gpt-4.1-mini",
+]
+
 LOCAL_API_KEY_FILE = REPO_ROOT / "local_api_key"
 
 
@@ -248,29 +254,48 @@ def generate_ai_recommendations(
 
         url = f"{base_url}/responses"
         headers = {"Authorization": f"Bearer {api_key}"}
-        payload = {
-            "model": model,
-            "input": [
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": prompt},
-                        {"type": "text", "text": json.dumps(context, ensure_ascii=False)},
-                    ],
-                }
-            ],
-            "temperature": 0.2,
-        }
-        r = requests.post(url, headers=headers, json=payload, timeout=timeout_seconds)
-        r.raise_for_status()
-        data = r.json()
-        text = ""
-        for item in data.get("output", []) or []:
-            for c in item.get("content", []) or []:
-                if c.get("type") == "output_text":
-                    text += str(c.get("text", ""))
-        text = text.strip() or str(data.get("text", "")).strip()
-        return _extract_json_object(text)
+        tried: list[str] = []
+        for attempt_model in [model, *[m for m in OPENAI_FALLBACK_MODELS if m != model]]:
+            tried.append(attempt_model)
+            payload = {
+                "model": attempt_model,
+                "input": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "input_text", "text": prompt},
+                            {"type": "input_text", "text": json.dumps(context, ensure_ascii=False)},
+                        ],
+                    }
+                ],
+                "temperature": 0.2,
+            }
+            r = requests.post(url, headers=headers, json=payload, timeout=timeout_seconds)
+            if r.status_code >= 400:
+                # If the model name is invalid/unavailable, try fallbacks. Otherwise, raise immediately.
+                try:
+                    err = r.json().get("error", {})
+                    code = str(err.get("code", "")).lower()
+                    msg = str(err.get("message", "")).lower()
+                except Exception:
+                    code, msg = "", ""
+                if r.status_code in {400, 404} and ("model" in msg or "model_not_found" in code or "invalid_model" in code):
+                    continue
+                r.raise_for_status()
+
+            data = r.json()
+            text = ""
+            for item in data.get("output", []) or []:
+                for c in item.get("content", []) or []:
+                    if c.get("type") == "output_text":
+                        text += str(c.get("text", ""))
+            text = text.strip() or str(data.get("text", "")).strip()
+            obj = _extract_json_object(text)
+            if obj:
+                obj["_meta"] = {"provider": "openai", "model": attempt_model, "tried": tried}
+            return obj
+
+        raise RuntimeError(f"OpenAI request failed for models: {', '.join(tried)}")
 
     raise ValueError("Unknown provider; use --ai-provider openai|ollama")
 
@@ -325,31 +350,47 @@ def generate_ai_improvement_notes(
         # Use the Responses API when available; best-effort only.
         url = f"{base_url}/responses"
         headers = {"Authorization": f"Bearer {api_key}"}
-        payload = {
-            "model": model,
-            "input": [
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": prompt},
-                        {"type": "text", "text": json.dumps(context, ensure_ascii=False)},
-                    ],
-                }
-            ],
-            "temperature": 0.2,
-        }
-        r = requests.post(url, headers=headers, json=payload, timeout=timeout_seconds)
-        r.raise_for_status()
-        data = r.json()
+        tried: list[str] = []
         text = ""
-        for item in data.get("output", []) or []:
-            for c in item.get("content", []) or []:
-                if c.get("type") == "output_text":
-                    text += str(c.get("text", ""))
-        text = text.strip()
+        for attempt_model in [model, *[m for m in OPENAI_FALLBACK_MODELS if m != model]]:
+            tried.append(attempt_model)
+            payload = {
+                "model": attempt_model,
+                "input": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "input_text", "text": prompt},
+                            {"type": "input_text", "text": json.dumps(context, ensure_ascii=False)},
+                        ],
+                    }
+                ],
+                "temperature": 0.2,
+            }
+            r = requests.post(url, headers=headers, json=payload, timeout=timeout_seconds)
+            if r.status_code >= 400:
+                try:
+                    err = r.json().get("error", {})
+                    code = str(err.get("code", "")).lower()
+                    msg = str(err.get("message", "")).lower()
+                except Exception:
+                    code, msg = "", ""
+                if r.status_code in {400, 404} and ("model" in msg or "model_not_found" in code or "invalid_model" in code):
+                    continue
+                r.raise_for_status()
+
+            data = r.json()
+            for item in data.get("output", []) or []:
+                for c in item.get("content", []) or []:
+                    if c.get("type") == "output_text":
+                        text += str(c.get("text", ""))
+            text = text.strip()
+            if not text:
+                text = str(data.get("text", "")).strip()
+            if text:
+                break
         if not text:
-            # Fallback: some gateways may return "text" at top-level.
-            text = str(data.get("text", "")).strip()
+            raise RuntimeError(f"OpenAI request produced empty output (models tried: {', '.join(tried)})")
     else:
         raise ValueError("Unknown provider; use --ai-provider openai|ollama")
 
@@ -561,6 +602,13 @@ def build_verification_report_markdown(
     )
 
     if ai_reco:
+        meta = {}
+        if isinstance(ai_reco, dict) and isinstance(ai_reco.get("_meta"), dict):
+            meta = dict(ai_reco.get("_meta"))
+        # Don't show meta in the tables.
+        if isinstance(ai_reco, dict) and "_meta" in ai_reco:
+            ai_reco = {k: v for k, v in ai_reco.items() if k != "_meta"}
+
         def _coerce_reco_df(items: list[dict]) -> pd.DataFrame:
             if not items:
                 return pd.DataFrame()
@@ -575,6 +623,7 @@ def build_verification_report_markdown(
             [
                 "## AI Picks (research only)",
                 "- 這一段是 AI 根據 daily_rank 摘要給的『追蹤/研究』名單，不是買賣建議。",
+                f"- AI provider/model: {meta.get('provider','')} / {meta.get('model','')}".strip(" /"),
                 "",
                 "### AI Short (5)",
                 _format_table(short_ai, ["ticker", "reason"]).rstrip(),

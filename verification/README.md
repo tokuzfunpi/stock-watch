@@ -47,8 +47,10 @@ python3.11 verification/verify_recommendations.py
 # 若要關掉 AI picks：
 python3.11 verification/verify_recommendations.py --no-ai-recommend
 #
-# 若要指定模型/價格偏好：
-python3.11 verification/verify_recommendations.py --ai-model <your-model> --ai-price-max 200
+# 若要指定模型/價格偏好（如果你看到 400 Bad Request，多半是 model 名稱不在你的 API 帳號可用範圍）：
+python3.11 verification/verify_recommendations.py --ai-model gpt-5.1
+python3.11 verification/verify_recommendations.py --ai-model gpt-5-mini
+python3.11 verification/verify_recommendations.py --ai-model gpt-4.1-mini
 
 # 2) 收盤後回填 outcomes（horizons 預設 1,5,20）
 python3.11 verification/evaluate_recommendations.py --horizons 1,5,20
