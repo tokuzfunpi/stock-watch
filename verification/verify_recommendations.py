@@ -55,6 +55,7 @@ OPENAI_FALLBACK_MODELS = [
 
 LOCAL_API_KEY_FILE = REPO_ROOT / "local_api_key"
 AI_RECO_CACHE_PATH = Path("verification") / "watchlist_daily" / "ai_reco_cache.json"
+AI_QUOTA_BACKOFF_SECONDS = 6 * 60 * 60  # 6 hours
 
 
 def load_local_api_key(path: Path = LOCAL_API_KEY_FILE) -> str:
@@ -227,6 +228,18 @@ def load_ai_reco_cache(key: str, *, path: Path = AI_RECO_CACHE_PATH) -> dict | N
         return None
     if str(data.get("key", "")) != str(key):
         return None
+    disable_until = str(data.get("disable_until", "")).strip()
+    if disable_until:
+        try:
+            until = pd.to_datetime(disable_until, errors="raise")
+            if until.tzinfo is None:
+                until = until.tz_localize(LOCAL_TZ)
+            now = datetime.now(LOCAL_TZ)
+            if now < until.to_pydatetime():
+                reco = data.get("reco")
+                return reco if isinstance(reco, dict) else None
+        except Exception:
+            pass
     reco = data.get("reco")
     return reco if isinstance(reco, dict) else None
 
@@ -238,6 +251,24 @@ def save_ai_reco_cache(key: str, reco: dict, *, path: Path = AI_RECO_CACHE_PATH)
             "key": key,
             "saved_at": datetime.now(LOCAL_TZ).strftime("%Y-%m-%d %H:%M:%S %Z"),
             "reco": reco,
+        },
+    )
+
+
+def save_ai_quota_cooldown(key: str, message: str, *, path: Path = AI_RECO_CACHE_PATH) -> None:
+    until = datetime.now(LOCAL_TZ).timestamp() + AI_QUOTA_BACKOFF_SECONDS
+    disable_until = datetime.fromtimestamp(until, tz=LOCAL_TZ).strftime("%Y-%m-%d %H:%M:%S %Z")
+    _write_json_file(
+        path,
+        {
+            "key": key,
+            "saved_at": datetime.now(LOCAL_TZ).strftime("%Y-%m-%d %H:%M:%S %Z"),
+            "disable_until": disable_until,
+            "reco": {
+                "_meta": {"provider": "openai", "model": ""},
+                "short": [{"ticker": "", "reason": f"AI picks unavailable: {message}"}],
+                "midlong": [],
+            },
         },
     )
 
@@ -325,9 +356,13 @@ def generate_ai_recommendations(
                     try:
                         err = r.json().get("error", {})
                         msg = str(err.get("message", "")).strip()
+                        code = str(err.get("code", "")).strip()
                     except Exception:
                         msg = r.text.strip()[:200]
+                        code = ""
                     last_rate_limit = msg or "rate_limited"
+                    if "exceeded your current quota" in (msg or "").lower() or str(code).lower() in {"insufficient_quota"}:
+                        raise RuntimeError(f"quota_exceeded: {last_rate_limit}")
                     retry_after = r.headers.get("retry-after")
                     sleep_s = float(retry_after) if retry_after and str(retry_after).strip().isdigit() else float(backoff_seconds) * (2**attempt)
                     time.sleep(min(sleep_s, 30.0))
@@ -358,7 +393,7 @@ def generate_ai_recommendations(
                 return obj
 
         if last_rate_limit:
-            raise RuntimeError(f"Rate limited (429): {last_rate_limit}")
+            raise RuntimeError(f"rate_limited: {last_rate_limit}")
 
         raise RuntimeError(f"OpenAI request failed for models: {', '.join(tried)}")
 
@@ -831,6 +866,9 @@ def main(argv: list[str] | None = None) -> int:
                 if isinstance(ai_reco, dict) and ai_reco:
                     save_ai_reco_cache(key, ai_reco)
         except Exception as exc:
+            msg = str(exc)
+            if msg.startswith("quota_exceeded:"):
+                save_ai_quota_cooldown(key, msg.replace("quota_exceeded:", "", 1).strip())
             ai_reco = {
                 "_meta": {"provider": str(args.ai_provider), "model": str(args.ai_model)},
                 "short": [{"ticker": "", "reason": f"AI picks unavailable: {exc}"}],

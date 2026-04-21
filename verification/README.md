@@ -50,6 +50,7 @@ python3.11 verification/verify_recommendations.py --no-ai-recommend
 # 若遇到 429 Too Many Requests：
 # - 等幾分鐘再跑，或降低跑的頻率（本工具會把上次 AI 結果 cache 在 verification/watchlist_daily/ai_reco_cache.json）
 # - 或改用較小模型：--ai-model gpt-4.1-mini
+# - 若訊息是 "exceeded your current quota / check your plan and billing details"，代表帳號額度/計費未開通或用完；需到 OpenAI 平台開通 billing 或等額度重置
 #
 # 若要指定模型/價格偏好（如果你看到 400 Bad Request，多半是 model 名稱不在你的 API 帳號可用範圍）：
 python3.11 verification/verify_recommendations.py --ai-model gpt-5.1
