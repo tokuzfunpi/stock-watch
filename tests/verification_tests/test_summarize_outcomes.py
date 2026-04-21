@@ -41,6 +41,7 @@ class SummarizeOutcomesTests(unittest.TestCase):
                     "signal_date": "2026-04-17",
                     "horizon_days": 1,
                     "watch_type": "midlong",
+                    "reco_status": "ok",
                     "action": "續抱",
                     "realized_ret_pct": -2.0,
                     "status": "ok",
@@ -51,4 +52,5 @@ class SummarizeOutcomesTests(unittest.TestCase):
         self.assertIn("# Recommendation Outcomes Summary", md)
         self.assertIn("## Coverage", md)
         self.assertIn("## Overall By Action", md)
+        self.assertIn("reco_status", md)
         self.assertIn("## By Action", md)

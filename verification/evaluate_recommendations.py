@@ -477,6 +477,7 @@ def main(argv: list[str] | None = None) -> int:
                     "watch_type": watch_type,
                     "ticker": ticker,
                     "name": name,
+                    "reco_status": str(getattr(r, "reco_status", "")),
                     "action": str(getattr(r, "action", "")),
                     "grade": str(getattr(r, "grade", "")),
                     "setup_score": getattr(r, "setup_score", None),
