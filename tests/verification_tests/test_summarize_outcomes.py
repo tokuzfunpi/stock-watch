@@ -84,6 +84,7 @@ class SummarizeOutcomesTests(unittest.TestCase):
         self.assertIn("# Recommendation Outcomes Summary", md)
         self.assertIn("## Coverage", md)
         self.assertIn("## Notes", md)
+        self.assertIn("## Weekly Checkpoint", md)
         self.assertIn("## Overall By Action", md)
         self.assertIn("reco_status", md)
         self.assertIn("## By Action", md)

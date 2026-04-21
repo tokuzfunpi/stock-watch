@@ -349,6 +349,19 @@ def build_summary_markdown(outcomes: pd.DataFrame, source: str, now_local: datet
         lines.extend(["## Delta (ok - below_threshold) By Signal (all dates)", _table_markdown(parts["delta_ok_minus_below"]).rstrip(), ""])
     if not parts["delta_ok_minus_below_by_date"].empty:
         lines.extend(["## Delta (ok - below_threshold) By Signal Date (top 30)", _table_markdown(parts["delta_ok_minus_below_by_date"].head(30)).rstrip(), ""])
+
+    # Weekly checkpoint: only show deltas with enough samples to be actionable.
+    try:
+        delta_strong = parts["delta_ok_minus_below"].copy()
+        if not delta_strong.empty and "min_n" in delta_strong.columns:
+            delta_strong = delta_strong[pd.to_numeric(delta_strong["min_n"], errors="coerce") >= 5].copy()
+        if not delta_strong.empty:
+            lines.extend(["## Weekly Checkpoint (min_n>=5)", _table_markdown(delta_strong).rstrip(), ""])
+        else:
+            lines.extend(["## Weekly Checkpoint (min_n>=5)", "_None_", ""])
+    except Exception:
+        lines.extend(["## Weekly Checkpoint (min_n>=5)", "_None_", ""])
+
     lines.extend(["## Overall By Action (all dates, top 80)", _table_markdown(parts["overall_by_action"].head(80)).rstrip(), ""])
     if not parts["overall_by_action_status"].empty:
         lines.extend(["## Overall By Action + reco_status (all dates, top 80)", _table_markdown(parts["overall_by_action_status"].head(80)).rstrip(), ""])
