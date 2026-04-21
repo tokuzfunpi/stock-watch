@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import csv
+import contextlib
 import hashlib
+import io
 import json
 import logging
 import os
@@ -414,45 +416,52 @@ def yf_download_one(ticker: str, period: str) -> pd.DataFrame:
     return df
 
 
-def fetch_realtime_last_close(tickers: list[str]) -> dict[str, float]:
-    if not realtime_quotes_enabled():
-        return {}
-    uniq = [str(t).strip() for t in tickers if str(t).strip()]
-    seen: set[str] = set()
-    uniq = [t for t in uniq if not (t in seen or seen.add(t))]
-    if not uniq:
-        return {}
-
-    cache_key = (REALTIME_QUOTE_PERIOD, REALTIME_QUOTE_INTERVAL, tuple(sorted(uniq)))
-    cached = _REALTIME_QUOTE_CACHE.get(cache_key)
-    if cached:
-        ts, data = cached
-        if time.time() - ts <= 30:
-            return dict(data)
-
+@contextlib.contextmanager
+def _suppress_yfinance_noise() -> None:
+    # yfinance sometimes emits noisy per-ticker errors (e.g. "possibly delisted") even when we
+    # treat quotes as best-effort. Suppress internal chatter but keep our own logs.
+    targets = ["yfinance", "yfinance.utils", "yfinance.base", "yfinance.multi"]
+    prev: list[tuple[logging.Logger, int, bool]] = []
+    for name in targets:
+        lg = logging.getLogger(name)
+        prev.append((lg, lg.level, lg.propagate))
+        lg.setLevel(logging.CRITICAL)
+        lg.propagate = False
     try:
+        with contextlib.redirect_stderr(io.StringIO()):
+            yield
+    finally:
+        for lg, level, propagate in prev:
+            lg.setLevel(level)
+            lg.propagate = propagate
+
+
+def _yf_download_last_close_multi(
+    tickers: list[str],
+    *,
+    period: str,
+    interval: str,
+) -> dict[str, float]:
+    if not tickers:
+        return {}
+    with _suppress_yfinance_noise():
         df = yf.download(
-            " ".join(uniq),
-            period=REALTIME_QUOTE_PERIOD,
-            interval=REALTIME_QUOTE_INTERVAL,
+            " ".join(tickers),
+            period=period,
+            interval=interval,
             auto_adjust=True,
             progress=False,
             threads=False,
             group_by="ticker",
         )
-    except Exception as exc:
-        logger.info("Realtime quote fetch failed: %s", exc)
-        _REALTIME_QUOTE_CACHE[cache_key] = (time.time(), {})
-        return {}
 
     if df is None or getattr(df, "empty", True):
-        _REALTIME_QUOTE_CACHE[cache_key] = (time.time(), {})
         return {}
 
     out: dict[str, float] = {}
     try:
         if isinstance(df.columns, pd.MultiIndex):
-            for ticker in uniq:
+            for ticker in tickers:
                 try:
                     if ticker not in df.columns.get_level_values(0):
                         continue
@@ -466,17 +475,48 @@ def fetch_realtime_last_close(tickers: list[str]) -> dict[str, float]:
                 except Exception:
                     continue
         else:
-            if "Close" in df.columns and len(uniq) == 1:
+            if "Close" in df.columns and len(tickers) == 1:
                 series = df["Close"].dropna()
                 if not series.empty:
-                    out[uniq[0]] = float(series.iloc[-1])
-    except Exception as exc:
-        logger.info("Realtime quote parse failed: %s", exc)
-        _REALTIME_QUOTE_CACHE[cache_key] = (time.time(), {})
+                    out[tickers[0]] = float(series.iloc[-1])
+    except Exception:
+        return {}
+    return out
+
+
+def fetch_realtime_last_close(tickers: list[str]) -> dict[str, float]:
+    if not realtime_quotes_enabled():
+        return {}
+    uniq = [str(t).strip() for t in tickers if str(t).strip()]
+    seen: set[str] = set()
+    uniq = [t for t in uniq if not (t in seen or seen.add(t))]
+    if not uniq:
         return {}
 
+    cache_key = (REALTIME_QUOTE_PERIOD, REALTIME_QUOTE_INTERVAL, tuple(sorted(uniq)))
+    cached = _REALTIME_QUOTE_CACHE.get(cache_key)
+    if cached:
+        ts, data = cached
+        ttl = 300 if not data else 30
+        if time.time() - ts <= ttl:
+            return dict(data)
+
+    out = _yf_download_last_close_multi(
+        uniq,
+        period=REALTIME_QUOTE_PERIOD,
+        interval=REALTIME_QUOTE_INTERVAL,
+    )
+
+    # Intraday quotes can be flaky for TW symbols; fallback to last daily close.
+    if not out:
+        out = _yf_download_last_close_multi(
+            uniq,
+            period="5d",
+            interval="1d",
+        )
+
     _REALTIME_QUOTE_CACHE[cache_key] = (time.time(), dict(out))
-    return out
+    return dict(out)
 
 
 def add_indicators(df: pd.DataFrame, ma_period: int = 20) -> pd.DataFrame:

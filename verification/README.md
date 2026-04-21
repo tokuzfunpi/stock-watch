@@ -9,6 +9,8 @@
   - 輸出：
     - `verification/watchlist_daily/verification_report.md`
     - `verification/watchlist_daily/reco_snapshots.csv`
+    - `verification/watchlist_daily/codex_context.json`（給 Codex/人工分析用的結構化 JSON）
+    - `verification/watchlist_daily/contexts/codex_context_*.json`（每次執行留一份）
 - `evaluate_recommendations.py`
   - 目的：把 `reco_snapshots.csv` 的推薦，對照未來 N 個交易日的收盤價，回填 outcome（報酬% / 狀態）。
   - 輸出：`verification/watchlist_daily/reco_outcomes.csv`
@@ -31,31 +33,6 @@ python3.11 verification/verify_recommendations.py
 
 # 若想調整「強制補滿」的數量（預設 5）
 python3.11 verification/verify_recommendations.py --top-n-short 5 --top-n-midlong 5
-
-# （選用）加上 AI 改進建議（best effort；失敗會退回固定 heuristics）
-# OpenAI
-OPENAI_API_KEY=... python3.11 verification/verify_recommendations.py --ai-advice --ai-provider openai --ai-model <your-model>
-# 或把 key 放在 repo root 的 `local_api_key`（已在 `.gitignore`，避免誤推到 GitHub）
-python3.11 verification/verify_recommendations.py --ai-advice --ai-provider openai --ai-model <your-model>
-# Ollama（本機）
-python3.11 verification/verify_recommendations.py --ai-advice --ai-provider ollama --ai-model <your-model>
-
-# （選用）直接讓 AI 給 short/midlong 各 5 檔「追蹤/研究名單」（research only，不是買賣建議）
-# 預設已開啟（provider=openai, model=gpt-5.4, ai-price-max=200），所以通常只要：
-python3.11 verification/verify_recommendations.py
-#
-# 若要關掉 AI picks：
-python3.11 verification/verify_recommendations.py --no-ai-recommend
-#
-# 若遇到 429 Too Many Requests：
-# - 等幾分鐘再跑，或降低跑的頻率（本工具會把上次 AI 結果 cache 在 verification/watchlist_daily/ai_reco_cache.json）
-# - 或改用較小模型：--ai-model gpt-4.1-mini
-# - 若訊息是 "exceeded your current quota / check your plan and billing details"，代表帳號額度/計費未開通或用完；需到 OpenAI 平台開通 billing 或等額度重置
-#
-# 若要指定模型/價格偏好（如果你看到 400 Bad Request，多半是 model 名稱不在你的 API 帳號可用範圍）：
-python3.11 verification/verify_recommendations.py --ai-model gpt-5.1
-python3.11 verification/verify_recommendations.py --ai-model gpt-5-mini
-python3.11 verification/verify_recommendations.py --ai-model gpt-4.1-mini
 
 # 2) 收盤後回填 outcomes（horizons 預設 1,5,20）
 python3.11 verification/evaluate_recommendations.py --horizons 1,5,20
@@ -103,6 +80,7 @@ python3.11 verification/backfill_from_git.py --since 2026-04-15 --until 2026-04-
 ## 結果怎麼看
 
 - `verification_report.md`：當天短線/中線推薦清單 + warnings/diagnostics（偏「質檢」）
+- `codex_context.json`：同一份資料但用 JSON（你可以直接貼到 Codex 做後續分析/迭代）
 - `reco_snapshots.csv`：每天早上推薦快照（偏「可追溯」）
 - `reco_outcomes.csv`：每個 ticker * 每個 horizon 的 realized return（偏「校正/評估」）
 - `outcomes_summary.md`：把 `reco_outcomes.csv` 聚合成勝率/平均報酬/樣本數（偏「管理 dashboard」）
