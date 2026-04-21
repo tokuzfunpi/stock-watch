@@ -163,6 +163,28 @@ def build_summary_markdown(outcomes: pd.DataFrame, source: str, now_local: datet
         ]
     )
 
+    # Extra coverage diagnostics (helps understand why 20D isn't showing up yet).
+    try:
+        cov = outcomes.copy()
+        cov["horizon_days"] = pd.to_numeric(cov.get("horizon_days"), errors="coerce").astype("Int64")
+        cov["status"] = cov.get("status", "").astype(str)
+        cov["is_ok"] = cov["status"] == "ok"
+        by_h = (
+            cov.groupby(["horizon_days"], dropna=False)
+            .agg(
+                total=("status", "count"),
+                ok=("is_ok", "sum"),
+                pending=("status", lambda s: int((s.astype(str) == "insufficient_forward_data").sum())),
+                no_price=("status", lambda s: int((s.astype(str) == "no_price_series").sum())),
+            )
+            .reset_index()
+            .sort_values(by=["horizon_days"])
+        )
+        by_h["ok_rate_pct"] = ((by_h["ok"] / by_h["total"]) * 100).round(1)
+        lines.extend(["## Coverage By Horizon", _table_markdown(by_h).rstrip(), ""])
+    except Exception:
+        pass
+
     lines.extend(["## Overall By Signal (all dates)", _table_markdown(parts["overall_by_signal"]).rstrip(), ""])
     lines.extend(["## Overall By Action (all dates, top 80)", _table_markdown(parts["overall_by_action"].head(80)).rstrip(), ""])
     lines.extend(["## By Signal (watch_type)", _table_markdown(parts["by_signal"].head(30)).rstrip(), ""])

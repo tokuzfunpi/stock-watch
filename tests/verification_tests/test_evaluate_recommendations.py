@@ -24,8 +24,9 @@ class EvaluateRecommendationsTests(unittest.TestCase):
             index=pd.to_datetime(["2026-04-17", "2026-04-18", "2026-04-21"]),
             name="Close",
         )
-        ret_pct, out_close, status = compute_forward_return_pct(s, "2026-04-17", 1)
+        ret_pct, out_close, status, detail = compute_forward_return_pct(s, "2026-04-17", 1)
         self.assertEqual(status, "ok")
+        self.assertEqual(detail, "")
         self.assertAlmostEqual(out_close or 0.0, 110.0)
         self.assertAlmostEqual(ret_pct or 0.0, 10.0)
 
@@ -35,7 +36,8 @@ class EvaluateRecommendationsTests(unittest.TestCase):
             index=pd.to_datetime(["2026-04-18", "2026-04-21"]),
             name="Close",
         )
-        ret_pct, out_close, status = compute_forward_return_pct(s, "2026-04-17", 1)
-        self.assertIsNone(ret_pct)
-        self.assertIsNone(out_close)
-        self.assertEqual(status, "signal_date_missing")
+        ret_pct, out_close, status, detail = compute_forward_return_pct(s, "2026-04-17", 1)
+        self.assertEqual(status, "ok")
+        self.assertIn("signal_date_shifted", detail)
+        self.assertAlmostEqual(out_close or 0.0, 110.0)
+        self.assertAlmostEqual(ret_pct or 0.0, 10.0)

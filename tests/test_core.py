@@ -622,7 +622,7 @@ class PushMessageTests(unittest.TestCase):
         self.assertNotIn("美股昨晚偏強", short_message)
         self.assertNotIn("觸發來源", short_message)
         self.assertIn("5日 9.0%", short_message)
-        self.assertTrue(any(label in short_message for label in ["可追", "等拉回", "開高不追", "續抱觀察", "分批落袋"]))
+        self.assertTrue(any(label in short_message for label in ["等拉回", "開高不追", "續抱觀察", "分批落袋"]))
 
         self.assertIn("中長線可布局", midlong_message)
         self.assertNotIn("美股昨晚偏強", midlong_message)

@@ -1260,8 +1260,6 @@ def short_term_action_label(row: pd.Series) -> str:
         return "分批落袋"
     if ret5 >= 15 or (risk >= 4 and ret5 >= 10):
         return "開高不追"
-    if is_strict_short_chase(row):
-        return "可追"
     # 非嚴格可追的加速型，預設以「等拉回」處理（收斂追價、偏 5D/20D 延續）
     if ("ACCEL" in signals and "TREND" in signals) and risk <= 3 and vol_ratio >= 1.0 and float(row.get("ret20_pct", 0.0) or 0.0) >= 0 and ret5 >= 4:
         return "等拉回"
@@ -1310,8 +1308,6 @@ def is_strict_short_chase(row: pd.Series) -> bool:
 
 def is_short_term_buyable(row: pd.Series) -> bool:
     action = short_term_action_label(row)
-    if action == "可追":
-        return is_strict_short_chase(row)
     return action == "等拉回"
 
 

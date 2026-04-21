@@ -32,32 +32,49 @@ def compute_forward_return_pct(
     close_series: pd.Series,
     signal_date: str,
     horizon_days: int,
-) -> tuple[float | None, float | None, str]:
+) -> tuple[float | None, float | None, str, str]:
     if close_series is None or close_series.empty:
-        return None, None, "empty_series"
+        return None, None, "empty_series", ""
     if horizon_days < 1:
-        return None, None, "invalid_horizon"
+        return None, None, "invalid_horizon", ""
 
     series = close_series.dropna().copy()
     series.index = pd.to_datetime(series.index).tz_localize(None)
 
     target_date = pd.to_datetime(signal_date).tz_localize(None)
+    status_detail = ""
     if target_date not in series.index:
-        return None, None, "signal_date_missing"
+        # Best effort: if snapshot date is a non-trading day (holiday/weekend) or Yahoo shifts
+        # the index, use the next available trading day within a small window.
+        try:
+            idx_pos = int(series.index.searchsorted(target_date))
+        except Exception:
+            idx_pos = -1
+
+        if 0 <= idx_pos < len(series.index):
+            shifted = series.index[idx_pos]
+            shift_days = int((shifted - target_date).days)
+            if shift_days >= 0 and shift_days <= 3:
+                target_date = shifted
+                status_detail = f"signal_date_shifted:+{shift_days}d"
+            else:
+                return None, None, "signal_date_missing", ""
+        else:
+            return None, None, "signal_date_missing", ""
 
     idx = series.index.get_loc(target_date)
     if isinstance(idx, slice):
         idx = idx.start
     if not isinstance(idx, int):
-        return None, None, "signal_date_ambiguous"
+        return None, None, "signal_date_ambiguous", status_detail
 
     entry = float(series.iloc[idx])
     out_idx = idx + horizon_days
     if out_idx >= len(series):
-        return None, None, "insufficient_forward_data"
+        return None, None, "insufficient_forward_data", status_detail
     out_close = float(series.iloc[out_idx])
     ret_pct = (out_close / entry - 1.0) * 100.0
-    return ret_pct, out_close, "ok"
+    return ret_pct, out_close, "ok", status_detail
 
 
 def _chunked(items: list[str], size: int) -> list[list[str]]:
@@ -447,10 +464,11 @@ def main(argv: list[str] | None = None) -> int:
             close_series = series_map.get(ticker)
             status_detail = ""
             if close_series is None:
-                ret_pct, out_close, reason = None, None, "no_price_series"
+                ret_pct, out_close, reason, detail = None, None, "no_price_series", ""
                 status_detail = series_errors.get(ticker, "")
             else:
-                ret_pct, out_close, reason = compute_forward_return_pct(close_series, str(getattr(r, "signal_date")), h)
+                ret_pct, out_close, reason, detail = compute_forward_return_pct(close_series, str(getattr(r, "signal_date")), h)
+                status_detail = detail
             rows.append(
                 {
                     "evaluated_at": now_local,
@@ -479,33 +497,64 @@ def main(argv: list[str] | None = None) -> int:
         print("No evaluation rows produced.")
         return 0
 
-    # De-dupe when appending.
+    # Upsert: keep existing OK rows; refresh non-ok rows when re-run (so 20D can become OK later).
+    key_cols = ["signal_date", "horizon_days", "watch_type", "ticker"]
+    existing = pd.DataFrame()
     if outcomes_csv.exists():
         try:
             existing = pd.read_csv(outcomes_csv)
         except Exception:
             existing = pd.DataFrame()
-        if not existing.empty:
-            key_cols = ["signal_date", "horizon_days", "watch_type", "ticker"]
-            existing_keys = set(tuple(x) for x in existing[key_cols].astype(str).itertuples(index=False, name=None))
-            out_df_keys = out_df[key_cols].astype(str)
-            keep_mask = [
-                tuple(row) not in existing_keys
-                for row in out_df_keys.itertuples(index=False, name=None)
-            ]
-            out_df = out_df[keep_mask].copy()
+
+    if not existing.empty:
+        for c in key_cols + ["status"]:
+            if c not in existing.columns:
+                existing[c] = ""
+        existing_key_df = existing[key_cols].astype(str)
+        existing_status = existing.get("status", pd.Series(dtype=str)).astype(str)
+        existing_status_by_key = {
+            tuple(k): str(s)
+            for k, s in zip(existing_key_df.itertuples(index=False, name=None), existing_status.tolist(), strict=False)
+        }
+
+        out_keys = out_df[key_cols].astype(str)
+        keep_rows: list[bool] = []
+        for k in out_keys.itertuples(index=False, name=None):
+            prev = existing_status_by_key.get(tuple(k))
+            keep_rows.append(prev is None or prev != "ok")
+        out_df = out_df[keep_rows].copy()
 
     if out_df.empty:
-        print("No new outcome rows (already evaluated).")
+        print("No new outcome rows (already evaluated or already OK).")
         return 0
 
     outcomes_csv.parent.mkdir(parents=True, exist_ok=True)
-    write_header = not outcomes_csv.exists()
-    with outcomes_csv.open("a", encoding="utf-8", newline="") as f:
-        out_df.to_csv(f, index=False, header=write_header)
+    if existing.empty:
+        final_df = out_df.copy()
+        replaced = 0
+    else:
+        replace_keys = set(tuple(x) for x in out_df[key_cols].astype(str).itertuples(index=False, name=None))
+        existing_keys = set(tuple(x) for x in existing[key_cols].astype(str).itertuples(index=False, name=None))
+        replaced = len(replace_keys & existing_keys)
+        keep_existing_mask = [
+            tuple(k) not in replace_keys
+            for k in existing[key_cols].astype(str).itertuples(index=False, name=None)
+        ]
+        keep_existing = existing[keep_existing_mask].copy()
+        # Align columns before concat.
+        for c in keep_existing.columns:
+            if c not in out_df.columns:
+                out_df[c] = pd.NA
+        for c in out_df.columns:
+            if c not in keep_existing.columns:
+                keep_existing[c] = pd.NA
+        final_df = pd.concat([keep_existing, out_df], ignore_index=True)
+
+    final_df.to_csv(outcomes_csv, index=False, encoding="utf-8")
 
     ok_rows = out_df[out_df["status"] == "ok"]
-    print(f"Appended {len(out_df)} rows to {outcomes_csv} (ok={len(ok_rows)}).")
+    action = "Upserted"
+    print(f"{action} {len(out_df)} rows to {outcomes_csv} (ok={len(ok_rows)}, replaced={replaced}).")
     if not ok_rows.empty:
         by_type = ok_rows.groupby("watch_type")["realized_ret_pct"].mean().to_dict()
         print(f"Avg realized_ret_pct by watch_type: {by_type}")
