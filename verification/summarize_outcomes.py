@@ -60,6 +60,7 @@ def summarize_outcomes(outcomes: pd.DataFrame) -> dict[str, pd.DataFrame]:
             "overall_by_signal": empty,
             "overall_by_signal_status": empty,
             "overall_by_action_status": empty,
+            "overall_by_market_heat": empty,
             "delta_ok_minus_below": empty,
             "delta_ok_minus_below_by_date": empty,
         }
@@ -76,6 +77,7 @@ def summarize_outcomes(outcomes: pd.DataFrame) -> dict[str, pd.DataFrame]:
             "overall_by_signal": empty,
             "overall_by_signal_status": empty,
             "overall_by_action_status": empty,
+            "overall_by_market_heat": empty,
             "delta_ok_minus_below": empty,
             "delta_ok_minus_below_by_date": empty,
         }
@@ -92,6 +94,7 @@ def summarize_outcomes(outcomes: pd.DataFrame) -> dict[str, pd.DataFrame]:
                 "overall_by_signal": empty,
                 "overall_by_signal_status": empty,
                 "overall_by_action_status": empty,
+                "overall_by_market_heat": empty,
                 "delta_ok_minus_below": empty,
                 "delta_ok_minus_below_by_date": empty,
             }
@@ -102,6 +105,12 @@ def summarize_outcomes(outcomes: pd.DataFrame) -> dict[str, pd.DataFrame]:
         df.loc[df["reco_status"] == "", "reco_status"] = "unknown"
     else:
         df["reco_status"] = "unknown"
+
+    if "market_heat" in df.columns:
+        df["market_heat"] = df["market_heat"].astype(str).str.strip().str.lower()
+        df.loc[~df["market_heat"].isin(["normal", "warm", "hot"]), "market_heat"] = "unknown"
+    else:
+        df["market_heat"] = "unknown"
 
     df["realized_ret_pct"] = pd.to_numeric(df["realized_ret_pct"], errors="coerce")
     df["horizon_days"] = pd.to_numeric(df["horizon_days"], errors="coerce").astype("Int64")
@@ -171,6 +180,21 @@ def summarize_outcomes(outcomes: pd.DataFrame) -> dict[str, pd.DataFrame]:
     overall_by_signal["win_rate"] = (overall_by_signal["win_rate"] * 100).round(1)
     for c in ["avg_ret", "med_ret"]:
         overall_by_signal[c] = overall_by_signal[c].round(2)
+
+    overall_by_market_heat = (
+        df.groupby(["horizon_days", "watch_type", "market_heat"], dropna=False)
+        .agg(
+            n=("realized_ret_pct", "count"),
+            win_rate=("win", "mean"),
+            avg_ret=("realized_ret_pct", "mean"),
+            med_ret=("realized_ret_pct", "median"),
+        )
+        .reset_index()
+        .sort_values(by=["horizon_days", "watch_type", "market_heat"], ascending=[True, True, True])
+    )
+    overall_by_market_heat["win_rate"] = (overall_by_market_heat["win_rate"] * 100).round(1)
+    for c in ["avg_ret", "med_ret"]:
+        overall_by_market_heat[c] = overall_by_market_heat[c].round(2)
 
     overall_by_signal_status = (
         df.groupby(["horizon_days", "watch_type", "reco_status"], dropna=False)
@@ -281,6 +305,7 @@ def summarize_outcomes(outcomes: pd.DataFrame) -> dict[str, pd.DataFrame]:
         "overall_by_signal": overall_by_signal,
         "overall_by_signal_status": overall_by_signal_status,
         "overall_by_action_status": overall_by_action_status,
+        "overall_by_market_heat": overall_by_market_heat,
         "delta_ok_minus_below": delta_ok_minus_below,
         "delta_ok_minus_below_by_date": delta_ok_minus_below_by_date,
     }
@@ -316,6 +341,7 @@ def build_summary_markdown(outcomes: pd.DataFrame, source: str, now_local: datet
             "## Notes",
             "- `pending`（insufficient_forward_data）代表還沒走滿 horizon 的交易日數，之後重跑 evaluate 會自動轉成 ok。",
             "- `below_threshold` 是為了固定補滿 5 檔而納入的樣本；請優先看 `min_n/confidence`，避免小樣本誤判。",
+            "- `market_heat` 是樣本熱度標籤；若 `hot/warm` 樣本偏多，代表近期結果可能被強勢盤墊高。",
             "",
         ]
     )
@@ -343,6 +369,8 @@ def build_summary_markdown(outcomes: pd.DataFrame, source: str, now_local: datet
         pass
 
     lines.extend(["## Overall By Signal (all dates)", _table_markdown(parts["overall_by_signal"]).rstrip(), ""])
+    if not parts["overall_by_market_heat"].empty:
+        lines.extend(["## Overall By Market Heat (all dates)", _table_markdown(parts["overall_by_market_heat"]).rstrip(), ""])
     if not parts["overall_by_signal_status"].empty:
         lines.extend(["## Overall By Signal + reco_status (all dates)", _table_markdown(parts["overall_by_signal_status"]).rstrip(), ""])
     if not parts["delta_ok_minus_below"].empty:

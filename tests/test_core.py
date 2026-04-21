@@ -18,6 +18,7 @@ from daily_theme_watchlist import (
     build_macro_message,
     build_portfolio_message,
     build_portfolio_report_markdown,
+    holding_style_label,
     is_placeholder_name,
     lookup_twse_display_name,
     lookup_yahoo_tw_name,
@@ -304,10 +305,14 @@ class ChatIdMapUpdateTests(unittest.TestCase):
             "daily_theme_watchlist.PORTFOLIO",
             pd.DataFrame([{"ticker": "2495.TW", "shares": 4000, "avg_cost": 36.35, "target_profit_pct": 20.0}]),
         ), patch.dict(os.environ, {"REALTIME_QUOTES": "0"}):
-            message = build_portfolio_message(df)
+            market_regime = {"comment": "加權指數目前偏多", "ret20_pct": 14.0, "volume_ratio20": 1.2, "is_bullish": True}
+            us_market = {"summary": "美股昨晚偏強，台股開盤情緒通常較正面。"}
+            message = build_portfolio_message(df, market_regime, us_market)
 
         self.assertIn("持股檢查", message)
+        self.assertIn("持股節奏", message)
         self.assertIn("2495", message)
+        self.assertIn("進攻持股", message)
         self.assertIn("報酬", message)
 
     def test_portfolio_report_is_separate_from_daily_report(self) -> None:
@@ -336,7 +341,7 @@ class ChatIdMapUpdateTests(unittest.TestCase):
                 }
             ]
         )
-        market_regime = {"comment": "盤勢中性偏多"}
+        market_regime = {"comment": "盤勢中性偏多", "ret20_pct": 12.0, "volume_ratio20": 1.1, "is_bullish": True}
         us_market = {"summary": "Nasdaq 小漲"}
 
         with patch(
@@ -348,11 +353,14 @@ class ChatIdMapUpdateTests(unittest.TestCase):
 
         self.assertNotIn("## Portfolio Review", daily_report)
         self.assertIn("# Portfolio Review", portfolio_report)
+        self.assertIn("Market Scenario", portfolio_report)
+        self.assertIn("核心持股", portfolio_report)
         self.assertIn("台積電", portfolio_report)
 
     def test_portfolio_advice_promotes_low_risk_accel_holding(self) -> None:
         row = pd.Series(
             {
+                "ticker": "3013.TW",
                 "current_close": 113.0,
                 "unrealized_pnl_pct": 8.54,
                 "target_profit_pct": 20.0,
@@ -364,6 +372,32 @@ class ChatIdMapUpdateTests(unittest.TestCase):
         )
 
         self.assertEqual(portfolio_advice_label(row), "強勢續抱")
+
+    def test_portfolio_advice_turns_more_defensive_in_high_vol_scenario(self) -> None:
+        row = pd.Series(
+            {
+                "ticker": "3013.TW",
+                "current_close": 113.0,
+                "unrealized_pnl_pct": 8.54,
+                "target_profit_pct": 20.0,
+                "risk_score": 2,
+                "signals": "ACCEL,TREND",
+                "ret20_pct": 12.68,
+                "volume_ratio20": 1.30,
+            }
+        )
+
+        scenario = {"label": "高檔震盪盤", "stance": "邊做邊收"}
+        self.assertEqual(portfolio_advice_label(row, scenario), "分批落袋")
+
+    def test_holding_style_marks_etf_and_financial_as_defensive(self) -> None:
+        etf_row = pd.Series({"ticker": "0050.TW", "group": "etf"})
+        fin_row = pd.Series({"ticker": "2886.TW", "group": "theme"})
+        attack_row = pd.Series({"ticker": "3013.TW", "group": "theme", "signals": "ACCEL", "risk_score": 4, "ret20_pct": 16.0})
+
+        self.assertEqual(holding_style_label(etf_row), "防守持股")
+        self.assertEqual(holding_style_label(fin_row), "防守持股")
+        self.assertEqual(holding_style_label(attack_row), "進攻持股")
 
     def test_portfolio_advice_flags_high_risk_target_hit(self) -> None:
         row = pd.Series(
@@ -530,14 +564,24 @@ class SelectPushCandidatesTests(unittest.TestCase):
 
 class PushMessageTests(unittest.TestCase):
     def test_macro_message_renders_market_and_us_summary_once(self) -> None:
-        market_regime = {"comment": "加權指數目前偏多"}
+        market_regime = {"comment": "加權指數目前偏多", "ret20_pct": 14.0, "volume_ratio20": 1.2, "is_bullish": True}
         us_market = {"summary": "美股昨晚偏強，台股開盤情緒通常較正面。", "tech_bias": "美股科技偏強，台股電子股若量價配合可積極一點。"}
+        df_rank = pd.DataFrame(
+            [
+                {"setup_score": 7, "risk_score": 2, "ret5_pct": 6.0, "ret20_pct": 12.0, "volume_ratio20": 1.2},
+                {"setup_score": 8, "risk_score": 3, "ret5_pct": 7.0, "ret20_pct": 10.0, "volume_ratio20": 1.1},
+                {"setup_score": 6, "risk_score": 2, "ret5_pct": 5.0, "ret20_pct": 8.0, "volume_ratio20": 1.0},
+            ]
+        )
 
-        message = build_macro_message(market_regime, us_market)
+        message = build_macro_message(market_regime, us_market, df_rank)
 
         self.assertIn("大盤 / 美股摘要", message)
         self.assertIn("加權指數目前偏多", message)
         self.assertIn("美股昨晚偏強", message)
+        self.assertIn("盤勢情境", message)
+        self.assertIn("操作重點", message)
+        self.assertIn("出場提醒", message)
         self.assertIn("觸發來源", message)
         self.assertIn("台灣時間", message)
 

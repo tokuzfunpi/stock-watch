@@ -28,6 +28,78 @@ class EvalConfig:
     cache_dir: Path | None = None
 
 
+def classify_market_heat(
+    *,
+    ret5_pct: object,
+    ret20_pct: object,
+    risk_score: object,
+    volume_ratio20: object,
+) -> tuple[str, str]:
+    def _to_float(value: object) -> float:
+        try:
+            if value is None or pd.isna(value):
+                return 0.0
+            return float(value)
+        except Exception:
+            return 0.0
+
+    ret5 = _to_float(ret5_pct)
+    ret20 = _to_float(ret20_pct)
+    risk = _to_float(risk_score)
+    vol = _to_float(volume_ratio20)
+
+    reasons: list[str] = []
+    if risk >= 5:
+        reasons.append("high_risk")
+    if ret5 >= 15:
+        reasons.append("ret5_hot")
+    if ret20 >= 25:
+        reasons.append("ret20_hot")
+    if vol >= 2.5:
+        reasons.append("volume_hot")
+    if reasons:
+        return "hot", ",".join(reasons)
+
+    reasons = []
+    if risk >= 3:
+        reasons.append("risk_up")
+    if ret5 >= 8:
+        reasons.append("ret5_warm")
+    if ret20 >= 12:
+        reasons.append("ret20_warm")
+    if vol >= 1.5:
+        reasons.append("volume_warm")
+    if reasons:
+        return "warm", ",".join(reasons)
+    return "normal", ""
+
+
+def enrich_market_heat_columns(df: pd.DataFrame) -> pd.DataFrame:
+    if df.empty:
+        return df
+    out = df.copy()
+    if "market_heat" not in out.columns:
+        out["market_heat"] = ""
+    if "market_heat_reason" not in out.columns:
+        out["market_heat_reason"] = ""
+
+    missing_mask = out["market_heat"].isna() | (out["market_heat"].astype(str).str.strip() == "")
+    if not missing_mask.any():
+        return out
+
+    for idx in out.index[missing_mask]:
+        heat, reason = classify_market_heat(
+            ret5_pct=out.at[idx, "ret5_pct"] if "ret5_pct" in out.columns else None,
+            ret20_pct=out.at[idx, "ret20_pct"] if "ret20_pct" in out.columns else None,
+            risk_score=out.at[idx, "risk_score"] if "risk_score" in out.columns else None,
+            volume_ratio20=out.at[idx, "volume_ratio20"] if "volume_ratio20" in out.columns else None,
+        )
+        out.at[idx, "market_heat"] = heat
+        if str(out.at[idx, "market_heat_reason"]).strip() == "":
+            out.at[idx, "market_heat_reason"] = reason
+    return out
+
+
 def compute_forward_return_pct(
     close_series: pd.Series,
     signal_date: str,
@@ -469,6 +541,12 @@ def main(argv: list[str] | None = None) -> int:
             else:
                 ret_pct, out_close, reason, detail = compute_forward_return_pct(close_series, str(getattr(r, "signal_date")), h)
                 status_detail = detail
+            market_heat, market_heat_reason = classify_market_heat(
+                ret5_pct=getattr(r, "ret5_pct", None),
+                ret20_pct=getattr(r, "ret20_pct", None),
+                risk_score=getattr(r, "risk_score", None),
+                volume_ratio20=getattr(r, "volume_ratio20", None),
+            )
             rows.append(
                 {
                     "evaluated_at": now_local,
@@ -486,6 +564,8 @@ def main(argv: list[str] | None = None) -> int:
                     "ret20_pct": getattr(r, "ret20_pct", None),
                     "volume_ratio20": getattr(r, "volume_ratio20", None),
                     "signals": str(getattr(r, "signals", "")),
+                    "market_heat": market_heat,
+                    "market_heat_reason": market_heat_reason,
                     "out_close": out_close,
                     "realized_ret_pct": ret_pct,
                     "status": reason,
@@ -551,6 +631,7 @@ def main(argv: list[str] | None = None) -> int:
                 keep_existing[c] = pd.NA
         final_df = pd.concat([keep_existing, out_df], ignore_index=True)
 
+    final_df = enrich_market_heat_columns(final_df)
     final_df.to_csv(outcomes_csv, index=False, encoding="utf-8")
 
     ok_rows = out_df[out_df["status"] == "ok"]

@@ -44,6 +44,7 @@ class SummarizeOutcomesTests(unittest.TestCase):
                     "horizon_days": 1,
                     "watch_type": "short",
                     "reco_status": "ok",
+                    "market_heat": "normal",
                     "action": "等拉回",
                     "realized_ret_pct": 1.0,
                     "status": "ok",
@@ -53,6 +54,7 @@ class SummarizeOutcomesTests(unittest.TestCase):
                     "horizon_days": 1,
                     "watch_type": "short",
                     "reco_status": "below_threshold",
+                    "market_heat": "hot",
                     "action": "等拉回",
                     "realized_ret_pct": 0.0,
                     "status": "ok",
@@ -65,6 +67,8 @@ class SummarizeOutcomesTests(unittest.TestCase):
         self.assertIn("delta_avg_ret", delta.columns)
         self.assertIn("confidence", delta.columns)
         self.assertIn("min_n", delta.columns)
+        self.assertIn("overall_by_market_heat", parts)
+        self.assertFalse(parts["overall_by_market_heat"].empty)
 
     def test_build_summary_markdown_renders_sections(self) -> None:
         df = pd.DataFrame(
@@ -74,6 +78,7 @@ class SummarizeOutcomesTests(unittest.TestCase):
                     "horizon_days": 1,
                     "watch_type": "midlong",
                     "reco_status": "ok",
+                    "market_heat": "warm",
                     "action": "續抱",
                     "realized_ret_pct": -2.0,
                     "status": "ok",
@@ -84,6 +89,8 @@ class SummarizeOutcomesTests(unittest.TestCase):
         self.assertIn("# Recommendation Outcomes Summary", md)
         self.assertIn("## Coverage", md)
         self.assertIn("## Notes", md)
+        self.assertIn("market_heat", md)
+        self.assertIn("## Overall By Market Heat", md)
         self.assertIn("## Weekly Checkpoint", md)
         self.assertIn("## Overall By Action", md)
         self.assertIn("reco_status", md)

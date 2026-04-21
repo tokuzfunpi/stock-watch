@@ -50,8 +50,8 @@ def main() -> int:
 
         save_portfolio_reports(df_rank, market_regime, us_market)
 
-        macro_message = build_macro_message(market_regime, us_market)
-        portfolio_message = build_portfolio_message(df_rank)
+        macro_message = build_macro_message(market_regime, us_market, df_rank)
+        portfolio_message = build_portfolio_message(df_rank, market_regime, us_market)
 
         if warnings:
             print("⚠️ Best effort: 部分資料抓取失敗，已用可用資料輸出。", file=sys.stderr)

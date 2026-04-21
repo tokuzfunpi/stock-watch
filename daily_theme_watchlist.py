@@ -1097,6 +1097,71 @@ def get_us_market_reference() -> dict:
     return {"summary": summary, "tech_bias": tech_bias, "rows": rows}
 
 
+def build_market_scenario(market_regime: dict, us_market: dict, df_rank: Optional[pd.DataFrame] = None) -> dict:
+    ret20_pct = float(market_regime.get("ret20_pct", 0.0) or 0.0)
+    volume_ratio20 = float(market_regime.get("volume_ratio20", 1.0) or 1.0)
+    is_bullish = bool(market_regime.get("is_bullish", False))
+    us_summary = str(us_market.get("summary", ""))
+    us_weak = ("偏弱" in us_summary) or ("續殺" in us_summary)
+
+    hot_count = 0
+    strong_count = 0
+    candidate_count = 0
+    if df_rank is not None and not df_rank.empty:
+        working = df_rank.copy()
+        for col in ["risk_score", "ret5_pct", "ret20_pct", "volume_ratio20", "setup_score"]:
+            if col in working.columns:
+                working[col] = pd.to_numeric(working[col], errors="coerce")
+        candidate_count = int(min(len(working), 20))
+        focus = working.head(candidate_count).copy()
+        if not focus.empty:
+            hot_mask = (
+                (focus.get("risk_score", pd.Series(dtype=float)).fillna(0) >= 5)
+                | (focus.get("ret5_pct", pd.Series(dtype=float)).fillna(0) >= 15)
+            )
+            strong_mask = (
+                (focus.get("setup_score", pd.Series(dtype=float)).fillna(0) >= 6)
+                & (focus.get("risk_score", pd.Series(dtype=float)).fillna(9) <= 3)
+                & (focus.get("ret20_pct", pd.Series(dtype=float)).fillna(-99) >= 0)
+            )
+            hot_count = int(hot_mask.sum())
+            strong_count = int(strong_mask.sum())
+
+    hot_ratio = (hot_count / candidate_count) if candidate_count > 0 else 0.0
+    strong_ratio = (strong_count / candidate_count) if candidate_count > 0 else 0.0
+
+    if not is_bullish or (ret20_pct <= 3 and us_weak):
+        return {
+            "label": "明顯修正盤",
+            "stance": "先保守",
+            "focus": "短線先縮手，中線也以守部位、等重新站回為主。",
+            "exit_note": "若持股跌破短線支撐或反彈無量，優先減碼，不用硬等。",
+        }
+
+    if is_bullish and ret20_pct >= 12 and strong_ratio < 0.35:
+        return {
+            "label": "權值撐盤、個股轉弱",
+            "stance": "選股更重要",
+            "focus": "指數可能還不差，但不是每一檔都好做，先看個股延續性。",
+            "exit_note": "若持股不跟漲、開高走低或量縮轉弱，要比大盤更早處理。",
+        }
+
+    if is_bullish and (ret20_pct >= 10 or volume_ratio20 >= 1.2) and (hot_ratio >= 0.3 or us_weak):
+        return {
+            "label": "高檔震盪盤",
+            "stance": "邊做邊收",
+            "focus": "行情還熱，但追價風險明顯變高，進場要更挑買點。",
+            "exit_note": "若隔日不續強、出現長上影或爆量不漲，就先分批落袋。",
+        }
+
+    return {
+        "label": "強勢延伸盤",
+        "stance": "順勢但不追價",
+        "focus": "主流趨勢仍在，但仍以等拉回取代追高。",
+        "exit_note": "有獲利的部位可採分批落袋，避免只看進場不管出場。",
+    }
+
+
 def reorder_priority_groups(df_rank: pd.DataFrame) -> pd.DataFrame:
     rule = CONFIG.notify
     df = df_rank.copy()
@@ -1591,11 +1656,15 @@ def build_midlong_message(df_rank: pd.DataFrame, market_regime: dict, us_market:
     return "\n".join(lines).strip()
 
 
-def build_macro_message(market_regime: dict, us_market: dict) -> str:
+def build_macro_message(market_regime: dict, us_market: dict, df_rank: Optional[pd.DataFrame] = None) -> str:
+    scenario = build_market_scenario(market_regime, us_market, df_rank)
     lines = [
         "📣 大盤 / 美股摘要",
         market_regime["comment"],
         us_market["summary"],
+        f"盤勢情境：{scenario['label']} | 目前節奏：{scenario['stance']}",
+        f"操作重點：{scenario['focus']}",
+        f"出場提醒：{scenario['exit_note']}",
     ]
     lines.extend(runtime_context_lines())
     if us_market.get("tech_bias"):
@@ -1605,7 +1674,31 @@ def build_macro_message(market_regime: dict, us_market: dict) -> str:
     return "\n".join(lines).strip()
 
 
-def portfolio_advice_label(row: pd.Series) -> str:
+def holding_style_label(row: pd.Series) -> str:
+    ticker = str(row.get("ticker", "") or "").upper()
+    group = str(row.get("group", "") or "").lower()
+    layer = str(row.get("layer", "") or "").lower()
+    signals = str(row.get("signals", "") or "")
+    risk_score = int(row.get("risk_score", 0)) if pd.notna(row.get("risk_score")) else 0
+    ret20_pct = float(row.get("ret20_pct", 0.0)) if pd.notna(row.get("ret20_pct")) else 0.0
+
+    if any(tag in ticker for tag in [".TWO", ".TW"]):
+        code = ticker.split(".")[0]
+    else:
+        code = ticker
+
+    if group == "etf" or code.startswith("00"):
+        return "防守持股"
+    if code in {"2882", "2884", "2886", "2890", "2891", "2892"}:
+        return "防守持股"
+    if layer in {"midlong_core", "defensive_watch"} or group == "core":
+        return "核心持股"
+    if "ACCEL" in signals or risk_score >= 4 or ret20_pct >= 15:
+        return "進攻持股"
+    return "核心持股"
+
+
+def portfolio_advice_label(row: pd.Series, market_scenario: Optional[dict] = None) -> str:
     current_close = row.get("current_close")
     if pd.isna(current_close):
         return "已補進觀察清單"
@@ -1616,25 +1709,91 @@ def portfolio_advice_label(row: pd.Series) -> str:
     signals = str(row.get("signals", ""))
     ret20_pct = float(row.get("ret20_pct", 0.0)) if pd.notna(row.get("ret20_pct")) else 0.0
     volume_ratio20 = float(row.get("volume_ratio20", 0.0)) if pd.notna(row.get("volume_ratio20")) else 0.0
+    holding_style = str(row.get("holding_style", "") or holding_style_label(row))
 
     if profit_pct >= target_pct and risk_score >= 4:
-        return "達標可落袋"
-    if profit_pct >= target_pct:
-        return "達標續抱"
-    if profit_pct <= -8 or risk_score >= 5:
-        return "轉弱留意"
-    if ("TREND" in signals or "REBREAK" in signals) and risk_score <= 3:
-        return "續抱"
-    if "ACCEL" in signals and risk_score <= 2 and profit_pct > 0 and ret20_pct >= 0 and volume_ratio20 >= 1.0:
-        return "強勢續抱"
-    if profit_pct > 0 and risk_score <= 3 and ret20_pct >= 0:
-        return "續抱觀察"
-    return "中性觀察"
+        base = "達標可落袋"
+    elif profit_pct >= target_pct:
+        base = "達標續抱"
+    elif profit_pct <= -8 or risk_score >= 5:
+        base = "轉弱留意"
+    elif ("TREND" in signals or "REBREAK" in signals) and risk_score <= 3:
+        base = "續抱"
+    elif "ACCEL" in signals and risk_score <= 2 and profit_pct > 0 and ret20_pct >= 0 and volume_ratio20 >= 1.0:
+        base = "強勢續抱"
+    elif profit_pct > 0 and risk_score <= 3 and ret20_pct >= 0:
+        base = "續抱觀察"
+    else:
+        base = "中性觀察"
+
+    if not market_scenario:
+        return base
+
+    scenario_label = str(market_scenario.get("label", ""))
+
+    if scenario_label == "高檔震盪盤":
+        if holding_style == "進攻持股" and (profit_pct >= max(target_pct * 0.35, 4) or ("ACCEL" in signals and profit_pct >= 4)):
+            return "分批落袋"
+        if holding_style == "核心持股" and profit_pct >= max(target_pct * 0.5, 6):
+            return "續抱但設停利"
+        if holding_style == "防守持股" and profit_pct >= max(target_pct * 0.6, 6):
+            return "續抱觀察"
+        if profit_pct >= max(target_pct * 0.4, 5) or risk_score >= 4 or ("ACCEL" in signals and profit_pct >= 5):
+            return "分批落袋"
+        if base == "強勢續抱":
+            return "續抱但設停利"
+        if base in {"續抱", "續抱觀察", "達標續抱"}:
+            return "續抱但盯盤"
+        return base
+
+    if scenario_label == "權值撐盤、個股轉弱":
+        if holding_style == "防守持股":
+            return "續抱觀察" if profit_pct > -5 else "保守觀察"
+        if holding_style == "核心持股" and profit_pct > 0:
+            return "續抱但看強弱"
+        if profit_pct > 0 and risk_score >= 3:
+            return "有賺先收一點"
+        if base in {"強勢續抱", "續抱"}:
+            return "續抱但看強弱"
+        if profit_pct <= 0:
+            return "轉弱先顧"
+        return base
+
+    if scenario_label == "明顯修正盤":
+        if holding_style == "防守持股":
+            return "防守續看" if profit_pct > -3 else "保守觀察"
+        if holding_style == "進攻持股" and profit_pct > 0:
+            return "先降部位"
+        if profit_pct > 0:
+            return "先降部位"
+        if risk_score >= 4 or ret20_pct < 0:
+            return "保守觀察"
+        return "減碼觀察"
+
+    if scenario_label == "強勢延伸盤":
+        if holding_style == "防守持股":
+            return "續抱觀察"
+        if holding_style == "核心持股" and base in {"續抱", "強勢續抱"}:
+            return "核心續抱"
+        if base == "達標續抱":
+            return "達標分批抱"
+        if base == "強勢續抱" and profit_pct >= max(target_pct * 0.5, 8):
+            return "強勢續抱但分批收"
+
+    return base
 
 
-def build_portfolio_review_df(df_rank: pd.DataFrame) -> pd.DataFrame:
+def build_portfolio_review_df(
+    df_rank: pd.DataFrame,
+    market_regime: Optional[dict] = None,
+    us_market: Optional[dict] = None,
+) -> pd.DataFrame:
     if PORTFOLIO.empty:
         return pd.DataFrame()
+
+    market_scenario = None
+    if market_regime is not None and us_market is not None:
+        market_scenario = build_market_scenario(market_regime, us_market, df_rank)
 
     market_cols = [
         "ticker", "name", "close", "signals", "regime", "risk_score", "ret5_pct", "ret20_pct", "volume_ratio20"
@@ -1659,13 +1818,24 @@ def build_portfolio_review_df(df_rank: pd.DataFrame) -> pd.DataFrame:
     review["unrealized_pnl"] = (review["position_value"] - review["position_cost"]).round(2)
     review["unrealized_pnl_pct"] = ((review["current_close"] / review["avg_cost"] - 1.0) * 100).round(2)
     review["target_gap_pct"] = (review["target_profit_pct"] - review["unrealized_pnl_pct"]).round(2)
-    review["advice"] = review.apply(portfolio_advice_label, axis=1)
+    review["holding_style"] = review.apply(holding_style_label, axis=1)
+    review["advice"] = review.apply(lambda row: portfolio_advice_label(row, market_scenario), axis=1)
+    review["market_scenario"] = market_scenario.get("label", "") if market_scenario else ""
+    review["market_stance"] = market_scenario.get("stance", "") if market_scenario else ""
     return review.sort_values(by=["unrealized_pnl_pct", "target_gap_pct"], ascending=[False, True]).reset_index(drop=True)
 
 
-def build_portfolio_message(df_rank: pd.DataFrame) -> str:
-    review = build_portfolio_review_df(df_rank)
+def build_portfolio_message(
+    df_rank: pd.DataFrame,
+    market_regime: Optional[dict] = None,
+    us_market: Optional[dict] = None,
+) -> str:
+    review = build_portfolio_review_df(df_rank, market_regime, us_market)
     lines = ["📣 持股檢查"]
+    if market_regime is not None and us_market is not None:
+        scenario = build_market_scenario(market_regime, us_market, df_rank)
+        lines.append(f"持股節奏：{scenario['label']} | {scenario['stance']}")
+        lines.append(f"今天重點：{scenario['exit_note']}")
     if review.empty:
         lines.append("portfolio.csv 目前沒有可分析的持股。")
         return "\n".join(lines)
@@ -1676,7 +1846,7 @@ def build_portfolio_message(df_rank: pd.DataFrame) -> str:
             lines.append(f"{r['ticker'].split('.')[0]} {r['advice']} | 尚未抓到行情，已同步加入觀察清單")
             continue
         lines.append(
-            f"{r['name']} ({r['ticker'].split('.')[0]}) {r['advice']} | "
+            f"{r['name']} ({r['ticker'].split('.')[0]}) [{r['holding_style']}] {r['advice']} | "
             f"現價 {round(float(current_close), 2)} / 成本 {round(float(r['avg_cost']), 2)} | "
             f"報酬 {r['unrealized_pnl_pct']}% / 目標 {r['target_profit_pct']}%"
         )
@@ -2221,7 +2391,8 @@ def save_reports(df_rank: pd.DataFrame, market_regime: dict, bt_steady: Optional
 
 
 def build_portfolio_report_markdown(df_rank: pd.DataFrame, market_regime: dict, us_market: dict) -> str:
-    review = build_portfolio_review_df(df_rank)
+    review = build_portfolio_review_df(df_rank, market_regime, us_market)
+    scenario = build_market_scenario(market_regime, us_market, df_rank)
     today = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     quote_line = f"- Quote: realtime({REALTIME_QUOTE_INTERVAL}) if available, else daily close"
     if not realtime_quotes_enabled():
@@ -2231,6 +2402,8 @@ def build_portfolio_report_markdown(df_rank: pd.DataFrame, market_regime: dict, 
         f"- Generated: {today}",
         f"- Market Regime: {market_regime['comment']}",
         f"- US Summary: {us_market['summary']}",
+        f"- Market Scenario: {scenario['label']} | {scenario['stance']}",
+        f"- Exit Focus: {scenario['exit_note']}",
         quote_line,
         "",
     ]
@@ -2249,7 +2422,7 @@ def build_portfolio_report_markdown(df_rank: pd.DataFrame, market_regime: dict, 
             lines.append(f"- {r['ticker'].split('.')[0]} | {r['advice']} | 尚未抓到行情，已同步加入觀察清單")
             continue
         lines.append(
-            f"- {r['name']} ({r['ticker'].split('.')[0]}) | 現價 {round(float(current_close), 2)} | "
+            f"- {r['name']} ({r['ticker'].split('.')[0]}) | {r['holding_style']} | 現價 {round(float(current_close), 2)} | "
             f"成本 {round(float(r['avg_cost']), 2)} | 報酬 {r['unrealized_pnl_pct']}% | "
             f"目標 {r['target_profit_pct']}% | 建議 {r['advice']}"
         )
@@ -2257,7 +2430,8 @@ def build_portfolio_report_markdown(df_rank: pd.DataFrame, market_regime: dict, 
 
 
 def build_portfolio_report_html(df_rank: pd.DataFrame, market_regime: dict, us_market: dict) -> str:
-    review = build_portfolio_review_df(df_rank)
+    review = build_portfolio_review_df(df_rank, market_regime, us_market)
+    scenario = build_market_scenario(market_regime, us_market, df_rank)
     review_html = "<p>None</p>" if review.empty else dataframe_to_html(review)
     auto_added_html = ""
     if AUTO_ADDED_TICKERS:
@@ -2273,6 +2447,8 @@ th {{ background: #f4f4f4; }}
 <h1>Portfolio Review</h1>
 <p><strong>Market:</strong> {market_regime['comment']}</p>
 <p><strong>US Summary:</strong> {us_market['summary']}</p>
+<p><strong>Scenario:</strong> {scenario['label']} | {scenario['stance']}</p>
+<p><strong>Exit Focus:</strong> {scenario['exit_note']}</p>
 {auto_added_html}
 <h2>Holdings</h2>{review_html}
 </body></html>"""
@@ -2353,7 +2529,7 @@ def main() -> int:
         last_state = load_last_state()
 
         if should_alert(df_rank, current_state, last_state, market_regime):
-            send_telegram_message(build_macro_message(market_regime, us_market))
+            send_telegram_message(build_macro_message(market_regime, us_market, df_rank))
             send_telegram_message(build_short_term_message(df_rank, market_regime, us_market))
             send_telegram_message(build_early_gem_message(df_rank, market_regime, us_market))
             send_telegram_message(build_midlong_message(df_rank, market_regime, us_market))
