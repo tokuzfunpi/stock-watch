@@ -1496,6 +1496,89 @@ def early_gem_reason(row: pd.Series) -> str:
     return " + ".join(reasons[:3]) if reasons else "早期轉強觀察"
 
 
+def watch_price_plan(row: pd.Series, watch_type: str) -> dict[str, float | str]:
+    close_ = float(row.get("close", 0.0) or 0.0)
+    ma20 = float(row.get("ma20", close_) or close_)
+    ma60 = float(row.get("ma60", ma20) or ma20)
+    ret5 = float(row.get("ret5_pct", 0.0) or 0.0)
+    ret20 = float(row.get("ret20_pct", 0.0) or 0.0)
+    risk = int(row.get("risk_score", 0) or 0)
+    signals = str(row.get("signals", "") or "")
+    holding_style = str(row.get("holding_style", "") or holding_style_label(row))
+
+    if close_ <= 0:
+        return {"add_price": 0.0, "trim_price": 0.0, "stop_price": 0.0, "note": ""}
+
+    if watch_type == "short":
+        if holding_style == "進攻持股":
+            pullback_pct = 0.05 if ("ACCEL" in signals or ret5 >= 8) else 0.04
+            trim_pct = 0.07 if ret20 < 12 else 0.08
+            stop_pct = 0.045 if risk <= 2 else 0.055
+            note = "進攻股用快進快出思維，先等更明確的回檔。"
+        elif holding_style == "防守持股":
+            pullback_pct = 0.025
+            trim_pct = 0.06 if ret20 < 8 else 0.07
+            stop_pct = 0.035 if risk <= 2 else 0.045
+            note = "防守股不用追價，偏向小回檔再看。"
+        else:
+            pullback_pct = 0.03
+            if "ACCEL" in signals:
+                pullback_pct = 0.04
+            if ret5 >= 8:
+                pullback_pct = max(pullback_pct, 0.05)
+            trim_pct = 0.08
+            if ret20 >= 12 or ("TREND" in signals and risk <= 2):
+                trim_pct = 0.1
+            stop_pct = 0.05 if risk <= 2 else 0.06
+            note = "短線先等回檔，不追現價。"
+
+        add_price = max(ma20, close_ * (1 - pullback_pct))
+        trim_price = close_ * (1 + trim_pct)
+        stop_price = min(ma20 * 0.98, close_ * (1 - stop_pct))
+    else:
+        if holding_style == "進攻持股":
+            pullback_pct = 0.06 if ret20 >= 10 else 0.05
+            trim_pct = 0.12 if ret20 < 15 else 0.14
+            stop_pct = 0.07 if risk <= 2 else 0.09
+            note = "進攻型中線股用分批策略，但失效也要看得更緊。"
+        elif holding_style == "防守持股":
+            pullback_pct = 0.035 if ret20 >= 5 else 0.025
+            trim_pct = 0.08 if ret20 < 10 else 0.1
+            stop_pct = 0.05 if risk <= 2 else 0.06
+            note = "防守型標的用配置角度看，不用太激進加減碼。"
+        else:
+            pullback_pct = 0.05
+            if risk <= 2 and ret20 >= 10:
+                pullback_pct = 0.06
+            trim_pct = 0.12
+            if ret20 >= 15:
+                trim_pct = 0.15
+            stop_pct = 0.08 if risk <= 2 else 0.1
+            note = "中線用分批看，不用急著一次買滿。"
+
+        add_price = max(ma20, ma60, close_ * (1 - pullback_pct))
+        trim_price = close_ * (1 + trim_pct)
+        stop_price = min(ma20 * 0.97, ma60 * 0.97, close_ * (1 - stop_pct))
+
+    return {
+        "add_price": round(add_price, 2),
+        "trim_price": round(trim_price, 2),
+        "stop_price": round(max(stop_price, 0.01), 2),
+        "note": note,
+    }
+
+
+def watch_price_plan_text(row: pd.Series, watch_type: str) -> str:
+    plan = watch_price_plan(row, watch_type)
+    if not plan["add_price"]:
+        return ""
+    return (
+        f"加碼參考 {plan['add_price']} / "
+        f"減碼參考 {plan['trim_price']} / "
+        f"失效 {plan['stop_price']}"
+    )
+
+
 def build_special_etf_summary(etf_candidates: pd.DataFrame) -> list[str]:
     if etf_candidates.empty:
         return ["今天指定 ETF / 債券標的沒有抓到完整資料，先看盤中報表。"]
@@ -1540,7 +1623,7 @@ def build_early_gem_message(df_rank: pd.DataFrame, market_regime: dict, us_marke
         lines.append(
             f"{int(r['rank'])}. {r['name']} ({r['ticker']}) | "
             f"{layer_label(r['layer'])} | 5日 {r['ret5_pct']}% / 20日 {r['ret20_pct']}% | "
-            f"{early_gem_reason(r)}"
+            f"{early_gem_reason(r)} | {watch_price_plan_text(r, 'short')}"
         )
     return "\n".join(lines).strip()
 
@@ -1607,7 +1690,7 @@ def build_short_term_message(df_rank: pd.DataFrame, market_regime: dict, us_mark
         lines.append(
             f"{int(r['rank'])}. {r['name']} ({r['ticker']}) {action} | "
             f"5日 {r['ret5_pct']}% / 量比 {r['volume_ratio20']} | "
-            f"{r['regime']}"
+            f"{r['regime']} | {watch_price_plan_text(r, 'short')}"
         )
     if not short_backups.empty:
         lines.append("")
@@ -1617,7 +1700,7 @@ def build_short_term_message(df_rank: pd.DataFrame, market_regime: dict, us_mark
             lines.append(
                 f"{int(r['rank'])}. {r['name']} ({r['ticker']}) {action} | "
                 f"5日 {r['ret5_pct']}% / 量比 {r['volume_ratio20']} | "
-                f"{r['regime']}"
+                f"{r['regime']} | {watch_price_plan_text(r, 'short')}"
             )
     return "\n".join(lines).strip()
 
@@ -1641,7 +1724,7 @@ def build_midlong_message(df_rank: pd.DataFrame, market_regime: dict, us_market:
         lines.append(
             f"{int(r['rank'])}. {r['name']} ({r['ticker']}) {action} | "
             f"20日 {r['ret20_pct']}% / 量比 {r['volume_ratio20']} | "
-            f"{r['regime']}"
+            f"{r['regime']} | {watch_price_plan_text(r, 'midlong')}"
         )
     if not midlong_backups.empty:
         lines.append("")
@@ -1651,7 +1734,7 @@ def build_midlong_message(df_rank: pd.DataFrame, market_regime: dict, us_market:
             lines.append(
                 f"{int(r['rank'])}. {r['name']} ({r['ticker']}) {action} | "
                 f"20日 {r['ret20_pct']}% / 量比 {r['volume_ratio20']} | "
-                f"{r['regime']}"
+                f"{r['regime']} | {watch_price_plan_text(r, 'midlong')}"
             )
     return "\n".join(lines).strip()
 
@@ -1997,6 +2080,7 @@ def upsert_alert_tracking(short_candidates: pd.DataFrame, midlong_candidates: pd
     cols = [
         "alert_date", "watch_type", "ticker", "name", "group", "grade", "rank", "setup_score", "risk_score",
         "layer", "signals", "regime", "action_label", "feedback_score", "feedback_label",
+        "add_price", "trim_price", "stop_price",
         "alert_close", "ret1_future_pct", "ret5_future_pct", "ret20_future_pct", "status"
     ]
 
@@ -2039,6 +2123,9 @@ def upsert_alert_tracking(short_candidates: pd.DataFrame, midlong_candidates: pd
                 "action_label": feedback_action_label(r, watch_type),
                 "feedback_score": float(r.get("feedback_score", 0.0)),
                 "feedback_label": str(r.get("feedback_label", "樣本不足")),
+                "add_price": watch_price_plan(r, watch_type).get("add_price"),
+                "trim_price": watch_price_plan(r, watch_type).get("trim_price"),
+                "stop_price": watch_price_plan(r, watch_type).get("stop_price"),
                 "alert_close": float(r["close"]),
                 "ret1_future_pct": None,
                 "ret5_future_pct": None,
@@ -2216,7 +2303,8 @@ def build_daily_report_markdown(df_rank: pd.DataFrame, market_regime: dict, bt_s
                 f"- #{int(r['rank'])} {r['name']} {r['ticker']} [{r['group']}/{layer_label(r['layer'])}] | "
                 f"setup {r['setup_score']} risk {r['risk_score']} | "
                 f"5D {r['ret5_pct']}% 10D {r['ret10_pct']}% 20D {r['ret20_pct']}% | 投機 {r['spec_risk_label']} | "
-                f"{r['signals']} | rankΔ {int(r['rank_change']):+d} setupΔ {int(r['setup_change']):+d}"
+                f"{r['signals']} | rankΔ {int(r['rank_change']):+d} setupΔ {int(r['setup_change']):+d} | "
+                f"{watch_price_plan_text(r, 'short')}"
             )
 
     lines.extend(["", "## Mid-Long Candidates", ""])
@@ -2240,7 +2328,8 @@ def build_daily_report_markdown(df_rank: pd.DataFrame, market_regime: dict, bt_s
                 f"- #{int(r['rank'])} {r['name']} {r['ticker']} [{r['group']}/{layer_label(r['layer'])}] | "
                 f"setup {r['setup_score']} risk {r['risk_score']} | "
                 f"10D {r['ret10_pct']}% 20D {r['ret20_pct']}% | 投機 {r['spec_risk_label']} | "
-                f"{r['signals']} | rankΔ {int(r['rank_change']):+d} setupΔ {int(r['setup_change']):+d}"
+                f"{r['signals']} | rankΔ {int(r['rank_change']):+d} setupΔ {int(r['setup_change']):+d} | "
+                f"{watch_price_plan_text(r, 'midlong')}"
             )
 
     special_etf_candidates = select_special_etf_candidates(df_rank)
@@ -2269,7 +2358,7 @@ def build_daily_report_markdown(df_rank: pd.DataFrame, market_regime: dict, bt_s
                 f"- #{int(r['rank'])} {r['name']} {r['ticker']} [{r['group']}/{layer_label(r['layer'])}] | "
                 f"setup {r['setup_score']} risk {r['risk_score']} | "
                 f"5D {r['ret5_pct']}% 20D {r['ret20_pct']}% | 投機 {r['spec_risk_label']} | "
-                f"{r['signals']} | 理由 {early_gem_reason(r)}"
+                f"{r['signals']} | 理由 {early_gem_reason(r)} | {watch_price_plan_text(r, 'short')}"
             )
 
     lines.extend(["", "## Prediction Feedback", ""])

@@ -41,6 +41,8 @@ from daily_theme_watchlist import (
     select_push_candidates,
     split_message,
     sync_watchlist_with_portfolio,
+    watch_price_plan,
+    watch_price_plan_text,
 )
 
 UPDATE_CHAT_ID_MAP_PATH = Path(__file__).resolve().parent.parent / "update_chat_id_map.py"
@@ -399,6 +401,78 @@ class ChatIdMapUpdateTests(unittest.TestCase):
         self.assertEqual(holding_style_label(fin_row), "防守持股")
         self.assertEqual(holding_style_label(attack_row), "進攻持股")
 
+    def test_watch_price_plan_produces_price_bands(self) -> None:
+        row = pd.Series(
+            {
+                "ticker": "2356.TW",
+                "close": 47.35,
+                "ma20": 43.32,
+                "ma60": 43.99,
+                "ret5_pct": 6.17,
+                "ret20_pct": 10.63,
+                "risk_score": 1,
+                "signals": "ACCEL",
+            }
+        )
+        plan = watch_price_plan(row, "short")
+        text = watch_price_plan_text(row, "short")
+
+        self.assertGreater(plan["trim_price"], plan["add_price"])
+        self.assertGreater(plan["add_price"], plan["stop_price"])
+        self.assertIn("加碼參考", text)
+        self.assertIn("減碼參考", text)
+        self.assertIn("失效", text)
+
+    def test_watch_price_plan_changes_by_holding_style(self) -> None:
+        attack = pd.Series(
+            {
+                "ticker": "3013.TW",
+                "group": "theme",
+                "signals": "ACCEL,TREND",
+                "close": 100.0,
+                "ma20": 95.0,
+                "ma60": 92.0,
+                "ret5_pct": 9.0,
+                "ret20_pct": 14.0,
+                "risk_score": 2,
+            }
+        )
+        core = pd.Series(
+            {
+                "ticker": "2330.TW",
+                "group": "core",
+                "signals": "TREND",
+                "close": 100.0,
+                "ma20": 95.0,
+                "ma60": 92.0,
+                "ret5_pct": 9.0,
+                "ret20_pct": 14.0,
+                "risk_score": 2,
+            }
+        )
+        defensive = pd.Series(
+            {
+                "ticker": "0050.TW",
+                "group": "etf",
+                "signals": "TREND",
+                "close": 100.0,
+                "ma20": 95.0,
+                "ma60": 92.0,
+                "ret5_pct": 9.0,
+                "ret20_pct": 14.0,
+                "risk_score": 2,
+            }
+        )
+
+        attack_plan = watch_price_plan(attack, "short")
+        core_plan = watch_price_plan(core, "short")
+        defensive_plan = watch_price_plan(defensive, "short")
+
+        self.assertLessEqual(attack_plan["add_price"], core_plan["add_price"])
+        self.assertLessEqual(core_plan["add_price"], defensive_plan["add_price"])
+        self.assertLessEqual(attack_plan["trim_price"], core_plan["trim_price"])
+        self.assertLessEqual(defensive_plan["trim_price"], core_plan["trim_price"])
+
     def test_portfolio_advice_flags_high_risk_target_hit(self) -> None:
         row = pd.Series(
             {
@@ -666,12 +740,16 @@ class PushMessageTests(unittest.TestCase):
         self.assertNotIn("美股昨晚偏強", short_message)
         self.assertNotIn("觸發來源", short_message)
         self.assertIn("5日 9.0%", short_message)
+        self.assertIn("加碼參考", short_message)
+        self.assertIn("減碼參考", short_message)
+        self.assertIn("失效", short_message)
         self.assertTrue(any(label in short_message for label in ["等拉回", "開高不追", "續抱觀察", "分批落袋"]))
 
         self.assertIn("中長線可布局", midlong_message)
         self.assertNotIn("美股昨晚偏強", midlong_message)
         self.assertNotIn("觸發來源", midlong_message)
         self.assertIn("20日 14.0%", midlong_message)
+        self.assertIn("加碼參考", midlong_message)
         self.assertTrue(any(label in midlong_message for label in ["續抱", "可分批", "觀察", "分批落袋"]))
 
     def test_special_etf_message_renders_requested_tickers(self) -> None:
