@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import csv
+import contextlib
 import hashlib
+import io
 import json
 import logging
 import os
 import re
 import sys
+import time
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -23,6 +26,7 @@ BASE_DIR = Path(__file__).resolve().parent
 CONFIG_PATH = Path(os.getenv("CONFIG_PATH", BASE_DIR / "config.json"))
 WATCHLIST_CSV = Path(os.getenv("WATCHLIST_CSV", BASE_DIR / "watchlist.csv"))
 PORTFOLIO_CSV = Path(os.getenv("PORTFOLIO_CSV", BASE_DIR / "portfolio.csv"))
+CHAT_IDS_PATH = Path(os.getenv("CHAT_IDS_PATH", BASE_DIR / "chat_ids"))
 OUTDIR = Path(os.getenv("OUTDIR", BASE_DIR / "theme_watchlist_daily"))
 OUTDIR.mkdir(parents=True, exist_ok=True)
 
@@ -48,12 +52,42 @@ LOG_DIR = OUTDIR / "logs"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "").strip()
-TELEGRAM_CHAT_IDS = [int(x.strip()) for x in os.getenv("TELEGRAM_CHAT_IDS", "").split(",") if x.strip()]
 HTTP_TIMEOUT = int(os.getenv("HTTP_TIMEOUT", "20"))
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 FORCE_RUN = os.getenv("FORCE_RUN", "").strip().lower() in {"1", "true", "yes", "y"}
 LOCAL_TZ = ZoneInfo(os.getenv("LOCAL_TZ", "Asia/Taipei"))
 TWSE_NAME_CACHE: dict[str, str] = {}
+REALTIME_QUOTE_INTERVAL = os.getenv("REALTIME_QUOTE_INTERVAL", "1m").strip()
+REALTIME_QUOTE_PERIOD = os.getenv("REALTIME_QUOTE_PERIOD", "1d").strip()
+
+
+def realtime_quotes_enabled() -> bool:
+    return os.getenv("REALTIME_QUOTES", "1").strip().lower() in {"1", "true", "yes", "y"}
+
+
+_REALTIME_QUOTE_CACHE: dict[tuple[str, str, tuple[str, ...]], tuple[float, dict[str, float]]] = {}
+
+
+def parse_chat_ids(raw: str) -> list[int]:
+    tokens = re.split(r"[\s,]+", str(raw or "").strip())
+    chat_ids: list[int] = []
+    for token in tokens:
+        if not token:
+            continue
+        chat_ids.append(int(token))
+    return chat_ids
+
+
+def load_telegram_chat_ids(chat_ids_path: Path) -> list[int]:
+    env_value = os.getenv("TELEGRAM_CHAT_IDS", "").strip()
+    if env_value:
+        return parse_chat_ids(env_value)
+    if not chat_ids_path.exists():
+        return []
+    return parse_chat_ids(chat_ids_path.read_text(encoding="utf-8-sig"))
+
+
+TELEGRAM_CHAT_IDS = load_telegram_chat_ids(CHAT_IDS_PATH)
 
 
 @dataclass
@@ -94,6 +128,18 @@ class GroupWeights:
 
 
 @dataclass
+class StrategyConfig:
+    base_low250_mult: float
+    base_range20_max: float
+    rebreak_vol_ratio: float
+    surge_ret20: float
+    surge_vol_ratio: float
+    trend_ret20: float
+    accel_ret5: float
+    accel_vol_ratio: float
+
+
+@dataclass
 class AppConfig:
     yf_period: str
     state_enabled: bool
@@ -104,11 +150,13 @@ class AppConfig:
     notify: NotificationRule
     backtest: BacktestConfig
     group_weights: GroupWeights
+    strategy: StrategyConfig
 
 
 def load_config(path: Path) -> AppConfig:
     raw = json.loads(path.read_text(encoding="utf-8"))
     notify_raw = raw["notify"]
+    strat_raw = raw.get("strategy", {})
     return AppConfig(
         yf_period=raw.get("yf_period", "3y"),
         state_enabled=bool(raw.get("state_enabled", True)),
@@ -128,6 +176,16 @@ def load_config(path: Path) -> AppConfig:
         ),
         backtest=BacktestConfig(**raw["backtest"]),
         group_weights=GroupWeights(**raw["group_weights"]),
+        strategy=StrategyConfig(
+            base_low250_mult=float(strat_raw.get("base_low250_mult", 1.20)),
+            base_range20_max=float(strat_raw.get("base_range20_max", 0.15)),
+            rebreak_vol_ratio=float(strat_raw.get("rebreak_vol_ratio", 1.35)),
+            surge_ret20=float(strat_raw.get("surge_ret20", 0.22)),
+            surge_vol_ratio=float(strat_raw.get("surge_vol_ratio", 1.55)),
+            trend_ret20=float(strat_raw.get("trend_ret20", 0.08)),
+            accel_ret5=float(strat_raw.get("accel_ret5", 0.08)),
+            accel_vol_ratio=float(strat_raw.get("accel_vol_ratio", 1.3)),
+        ),
     )
 
 
@@ -363,7 +421,7 @@ SPECIAL_ETF_TICKERS = [
     "0050.TW",
     "00878.TW",
 ]
-SCHEDULE_TARGET_TIMES = ["08:37", "08:52"]
+SCHEDULE_TARGET_TIMES = ["08:45", "14:00"]
 
 
 def yf_download_one(ticker: str, period: str) -> pd.DataFrame:
@@ -380,6 +438,109 @@ def yf_download_one(ticker: str, period: str) -> pd.DataFrame:
     if len(df) < 250:
         raise ValueError(f"Insufficient history for {ticker}: {len(df)} rows")
     return df
+
+
+@contextlib.contextmanager
+def _suppress_yfinance_noise() -> None:
+    # yfinance sometimes emits noisy per-ticker errors (e.g. "possibly delisted") even when we
+    # treat quotes as best-effort. Suppress internal chatter but keep our own logs.
+    targets = ["yfinance", "yfinance.utils", "yfinance.base", "yfinance.multi"]
+    prev: list[tuple[logging.Logger, int, bool]] = []
+    for name in targets:
+        lg = logging.getLogger(name)
+        prev.append((lg, lg.level, lg.propagate))
+        lg.setLevel(logging.CRITICAL)
+        lg.propagate = False
+    try:
+        with contextlib.redirect_stderr(io.StringIO()):
+            yield
+    finally:
+        for lg, level, propagate in prev:
+            lg.setLevel(level)
+            lg.propagate = propagate
+
+
+def _yf_download_last_close_multi(
+    tickers: list[str],
+    *,
+    period: str,
+    interval: str,
+) -> dict[str, float]:
+    if not tickers:
+        return {}
+    with _suppress_yfinance_noise():
+        df = yf.download(
+            " ".join(tickers),
+            period=period,
+            interval=interval,
+            auto_adjust=True,
+            progress=False,
+            threads=False,
+            group_by="ticker",
+        )
+
+    if df is None or getattr(df, "empty", True):
+        return {}
+
+    out: dict[str, float] = {}
+    try:
+        if isinstance(df.columns, pd.MultiIndex):
+            for ticker in tickers:
+                try:
+                    if ticker not in df.columns.get_level_values(0):
+                        continue
+                    sub = df[ticker]
+                    if "Close" not in sub.columns:
+                        continue
+                    series = sub["Close"].dropna()
+                    if series.empty:
+                        continue
+                    out[ticker] = float(series.iloc[-1])
+                except Exception:
+                    continue
+        else:
+            if "Close" in df.columns and len(tickers) == 1:
+                series = df["Close"].dropna()
+                if not series.empty:
+                    out[tickers[0]] = float(series.iloc[-1])
+    except Exception:
+        return {}
+    return out
+
+
+def fetch_realtime_last_close(tickers: list[str]) -> dict[str, float]:
+    if not realtime_quotes_enabled():
+        return {}
+    uniq = [str(t).strip() for t in tickers if str(t).strip()]
+    seen: set[str] = set()
+    uniq = [t for t in uniq if not (t in seen or seen.add(t))]
+    if not uniq:
+        return {}
+
+    cache_key = (REALTIME_QUOTE_PERIOD, REALTIME_QUOTE_INTERVAL, tuple(sorted(uniq)))
+    cached = _REALTIME_QUOTE_CACHE.get(cache_key)
+    if cached:
+        ts, data = cached
+        ttl = 300 if not data else 30
+        if time.time() - ts <= ttl:
+            return dict(data)
+
+    out = _yf_download_last_close_multi(
+        uniq,
+        period=REALTIME_QUOTE_PERIOD,
+        interval=REALTIME_QUOTE_INTERVAL,
+    )
+
+    # Intraday quotes can be flaky for TW symbols; fallback to last daily close.
+    if not out:
+        out = _yf_download_last_close_multi(
+            uniq,
+            period="5d",
+            interval="1d",
+        )
+
+    _REALTIME_QUOTE_CACHE[cache_key] = (time.time(), dict(out))
+    return dict(out)
 
 
 def add_indicators(df: pd.DataFrame, ma_period: int = 20) -> pd.DataFrame:
@@ -403,6 +564,15 @@ def add_indicators(df: pd.DataFrame, ma_period: int = 20) -> pd.DataFrame:
     ) / out["Close"]
     out["DistToLow250"] = out["Close"] / out["Low250D"] - 1.0
     out["VolumeRatio20"] = out["Volume"] / out["AvgVol20"]
+
+    # ATR calculation
+    tr = pd.concat([
+        out["High"] - out["Low"],
+        (out["High"] - out["Close"].shift(1)).abs(),
+        (out["Low"] - out["Close"].shift(1)).abs()
+    ], axis=1).max(axis=1)
+    out["ATR14"] = tr.rolling(14).mean()
+    out["ATR_Pct"] = out["ATR14"] / out["Close"]
 
     if ma_period not in [5, 10, 20, 60, 120, 250]:
         out[f"MA{ma_period}"] = out["Close"].rolling(ma_period).mean()
@@ -486,7 +656,22 @@ def speculative_risk_label(score: int) -> str:
     return "正常"
 
 
-def detect_row(df: pd.DataFrame, ticker: str, name: str, group: str, layer: str) -> dict:
+def volatility_label(atr_pct: float) -> str:
+    if atr_pct <= 0:
+        return "未知"
+    if atr_pct < 2.0:
+        return "🧊 穩健"
+    if atr_pct < 4.0:
+        return "⚖️ 標準"
+    if atr_pct < 6.5:
+        return "🔥 活潑"
+    return "⚡ 劇烈"
+
+
+def detect_row(df: pd.DataFrame, ticker: str, name: str, group: str, layer: str, strat: Optional[StrategyConfig] = None) -> dict:
+    if strat is None:
+        strat = CONFIG.strategy
+
     x = df.iloc[-1]
     prev = df.iloc[-2] if len(df) >= 2 else x
 
@@ -511,40 +696,40 @@ def detect_row(df: pd.DataFrame, ticker: str, name: str, group: str, layer: str)
 
     base_signal = bool(
         low250 is not None
-        and close_ <= low250 * 1.20
+        and close_ <= low250 * strat.base_low250_mult
         and avg_vol20 > 0
         and volume < avg_vol20
-        and range20 < 0.15
+        and range20 < strat.base_range20_max
     )
     rebreak_signal = bool(
         ma20 is not None and ma60 is not None and avg_vol20 > 0
         and close_ > ma20 and close_ > ma60
-        and vol_ratio20 > 1.35
+        and vol_ratio20 > strat.rebreak_vol_ratio
         and pd.notna(prev.get("MA20"))
         and float(prev["Close"]) <= float(prev["MA20"])
     )
-    surge_signal = bool(ret20 > 0.22 and vol_ratio20 > 1.55)
+    surge_signal = bool(ret20 > strat.surge_ret20 and vol_ratio20 > strat.surge_vol_ratio)
     trend_signal = bool(
         ma20 is not None and ma60 is not None
-        and close_ > ma20 and ma20 > ma60 and ret20 > 0.08
+        and close_ > ma20 and ma20 > ma60 and ret20 > strat.trend_ret20
     )
     accel_signal = bool(
-        (ret5 > 0.08 and vol_ratio20 > 1.3 and ret20 > 0)
+        (ret5 > strat.accel_ret5 and vol_ratio20 > strat.accel_vol_ratio and ret20 > 0)
         or (ret10 > 0.12 and vol_ratio20 > 1.2 and ret20 > 0)
     )
     pullback_signal = bool(drawdown120 <= -0.20)
 
     setup_score = 0
-    if low250 is not None and close_ <= low250 * 1.20:
+    if low250 is not None and close_ <= low250 * strat.base_low250_mult:
         setup_score += 2
-    elif low250 is not None and close_ <= low250 * 1.35:
+    elif low250 is not None and close_ <= low250 * (strat.base_low250_mult + 0.15):
         setup_score += 1
 
     if avg_vol20 > 0 and volume < avg_vol20:
         setup_score += 1
-    if range20 < 0.15:
+    if range20 < strat.base_range20_max:
         setup_score += 1
-    if range20 < 0.10:
+    if range20 < (strat.base_range20_max - 0.05):
         setup_score += 1
     if ma20 is not None and close_ > ma20:
         setup_score += 1
@@ -673,6 +858,8 @@ def detect_row(df: pd.DataFrame, ticker: str, name: str, group: str, layer: str)
         "regime": regime,
         "spec_risk_score": int(spec_score),
         "spec_risk_label": speculative_risk_label(spec_score),
+        "atr_pct": round(float(x.get("ATR_Pct", 0.0)) * 100, 2) if pd.notna(x.get("ATR_Pct")) else 0.0,
+        "volatility_tag": volatility_label(round(float(x.get("ATR_Pct", 0.0)) * 100, 2) if pd.notna(x.get("ATR_Pct")) else 0.0),
     }
 
 
@@ -960,6 +1147,71 @@ def get_us_market_reference() -> dict:
     return {"summary": summary, "tech_bias": tech_bias, "rows": rows}
 
 
+def build_market_scenario(market_regime: dict, us_market: dict, df_rank: Optional[pd.DataFrame] = None) -> dict:
+    ret20_pct = float(market_regime.get("ret20_pct", 0.0) or 0.0)
+    volume_ratio20 = float(market_regime.get("volume_ratio20", 1.0) or 1.0)
+    is_bullish = bool(market_regime.get("is_bullish", False))
+    us_summary = str(us_market.get("summary", ""))
+    us_weak = ("偏弱" in us_summary) or ("續殺" in us_summary)
+
+    hot_count = 0
+    strong_count = 0
+    candidate_count = 0
+    if df_rank is not None and not df_rank.empty:
+        working = df_rank.copy()
+        for col in ["risk_score", "ret5_pct", "ret20_pct", "volume_ratio20", "setup_score"]:
+            if col in working.columns:
+                working[col] = pd.to_numeric(working[col], errors="coerce")
+        candidate_count = int(min(len(working), 20))
+        focus = working.head(candidate_count).copy()
+        if not focus.empty:
+            hot_mask = (
+                (focus.get("risk_score", pd.Series(dtype=float)).fillna(0) >= 5)
+                | (focus.get("ret5_pct", pd.Series(dtype=float)).fillna(0) >= 15)
+            )
+            strong_mask = (
+                (focus.get("setup_score", pd.Series(dtype=float)).fillna(0) >= 6)
+                & (focus.get("risk_score", pd.Series(dtype=float)).fillna(9) <= 3)
+                & (focus.get("ret20_pct", pd.Series(dtype=float)).fillna(-99) >= 0)
+            )
+            hot_count = int(hot_mask.sum())
+            strong_count = int(strong_mask.sum())
+
+    hot_ratio = (hot_count / candidate_count) if candidate_count > 0 else 0.0
+    strong_ratio = (strong_count / candidate_count) if candidate_count > 0 else 0.0
+
+    if not is_bullish or (ret20_pct <= 3 and us_weak):
+        return {
+            "label": "明顯修正盤",
+            "stance": "先保守",
+            "focus": "短線先縮手，中線也以守部位、等重新站回為主。",
+            "exit_note": "若持股跌破短線支撐或反彈無量，優先減碼，不用硬等。",
+        }
+
+    if is_bullish and ret20_pct >= 12 and strong_ratio < 0.35:
+        return {
+            "label": "權值撐盤、個股轉弱",
+            "stance": "選股更重要",
+            "focus": "指數可能還不差，但不是每一檔都好做，先看個股延續性。",
+            "exit_note": "若持股不跟漲、開高走低或量縮轉弱，要比大盤更早處理。",
+        }
+
+    if is_bullish and (ret20_pct >= 10 or volume_ratio20 >= 1.2) and (hot_ratio >= 0.3 or us_weak):
+        return {
+            "label": "高檔震盪盤",
+            "stance": "邊做邊收",
+            "focus": "行情還熱，但追價風險明顯變高，進場要更挑買點。",
+            "exit_note": "若隔日不續強、出現長上影或爆量不漲，就先分批落袋。",
+        }
+
+    return {
+        "label": "強勢延伸盤",
+        "stance": "順勢但不追價",
+        "focus": "主流趨勢仍在，但仍以等拉回取代追高。",
+        "exit_note": "有獲利的部位可採分批落袋，避免只看進場不管出場。",
+    }
+
+
 def reorder_priority_groups(df_rank: pd.DataFrame) -> pd.DataFrame:
     rule = CONFIG.notify
     df = df_rank.copy()
@@ -1123,17 +1375,55 @@ def short_term_action_label(row: pd.Series) -> str:
         return "分批落袋"
     if ret5 >= 15 or (risk >= 4 and ret5 >= 10):
         return "開高不追"
-    if "ACCEL" in signals and vol_ratio >= 1.3 and ret5 <= 12:
-        return "可追"
-    if ret5 >= 10:
+    # 非嚴格可追的加速型，預設以「等拉回」處理（收斂追價、偏 5D/20D 延續）
+    if ("ACCEL" in signals and "TREND" in signals) and risk <= 3 and vol_ratio >= 1.0 and float(row.get("ret20_pct", 0.0) or 0.0) >= 0 and ret5 >= 4:
+        return "等拉回"
+    if ret5 >= 8:
         return "等拉回"
     if row["setup_change"] > 0 or row["rank_change"] > 0:
         return "續抱觀察"
     return "續追蹤"
 
 
+def is_strict_short_chase(row: pd.Series) -> bool:
+    try:
+        risk = int(row["risk_score"])
+        ret5 = float(row["ret5_pct"])
+        vol_ratio = float(row["volume_ratio20"])
+        signals = str(row["signals"])
+        setup_score = float(row.get("setup_score", 0.0)) if pd.notna(row.get("setup_score")) else 0.0
+        ret20 = float(row.get("ret20_pct", 0.0)) if pd.notna(row.get("ret20_pct")) else 0.0
+    except Exception:
+        return False
+
+    if "ACCEL" not in signals:
+        return False
+    if "TREND" not in signals:
+        return False
+    if "SURGE" in signals:
+        return False
+    if risk > 2:
+        return False
+    # "可追" 盡量偏向 5D/20D 的延續，而不是 1D 的追價衝動：
+    # - 需要更強的量能確認
+    # - ret20 要夠大（代表中期趨勢有料）
+    # - ret5 不要過熱（避免隔日回檔造成 1D 表現差）
+    if vol_ratio < 1.6:
+        return False
+    if ret5 < 0.5:
+        return False
+    if ret5 > 8:
+        return False
+    if ret20 < 10:
+        return False
+    if setup_score < 9:
+        return False
+    return True
+
+
 def is_short_term_buyable(row: pd.Series) -> bool:
-    return short_term_action_label(row) in {"可追", "等拉回"}
+    action = short_term_action_label(row)
+    return action == "等拉回"
 
 
 def midlong_action_label(row: pd.Series) -> str:
@@ -1256,6 +1546,102 @@ def early_gem_reason(row: pd.Series) -> str:
     return " + ".join(reasons[:3]) if reasons else "早期轉強觀察"
 
 
+def watch_price_plan(row: pd.Series, watch_type: str) -> dict[str, float | str]:
+    close_ = float(row.get("close", 0.0) or 0.0)
+    ma20 = float(row.get("ma20", close_) or close_)
+    ma60 = float(row.get("ma60", ma20) or ma20)
+    ret5 = float(row.get("ret5_pct", 0.0) or 0.0)
+    ret20 = float(row.get("ret20_pct", 0.0) or 0.0)
+    risk = int(row.get("risk_score", 0) or 0)
+    signals = str(row.get("signals", "") or "")
+    holding_style = str(row.get("holding_style", "") or holding_style_label(row))
+    atr_pct = float(row.get("atr_pct", 0.0) or 0.0) / 100.0
+
+    if close_ <= 0:
+        return {"add_price": 0.0, "trim_price": 0.0, "stop_price": 0.0, "note": ""}
+
+    # Use ATR as a base for volatility adjustment if available, else fallback to defaults
+    vol_mult = max(atr_pct / 0.03, 0.8) if atr_pct > 0 else 1.0
+
+    if watch_type == "short":
+        if holding_style == "進攻持股":
+            pullback_pct = 0.05 if ("ACCEL" in signals or ret5 >= 8) else 0.04
+            trim_pct = 0.07 if ret20 < 12 else 0.08
+            stop_pct = 0.045 if risk <= 2 else 0.055
+            note = "進攻股用快進快出思維，等更明確的回檔。"
+        elif holding_style == "防守持股":
+            pullback_pct = 0.025
+            trim_pct = 0.06 if ret20 < 8 else 0.07
+            stop_pct = 0.035 if risk <= 2 else 0.045
+            note = "防守股不用追價，偏向小回檔再看。"
+        else:
+            pullback_pct = 0.03
+            if "ACCEL" in signals:
+                pullback_pct = 0.04
+            if ret5 >= 8:
+                pullback_pct = max(pullback_pct, 0.05)
+            trim_pct = 0.08
+            if ret20 >= 12 or ("TREND" in signals and risk <= 2):
+                trim_pct = 0.1
+            stop_pct = 0.05 if risk <= 2 else 0.06
+            note = "短線先等回檔，不追現價。"
+
+        # Apply volatility adjustment
+        pullback_pct *= vol_mult
+        stop_pct *= vol_mult
+
+        add_price = max(ma20, close_ * (1 - pullback_pct))
+        trim_price = close_ * (1 + trim_pct)
+        stop_price = min(ma20 * 0.98, close_ * (1 - stop_pct))
+    else:
+        if holding_style == "進攻持股":
+            pullback_pct = 0.06 if ret20 >= 10 else 0.05
+            trim_pct = 0.12 if ret20 < 15 else 0.14
+            stop_pct = 0.07 if risk <= 2 else 0.09
+            note = "進攻型中線股用分批策略，但失效也要看得更緊。"
+        elif holding_style == "防守持股":
+            pullback_pct = 0.035 if ret20 >= 5 else 0.025
+            trim_pct = 0.08 if ret20 < 10 else 0.1
+            stop_pct = 0.05 if risk <= 2 else 0.06
+            note = "防守型標的用配置角度看，不用太激進加減碼。"
+        else:
+            pullback_pct = 0.05
+            if risk <= 2 and ret20 >= 10:
+                pullback_pct = 0.06
+            trim_pct = 0.12
+            if ret20 >= 15:
+                trim_pct = 0.15
+            stop_pct = 0.08 if risk <= 2 else 0.1
+            note = "中線用分批看，不用急著一次買滿。"
+
+        # Apply volatility adjustment (less aggressive for midlong)
+        vol_mult_mid = 1.0 + (vol_mult - 1.0) * 0.5
+        pullback_pct *= vol_mult_mid
+        stop_pct *= vol_mult_mid
+
+        add_price = max(ma20, ma60, close_ * (1 - pullback_pct))
+        trim_price = close_ * (1 + trim_pct)
+        stop_price = min(ma20 * 0.97, ma60 * 0.97, close_ * (1 - stop_pct))
+
+    return {
+        "add_price": round(add_price, 2),
+        "trim_price": round(trim_price, 2),
+        "stop_price": round(max(stop_price, 0.01), 2),
+        "note": note,
+    }
+
+
+def watch_price_plan_text(row: pd.Series, watch_type: str) -> str:
+    plan = watch_price_plan(row, watch_type)
+    if not plan["add_price"]:
+        return ""
+    return (
+        f"加碼參考 {plan['add_price']} / "
+        f"減碼參考 {plan['trim_price']} / "
+        f"失效 {plan['stop_price']}"
+    )
+
+
 def build_special_etf_summary(etf_candidates: pd.DataFrame) -> list[str]:
     if etf_candidates.empty:
         return ["今天指定 ETF / 債券標的沒有抓到完整資料，先看盤中報表。"]
@@ -1300,7 +1686,7 @@ def build_early_gem_message(df_rank: pd.DataFrame, market_regime: dict, us_marke
         lines.append(
             f"{int(r['rank'])}. {r['name']} ({r['ticker']}) | "
             f"{layer_label(r['layer'])} | 5日 {r['ret5_pct']}% / 20日 {r['ret20_pct']}% | "
-            f"{early_gem_reason(r)}"
+            f"{early_gem_reason(r)} | {watch_price_plan_text(r, 'short')}"
         )
     return "\n".join(lines).strip()
 
@@ -1361,23 +1747,26 @@ def build_short_term_message(df_rank: pd.DataFrame, market_regime: dict, us_mark
 
     lines.append("")
     lines.append("解讀：這一區只放今天相對可考慮出手的短線標的；太熱或只適合續看的，會放到短線觀察。")
+    lines.append("短線主看 5 個交易日；1D 只當輔助參考。")
     lines.append("")
     for _, r in short_candidates.iterrows():
         action = short_term_action_label(r)
+        vol_tag = r.get("volatility_tag", "")
         lines.append(
-            f"{int(r['rank'])}. {r['name']} ({r['ticker']}) {action} | "
+            f"{int(r['rank'])}. {r['name']} ({r['ticker']}) {action} | {vol_tag} | "
             f"5日 {r['ret5_pct']}% / 量比 {r['volume_ratio20']} | "
-            f"{r['regime']}"
+            f"{r['regime']} | {watch_price_plan_text(r, 'short')}"
         )
     if not short_backups.empty:
         lines.append("")
         lines.append("短線觀察 (最多5檔)")
         for _, r in short_backups.iterrows():
             action = short_term_action_label(r)
+            vol_tag = r.get("volatility_tag", "")
             lines.append(
-                f"{int(r['rank'])}. {r['name']} ({r['ticker']}) {action} | "
+                f"{int(r['rank'])}. {r['name']} ({r['ticker']}) {action} | {vol_tag} | "
                 f"5日 {r['ret5_pct']}% / 量比 {r['volume_ratio20']} | "
-                f"{r['regime']}"
+                f"{r['regime']} | {watch_price_plan_text(r, 'short')}"
             )
     return "\n".join(lines).strip()
 
@@ -1395,33 +1784,49 @@ def build_midlong_message(df_rank: pd.DataFrame, market_regime: dict, us_market:
 
     lines.append("")
     lines.append("解讀：這一區偏向可布局的趨勢股；強但不一定適合現在進場的，會放到中長線觀察。")
+    lines.append("中線主看 20 個交易日；1D / 5D 只當輔助觀察。")
     lines.append("")
     for _, r in midlong_candidates.iterrows():
         action = midlong_action_label(r)
+        vol_tag = r.get("volatility_tag", "")
         lines.append(
-            f"{int(r['rank'])}. {r['name']} ({r['ticker']}) {action} | "
+            f"{int(r['rank'])}. {r['name']} ({r['ticker']}) {action} | {vol_tag} | "
             f"20日 {r['ret20_pct']}% / 量比 {r['volume_ratio20']} | "
-            f"{r['regime']}"
+            f"{r['regime']} | {watch_price_plan_text(r, 'midlong')}"
         )
     if not midlong_backups.empty:
         lines.append("")
         lines.append("中長線觀察 (最多5檔)")
         for _, r in midlong_backups.iterrows():
             action = midlong_action_label(r)
+            vol_tag = r.get("volatility_tag", "")
             lines.append(
-                f"{int(r['rank'])}. {r['name']} ({r['ticker']}) {action} | "
+                f"{int(r['rank'])}. {r['name']} ({r['ticker']}) {action} | {vol_tag} | "
                 f"20日 {r['ret20_pct']}% / 量比 {r['volume_ratio20']} | "
-                f"{r['regime']}"
+                f"{r['regime']} | {watch_price_plan_text(r, 'midlong')}"
             )
     return "\n".join(lines).strip()
 
 
-def build_macro_message(market_regime: dict, us_market: dict) -> str:
+def build_macro_message(market_regime: dict, us_market: dict, df_rank: Optional[pd.DataFrame] = None) -> str:
+    scenario = build_market_scenario(market_regime, us_market, df_rank)
     lines = [
         "📣 大盤 / 美股摘要",
         market_regime["comment"],
         us_market["summary"],
+        f"盤勢情境：{scenario['label']} | 目前節奏：{scenario['stance']}",
+        f"操作重點：{scenario['focus']}",
+        f"出場提醒：{scenario['exit_note']}",
     ]
+    
+    # Heat Bias Check
+    if df_rank is not None and not df_rank.empty:
+        hot_count = int((df_rank.head(10)["risk_score"].fillna(0) >= 5).sum())
+        if hot_count >= 4 and scenario['label'] in ["強勢延伸盤", "高檔震盪盤"]:
+            lines.append("⚠️ 注意：目前前排標的熱度高（Heat Bias 偏強），勝率可能受大盤強勢墊高，不宜過度追價。")
+        elif hot_count >= 7:
+            lines.append("⚠️ 警訊：極度過熱，多數標的已入風險區，優先守住獲利。")
+
     lines.extend(runtime_context_lines())
     if us_market.get("tech_bias"):
         lines.append(us_market["tech_bias"])
@@ -1430,7 +1835,31 @@ def build_macro_message(market_regime: dict, us_market: dict) -> str:
     return "\n".join(lines).strip()
 
 
-def portfolio_advice_label(row: pd.Series) -> str:
+def holding_style_label(row: pd.Series) -> str:
+    ticker = str(row.get("ticker", "") or "").upper()
+    group = str(row.get("group", "") or "").lower()
+    layer = str(row.get("layer", "") or "").lower()
+    signals = str(row.get("signals", "") or "")
+    risk_score = int(row.get("risk_score", 0)) if pd.notna(row.get("risk_score")) else 0
+    ret20_pct = float(row.get("ret20_pct", 0.0)) if pd.notna(row.get("ret20_pct")) else 0.0
+
+    if any(tag in ticker for tag in [".TWO", ".TW"]):
+        code = ticker.split(".")[0]
+    else:
+        code = ticker
+
+    if group == "etf" or code.startswith("00"):
+        return "防守持股"
+    if code in {"2882", "2884", "2886", "2890", "2891", "2892"}:
+        return "防守持股"
+    if layer in {"midlong_core", "defensive_watch"} or group == "core":
+        return "核心持股"
+    if "ACCEL" in signals or risk_score >= 4 or ret20_pct >= 15:
+        return "進攻持股"
+    return "核心持股"
+
+
+def portfolio_advice_label(row: pd.Series, market_scenario: Optional[dict] = None) -> str:
     current_close = row.get("current_close")
     if pd.isna(current_close):
         return "已補進觀察清單"
@@ -1441,25 +1870,91 @@ def portfolio_advice_label(row: pd.Series) -> str:
     signals = str(row.get("signals", ""))
     ret20_pct = float(row.get("ret20_pct", 0.0)) if pd.notna(row.get("ret20_pct")) else 0.0
     volume_ratio20 = float(row.get("volume_ratio20", 0.0)) if pd.notna(row.get("volume_ratio20")) else 0.0
+    holding_style = str(row.get("holding_style", "") or holding_style_label(row))
 
     if profit_pct >= target_pct and risk_score >= 4:
-        return "達標可落袋"
-    if profit_pct >= target_pct:
-        return "達標續抱"
-    if profit_pct <= -8 or risk_score >= 5:
-        return "轉弱留意"
-    if ("TREND" in signals or "REBREAK" in signals) and risk_score <= 3:
-        return "續抱"
-    if "ACCEL" in signals and risk_score <= 2 and profit_pct > 0 and ret20_pct >= 0 and volume_ratio20 >= 1.0:
-        return "強勢續抱"
-    if profit_pct > 0 and risk_score <= 3 and ret20_pct >= 0:
-        return "續抱觀察"
-    return "中性觀察"
+        base = "達標可落袋"
+    elif profit_pct >= target_pct:
+        base = "達標續抱"
+    elif profit_pct <= -8 or risk_score >= 5:
+        base = "轉弱留意"
+    elif ("TREND" in signals or "REBREAK" in signals) and risk_score <= 3:
+        base = "續抱"
+    elif "ACCEL" in signals and risk_score <= 2 and profit_pct > 0 and ret20_pct >= 0 and volume_ratio20 >= 1.0:
+        base = "強勢續抱"
+    elif profit_pct > 0 and risk_score <= 3 and ret20_pct >= 0:
+        base = "續抱觀察"
+    else:
+        base = "中性觀察"
+
+    if not market_scenario:
+        return base
+
+    scenario_label = str(market_scenario.get("label", ""))
+
+    if scenario_label == "高檔震盪盤":
+        if holding_style == "進攻持股" and (profit_pct >= max(target_pct * 0.35, 4) or ("ACCEL" in signals and profit_pct >= 4)):
+            return "分批落袋"
+        if holding_style == "核心持股" and profit_pct >= max(target_pct * 0.5, 6):
+            return "續抱但設停利"
+        if holding_style == "防守持股" and profit_pct >= max(target_pct * 0.6, 6):
+            return "續抱觀察"
+        if profit_pct >= max(target_pct * 0.4, 5) or risk_score >= 4 or ("ACCEL" in signals and profit_pct >= 5):
+            return "分批落袋"
+        if base == "強勢續抱":
+            return "續抱但設停利"
+        if base in {"續抱", "續抱觀察", "達標續抱"}:
+            return "續抱但盯盤"
+        return base
+
+    if scenario_label == "權值撐盤、個股轉弱":
+        if holding_style == "防守持股":
+            return "續抱觀察" if profit_pct > -5 else "保守觀察"
+        if holding_style == "核心持股" and profit_pct > 0:
+            return "續抱但看強弱"
+        if profit_pct > 0 and risk_score >= 3:
+            return "有賺先收一點"
+        if base in {"強勢續抱", "續抱"}:
+            return "續抱但看強弱"
+        if profit_pct <= 0:
+            return "轉弱先顧"
+        return base
+
+    if scenario_label == "明顯修正盤":
+        if holding_style == "防守持股":
+            return "防守續看" if profit_pct > -3 else "保守觀察"
+        if holding_style == "進攻持股" and profit_pct > 0:
+            return "先降部位"
+        if profit_pct > 0:
+            return "先降部位"
+        if risk_score >= 4 or ret20_pct < 0:
+            return "保守觀察"
+        return "減碼觀察"
+
+    if scenario_label == "強勢延伸盤":
+        if holding_style == "防守持股":
+            return "續抱觀察"
+        if holding_style == "核心持股" and base in {"續抱", "強勢續抱"}:
+            return "核心續抱"
+        if base == "達標續抱":
+            return "達標分批抱"
+        if base == "強勢續抱" and profit_pct >= max(target_pct * 0.5, 8):
+            return "強勢續抱但分批收"
+
+    return base
 
 
-def build_portfolio_review_df(df_rank: pd.DataFrame) -> pd.DataFrame:
+def build_portfolio_review_df(
+    df_rank: pd.DataFrame,
+    market_regime: Optional[dict] = None,
+    us_market: Optional[dict] = None,
+) -> pd.DataFrame:
     if PORTFOLIO.empty:
         return pd.DataFrame()
+
+    market_scenario = None
+    if market_regime is not None and us_market is not None:
+        market_scenario = build_market_scenario(market_regime, us_market, df_rank)
 
     market_cols = [
         "ticker", "name", "close", "signals", "regime", "risk_score", "ret5_pct", "ret20_pct", "volume_ratio20"
@@ -1467,19 +1962,41 @@ def build_portfolio_review_df(df_rank: pd.DataFrame) -> pd.DataFrame:
     market_df = df_rank[market_cols].copy() if not df_rank.empty else pd.DataFrame(columns=market_cols)
     review = PORTFOLIO.merge(market_df, on="ticker", how="left")
     review["name"] = review["name"].fillna(review["ticker"].str.split(".").str[0])
+
     review["current_close"] = pd.to_numeric(review["close"], errors="coerce")
+    review["quote_source"] = "close"
+    realtime = fetch_realtime_last_close(review["ticker"].tolist())
+    if realtime:
+        review["realtime_close"] = pd.to_numeric(review["ticker"].map(realtime), errors="coerce")
+        has_realtime = review["realtime_close"].notna()
+        review.loc[has_realtime, "current_close"] = review.loc[has_realtime, "realtime_close"]
+        review.loc[has_realtime, "quote_source"] = "realtime"
+    else:
+        review["realtime_close"] = pd.NA
+
     review["position_cost"] = (review["shares"] * review["avg_cost"]).round(2)
     review["position_value"] = (review["shares"] * review["current_close"]).round(2)
     review["unrealized_pnl"] = (review["position_value"] - review["position_cost"]).round(2)
     review["unrealized_pnl_pct"] = ((review["current_close"] / review["avg_cost"] - 1.0) * 100).round(2)
     review["target_gap_pct"] = (review["target_profit_pct"] - review["unrealized_pnl_pct"]).round(2)
-    review["advice"] = review.apply(portfolio_advice_label, axis=1)
+    review["holding_style"] = review.apply(holding_style_label, axis=1)
+    review["advice"] = review.apply(lambda row: portfolio_advice_label(row, market_scenario), axis=1)
+    review["market_scenario"] = market_scenario.get("label", "") if market_scenario else ""
+    review["market_stance"] = market_scenario.get("stance", "") if market_scenario else ""
     return review.sort_values(by=["unrealized_pnl_pct", "target_gap_pct"], ascending=[False, True]).reset_index(drop=True)
 
 
-def build_portfolio_message(df_rank: pd.DataFrame) -> str:
-    review = build_portfolio_review_df(df_rank)
+def build_portfolio_message(
+    df_rank: pd.DataFrame,
+    market_regime: Optional[dict] = None,
+    us_market: Optional[dict] = None,
+) -> str:
+    review = build_portfolio_review_df(df_rank, market_regime, us_market)
     lines = ["📣 持股檢查"]
+    if market_regime is not None and us_market is not None:
+        scenario = build_market_scenario(market_regime, us_market, df_rank)
+        lines.append(f"持股節奏：{scenario['label']} | {scenario['stance']}")
+        lines.append(f"今天重點：{scenario['exit_note']}")
     if review.empty:
         lines.append("portfolio.csv 目前沒有可分析的持股。")
         return "\n".join(lines)
@@ -1490,7 +2007,7 @@ def build_portfolio_message(df_rank: pd.DataFrame) -> str:
             lines.append(f"{r['ticker'].split('.')[0]} {r['advice']} | 尚未抓到行情，已同步加入觀察清單")
             continue
         lines.append(
-            f"{r['name']} ({r['ticker'].split('.')[0]}) {r['advice']} | "
+            f"{r['name']} ({r['ticker'].split('.')[0]}) [{r['holding_style']}] {r['advice']} | "
             f"現價 {round(float(current_close), 2)} / 成本 {round(float(r['avg_cost']), 2)} | "
             f"報酬 {r['unrealized_pnl_pct']}% / 目標 {r['target_profit_pct']}%"
         )
@@ -1556,10 +2073,18 @@ def build_feedback_summary() -> pd.DataFrame:
             if action_df.empty:
                 continue
             samples = int(action_df.shape[0])
-            win_rate_pct = round(float(action_df["target_return"].gt(0).mean()) * 100, 2)
+            win_mask = action_df["target_return"].gt(0)
+            win_rate_pct = round(float(win_mask.mean()) * 100, 2)
             avg_return_pct = round(float(action_df["target_return"].mean()), 2)
+            
+            # P/L Ratio calculation
+            avg_win = float(action_df[win_mask]["target_return"].mean()) if win_mask.any() else 0.0
+            avg_loss = abs(float(action_df[~win_mask]["target_return"].mean())) if (~win_mask).any() else 0.0
+            pl_ratio = round(avg_win / avg_loss, 2) if avg_loss > 0 else round(avg_win, 2)
+
             shrink = min(samples / 8.0, 1.0)
-            feedback_score = round((((win_rate_pct - 50.0) / 10.0) + (avg_return_pct / 5.0)) * shrink, 2)
+            # Refined feedback score: win rate + avg return + pl_ratio bias
+            feedback_score = round((((win_rate_pct - 50.0) / 10.0) + (avg_return_pct / 5.0) + (min(pl_ratio, 3.0) / 2.0)) * shrink, 2)
             rows.append(
                 {
                     "watch_type": watch_type,
@@ -1567,6 +2092,7 @@ def build_feedback_summary() -> pd.DataFrame:
                     "samples": samples,
                     "win_rate_pct": win_rate_pct,
                     "avg_return_pct": avg_return_pct,
+                    "pl_ratio": pl_ratio,
                     "feedback_score": feedback_score,
                     "feedback_label": feedback_label_from_score(feedback_score, samples),
                 }
@@ -1637,10 +2163,13 @@ def summarize_events(events_df: pd.DataFrame, horizons: List[int]) -> pd.DataFra
 
 
 
-def upsert_alert_tracking(short_candidates: pd.DataFrame, midlong_candidates: pd.DataFrame) -> None:
+def upsert_alert_tracking(short_candidates: pd.DataFrame, midlong_candidates: pd.DataFrame, scenario: Optional[dict] = None) -> None:
+    scenario_label = scenario.get("label", "unknown") if scenario else "unknown"
     cols = [
         "alert_date", "watch_type", "ticker", "name", "group", "grade", "rank", "setup_score", "risk_score",
         "layer", "signals", "regime", "action_label", "feedback_score", "feedback_label",
+        "scenario_label",
+        "add_price", "trim_price", "stop_price",
         "alert_close", "ret1_future_pct", "ret5_future_pct", "ret20_future_pct", "status"
     ]
 
@@ -1683,6 +2212,10 @@ def upsert_alert_tracking(short_candidates: pd.DataFrame, midlong_candidates: pd
                 "action_label": feedback_action_label(r, watch_type),
                 "feedback_score": float(r.get("feedback_score", 0.0)),
                 "feedback_label": str(r.get("feedback_label", "樣本不足")),
+                "scenario_label": scenario_label,
+                "add_price": watch_price_plan(r, watch_type).get("add_price"),
+                "trim_price": watch_price_plan(r, watch_type).get("trim_price"),
+                "stop_price": watch_price_plan(r, watch_type).get("stop_price"),
                 "alert_close": float(r["close"]),
                 "ret1_future_pct": None,
                 "ret5_future_pct": None,
@@ -1692,7 +2225,7 @@ def upsert_alert_tracking(short_candidates: pd.DataFrame, midlong_candidates: pd
             if mask.any():
                 hist.loc[mask, list(row.keys())] = list(row.values())
             else:
-                hist = pd.concat([hist, pd.DataFrame([row])], ignore_index=True)
+                hist.loc[len(hist), list(row.keys())] = list(row.values())
 
     if not hist.empty:
         for i, row in hist.iterrows():
@@ -1723,7 +2256,28 @@ def upsert_alert_tracking(short_candidates: pd.DataFrame, midlong_candidates: pd
     hist.to_csv(ALERT_TRACK_CSV, index=False, encoding="utf-8-sig")
 
 
-def run_watchlist() -> pd.DataFrame:
+def adjust_strategy_by_scenario(base_strat: StrategyConfig, scenario: dict) -> StrategyConfig:
+    import copy
+    strat = copy.deepcopy(base_strat)
+    label = scenario.get("label", "")
+    
+    if label == "明顯修正盤":
+        # Make thresholds stricter
+        strat.accel_vol_ratio += 0.3
+        strat.rebreak_vol_ratio += 0.2
+        strat.accel_ret5 += 0.02
+    elif label == "權值撐盤、個股轉弱":
+        # Slightly stricter on volume
+        strat.accel_vol_ratio += 0.15
+        strat.rebreak_vol_ratio += 0.1
+    elif label == "強勢延伸盤":
+        # Allow slightly more aggression
+        strat.accel_vol_ratio = max(strat.accel_vol_ratio - 0.1, 1.0)
+        
+    return strat
+
+
+def run_watchlist(strat: Optional[StrategyConfig] = None) -> pd.DataFrame:
     rows: List[dict] = []
     prev_rank = load_previous_rank()
     for item in WATCHLIST:
@@ -1731,14 +2285,24 @@ def run_watchlist() -> pd.DataFrame:
         try:
             df = yf_download_one(ticker, CONFIG.yf_period)
             df = add_indicators(df)
-            row = detect_row(df, ticker, name, group, item["layer"])
+            row = detect_row(df, ticker, name, group, item["layer"], strat=strat)
             rows.append(row)
             append_stock_log(row)
             logger.debug("OK: %s %s", ticker, name)
         except Exception as exc:
             logger.exception("FAILED: %s %s -> %s", ticker, name, exc)
     if not rows:
-        raise RuntimeError("No stock data available from watchlist.")
+        for fallback in [RANK_CSV, PREV_RANK_CSV]:
+            if not fallback.exists():
+                continue
+            try:
+                df = pd.read_csv(fallback)
+                if not df.empty:
+                    logger.warning("No fresh stock data; fallback to cached rank CSV: %s", fallback)
+                    return df
+            except Exception:
+                continue
+        raise RuntimeError("No stock data available from watchlist (and no cached daily_rank.csv to fallback).")
     return save_daily_rank(rows, prev_rank)
 
 
@@ -1850,7 +2414,8 @@ def build_daily_report_markdown(df_rank: pd.DataFrame, market_regime: dict, bt_s
                 f"- #{int(r['rank'])} {r['name']} {r['ticker']} [{r['group']}/{layer_label(r['layer'])}] | "
                 f"setup {r['setup_score']} risk {r['risk_score']} | "
                 f"5D {r['ret5_pct']}% 10D {r['ret10_pct']}% 20D {r['ret20_pct']}% | 投機 {r['spec_risk_label']} | "
-                f"{r['signals']} | rankΔ {int(r['rank_change']):+d} setupΔ {int(r['setup_change']):+d}"
+                f"{r['signals']} | rankΔ {int(r['rank_change']):+d} setupΔ {int(r['setup_change']):+d} | "
+                f"{watch_price_plan_text(r, 'short')}"
             )
 
     lines.extend(["", "## Mid-Long Candidates", ""])
@@ -1874,7 +2439,8 @@ def build_daily_report_markdown(df_rank: pd.DataFrame, market_regime: dict, bt_s
                 f"- #{int(r['rank'])} {r['name']} {r['ticker']} [{r['group']}/{layer_label(r['layer'])}] | "
                 f"setup {r['setup_score']} risk {r['risk_score']} | "
                 f"10D {r['ret10_pct']}% 20D {r['ret20_pct']}% | 投機 {r['spec_risk_label']} | "
-                f"{r['signals']} | rankΔ {int(r['rank_change']):+d} setupΔ {int(r['setup_change']):+d}"
+                f"{r['signals']} | rankΔ {int(r['rank_change']):+d} setupΔ {int(r['setup_change']):+d} | "
+                f"{watch_price_plan_text(r, 'midlong')}"
             )
 
     special_etf_candidates = select_special_etf_candidates(df_rank)
@@ -1903,7 +2469,7 @@ def build_daily_report_markdown(df_rank: pd.DataFrame, market_regime: dict, bt_s
                 f"- #{int(r['rank'])} {r['name']} {r['ticker']} [{r['group']}/{layer_label(r['layer'])}] | "
                 f"setup {r['setup_score']} risk {r['risk_score']} | "
                 f"5D {r['ret5_pct']}% 20D {r['ret20_pct']}% | 投機 {r['spec_risk_label']} | "
-                f"{r['signals']} | 理由 {early_gem_reason(r)}"
+                f"{r['signals']} | 理由 {early_gem_reason(r)} | {watch_price_plan_text(r, 'short')}"
             )
 
     lines.extend(["", "## Prediction Feedback", ""])
@@ -2025,13 +2591,20 @@ def save_reports(df_rank: pd.DataFrame, market_regime: dict, bt_steady: Optional
 
 
 def build_portfolio_report_markdown(df_rank: pd.DataFrame, market_regime: dict, us_market: dict) -> str:
-    review = build_portfolio_review_df(df_rank)
+    review = build_portfolio_review_df(df_rank, market_regime, us_market)
+    scenario = build_market_scenario(market_regime, us_market, df_rank)
     today = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    quote_line = f"- Quote: realtime({REALTIME_QUOTE_INTERVAL}) if available, else daily close"
+    if not realtime_quotes_enabled():
+        quote_line = "- Quote: daily close (realtime disabled)"
     lines = [
         "# Portfolio Review",
         f"- Generated: {today}",
         f"- Market Regime: {market_regime['comment']}",
         f"- US Summary: {us_market['summary']}",
+        f"- Market Scenario: {scenario['label']} | {scenario['stance']}",
+        f"- Exit Focus: {scenario['exit_note']}",
+        quote_line,
         "",
     ]
     if AUTO_ADDED_TICKERS:
@@ -2049,7 +2622,7 @@ def build_portfolio_report_markdown(df_rank: pd.DataFrame, market_regime: dict, 
             lines.append(f"- {r['ticker'].split('.')[0]} | {r['advice']} | 尚未抓到行情，已同步加入觀察清單")
             continue
         lines.append(
-            f"- {r['name']} ({r['ticker'].split('.')[0]}) | 現價 {round(float(current_close), 2)} | "
+            f"- {r['name']} ({r['ticker'].split('.')[0]}) | {r['holding_style']} | 現價 {round(float(current_close), 2)} | "
             f"成本 {round(float(r['avg_cost']), 2)} | 報酬 {r['unrealized_pnl_pct']}% | "
             f"目標 {r['target_profit_pct']}% | 建議 {r['advice']}"
         )
@@ -2057,7 +2630,8 @@ def build_portfolio_report_markdown(df_rank: pd.DataFrame, market_regime: dict, 
 
 
 def build_portfolio_report_html(df_rank: pd.DataFrame, market_regime: dict, us_market: dict) -> str:
-    review = build_portfolio_review_df(df_rank)
+    review = build_portfolio_review_df(df_rank, market_regime, us_market)
+    scenario = build_market_scenario(market_regime, us_market, df_rank)
     review_html = "<p>None</p>" if review.empty else dataframe_to_html(review)
     auto_added_html = ""
     if AUTO_ADDED_TICKERS:
@@ -2073,6 +2647,8 @@ th {{ background: #f4f4f4; }}
 <h1>Portfolio Review</h1>
 <p><strong>Market:</strong> {market_regime['comment']}</p>
 <p><strong>US Summary:</strong> {us_market['summary']}</p>
+<p><strong>Scenario:</strong> {scenario['label']} | {scenario['stance']}</p>
+<p><strong>Exit Focus:</strong> {scenario['exit_note']}</p>
 {auto_added_html}
 <h2>Holdings</h2>{review_html}
 </body></html>"""
@@ -2124,23 +2700,41 @@ def main() -> int:
             logger.info("Already completed successfully for %s with same code/config. Skip duplicate run.", today_local_str())
             return 0
 
-        market_regime = get_market_regime()
-        us_market = get_us_market_reference()
-        df_rank = run_watchlist()
+        warnings: list[str] = []
+        try:
+            market_regime = get_market_regime()
+        except Exception as exc:
+            warnings.append(f"market_regime: {exc}")
+            logger.exception("Market regime fetch failed (best effort): %s", exc)
+            market_regime = {"comment": "加權指數資料抓不到（best effort）", "is_bullish": True}
+
+        try:
+            us_market = get_us_market_reference()
+        except Exception as exc:
+            warnings.append(f"us_market: {exc}")
+            logger.exception("US market reference failed (best effort): %s", exc)
+            us_market = {"summary": "美股參考暫時抓不到（best effort）。", "rows": []}
+
+        # Point 3: Scenario-aware thresholds
+        initial_scenario = build_market_scenario(market_regime, us_market)
+        adjusted_strat = adjust_strategy_by_scenario(CONFIG.strategy, initial_scenario)
+        logger.info("Market Scenario: %s, Stance: %s", initial_scenario["label"], initial_scenario["stance"])
+
+        df_rank = run_watchlist(strat=adjusted_strat)
         bt_steady, bt_attack = run_backtest_dual()
 
         logger.info("=== 今日排行榜 ===\n%s", df_rank.to_string(index=False))
         logger.info("Market regime: %s", market_regime["comment"])
 
         short_candidates, short_backups, midlong_candidates, _ = build_candidate_sets(df_rank)
-        upsert_alert_tracking(short_candidates, midlong_candidates)
+        upsert_alert_tracking(short_candidates, midlong_candidates, scenario=initial_scenario)
         save_reports(df_rank, market_regime, bt_steady, bt_attack)
 
         current_state = build_state(df_rank, market_regime)
         last_state = load_last_state()
 
         if should_alert(df_rank, current_state, last_state, market_regime):
-            send_telegram_message(build_macro_message(market_regime, us_market))
+            send_telegram_message(build_macro_message(market_regime, us_market, df_rank))
             send_telegram_message(build_short_term_message(df_rank, market_regime, us_market))
             send_telegram_message(build_early_gem_message(df_rank, market_regime, us_market))
             send_telegram_message(build_midlong_message(df_rank, market_regime, us_market))
@@ -2151,6 +2745,9 @@ def main() -> int:
 
         save_last_state(current_state)
         save_last_success_date(today_local_str())
+
+        if warnings:
+            logger.warning("Best effort warnings: %s", " | ".join(warnings))
         return 0
     except Exception as exc:
         err_msg = f"Watchlist job failed: {exc}"

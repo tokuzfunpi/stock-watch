@@ -39,5 +39,15 @@
     "theme_bonus": 2,
     "core_penalty": 0,
     "etf_penalty": 2
+  },
+  "strategy": {
+    "base_low250_mult": 1.20,
+    "base_range20_max": 0.15,
+    "rebreak_vol_ratio": 1.35,
+    "surge_ret20": 0.22,
+    "surge_vol_ratio": 1.55,
+    "trend_ret20": 0.08,
+    "accel_ret5": 0.08,
+    "accel_vol_ratio": 1.3
   }
 }
