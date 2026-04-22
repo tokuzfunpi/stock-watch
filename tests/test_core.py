@@ -361,6 +361,8 @@ class ChatIdMapUpdateTests(unittest.TestCase):
                     "ret5_pct": 5.0,
                     "ret20_pct": 15.0,
                     "volume_ratio20": 1.2,
+                    "atr_pct": 4.4,
+                    "volatility_tag": "活潑",
                 }
             ]
         )
@@ -377,6 +379,7 @@ class ChatIdMapUpdateTests(unittest.TestCase):
         self.assertIn("持股節奏", message)
         self.assertIn("2495", message)
         self.assertIn("進攻持股", message)
+        self.assertIn("🔥活潑", message)
         self.assertIn("報酬", message)
 
     def test_portfolio_report_is_separate_from_daily_report(self) -> None:
@@ -741,9 +744,9 @@ class PushMessageTests(unittest.TestCase):
         us_market = {"summary": "美股昨晚偏強，台股開盤情緒通常較正面。", "tech_bias": "美股科技偏強，台股電子股若量價配合可積極一點。"}
         df_rank = pd.DataFrame(
             [
-                {"setup_score": 7, "risk_score": 2, "ret5_pct": 6.0, "ret20_pct": 12.0, "volume_ratio20": 1.2},
-                {"setup_score": 8, "risk_score": 3, "ret5_pct": 7.0, "ret20_pct": 10.0, "volume_ratio20": 1.1},
-                {"setup_score": 6, "risk_score": 2, "ret5_pct": 5.0, "ret20_pct": 8.0, "volume_ratio20": 1.0},
+                {"setup_score": 7, "risk_score": 5, "ret5_pct": 16.0, "ret20_pct": 12.0, "volume_ratio20": 1.2, "volatility_tag": "劇烈"},
+                {"setup_score": 8, "risk_score": 3, "ret5_pct": 13.0, "ret20_pct": 10.0, "volume_ratio20": 1.1, "volatility_tag": "活潑"},
+                {"setup_score": 6, "risk_score": 2, "ret5_pct": 5.0, "ret20_pct": 8.0, "volume_ratio20": 1.0, "volatility_tag": "標準"},
             ]
         )
 
@@ -755,6 +758,7 @@ class PushMessageTests(unittest.TestCase):
         self.assertIn("盤勢情境", message)
         self.assertIn("操作重點", message)
         self.assertIn("出場提醒", message)
+        self.assertIn("Heat Bias", message)
         self.assertIn("觸發來源", message)
         self.assertIn("台灣時間", message)
 
@@ -782,6 +786,8 @@ class PushMessageTests(unittest.TestCase):
                     "regime": "轉強速度有出來",
                     "date": "2026-04-14",
                     "close": 100.0,
+                    "atr_pct": 4.8,
+                    "volatility_tag": "活潑",
                 },
                 {
                     "rank": 2,
@@ -804,6 +810,8 @@ class PushMessageTests(unittest.TestCase):
                     "regime": "中段延續中",
                     "date": "2026-04-14",
                     "close": 120.0,
+                    "atr_pct": 1.8,
+                    "volatility_tag": "穩健",
                 },
                 {
                     "rank": 3,
@@ -826,6 +834,8 @@ class PushMessageTests(unittest.TestCase):
                     "regime": "重新站上來了",
                     "date": "2026-04-14",
                     "close": 90.0,
+                    "atr_pct": 3.2,
+                    "volatility_tag": "標準",
                 },
             ]
         )
@@ -839,6 +849,7 @@ class PushMessageTests(unittest.TestCase):
         self.assertNotIn("美股昨晚偏強", short_message)
         self.assertNotIn("觸發來源", short_message)
         self.assertIn("5日 9.0%", short_message)
+        self.assertIn("🔥活潑", short_message)
         self.assertIn("加碼參考", short_message)
         self.assertIn("減碼參考", short_message)
         self.assertIn("失效", short_message)
@@ -848,6 +859,7 @@ class PushMessageTests(unittest.TestCase):
         self.assertNotIn("美股昨晚偏強", midlong_message)
         self.assertNotIn("觸發來源", midlong_message)
         self.assertIn("20日 14.0%", midlong_message)
+        self.assertIn("🧊穩健", midlong_message)
         self.assertIn("加碼參考", midlong_message)
         self.assertTrue(any(label in midlong_message for label in ["續抱", "可分批", "觀察", "分批落袋"]))
 
@@ -980,6 +992,8 @@ class PushMessageTests(unittest.TestCase):
                     "regime": "重新站上來了",
                     "date": "2026-04-14",
                     "close": 55.0,
+                    "atr_pct": 2.5,
+                    "volatility_tag": "標準",
                 }
             ]
         )
@@ -991,6 +1005,7 @@ class PushMessageTests(unittest.TestCase):
         self.assertIn("早期轉強觀察", message)
         self.assertNotIn("觸發來源", message)
         self.assertIn("GEM1.TW", message)
+        self.assertIn("⚖️標準", message)
         self.assertIn("重新站回結構", message)
 
     def test_daily_report_markdown_includes_prediction_feedback_section(self) -> None:

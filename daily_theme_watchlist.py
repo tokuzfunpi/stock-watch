@@ -674,6 +674,61 @@ def volatility_label(atr_pct: float) -> str:
     return "劇烈"
 
 
+def volatility_emoji(tag: str) -> str:
+    return {
+        "穩健": "🧊",
+        "標準": "⚖️",
+        "活潑": "🔥",
+        "劇烈": "⚡",
+    }.get(tag, "❔")
+
+
+def volatility_badge_text(row: pd.Series) -> str:
+    tag = str(row.get("volatility_tag", "") or "")
+    atr_pct = row.get("atr_pct")
+    if not tag:
+        try:
+            atr_value = float(atr_pct)
+            if atr_value > 0:
+                tag = volatility_label(atr_value)
+        except Exception:
+            tag = ""
+    if not tag:
+        return ""
+    emoji = volatility_emoji(tag)
+    try:
+        atr_value = float(atr_pct)
+        if atr_value > 0:
+            return f"{emoji}{tag}({atr_value:.2f}%)"
+    except Exception:
+        pass
+    return f"{emoji}{tag}"
+
+
+def heat_bias_message(df_rank: Optional[pd.DataFrame], scenario: dict) -> str:
+    if df_rank is None or df_rank.empty:
+        return ""
+    working = df_rank.head(10).copy()
+    if working.empty:
+        return ""
+    for col in ["risk_score", "ret5_pct"]:
+        if col in working.columns:
+            working[col] = pd.to_numeric(working[col], errors="coerce")
+    hot_mask = (
+        working.get("risk_score", pd.Series(dtype=float)).fillna(0).ge(5)
+        | working.get("ret5_pct", pd.Series(dtype=float)).fillna(0).ge(12)
+        | working.get("volatility_tag", pd.Series(dtype=str)).astype(str).isin(["活潑", "劇烈"])
+        | working.get("spec_risk_label", pd.Series(dtype=str)).astype(str).eq("疑似炒作風險高")
+    )
+    hot_ratio = float(hot_mask.mean()) if len(working) else 0.0
+    label = str(scenario.get("label", "") or "")
+    if hot_ratio >= 0.5:
+        return "⚠️ Heat Bias 偏強：前排標的偏熱，最近績效可能有行情抬轎，追價風險高。"
+    if hot_ratio >= 0.3 and label in {"高檔震盪盤", "強勢延伸盤"}:
+        return "⚠️ Heat Bias 提醒：前排標的已有明顯熱度，請把拉回買點與分批落袋看得比平常更重。"
+    return ""
+
+
 def detect_row(
     df: pd.DataFrame,
     ticker: str,
@@ -1751,9 +1806,11 @@ def build_early_gem_message(df_rank: pd.DataFrame, market_regime: dict, us_marke
     lines.append("解讀：這一區不是追最熱，而是找剛轉強、還沒太擁擠的候選。")
     lines.append("")
     for _, r in gem_candidates.iterrows():
+        vol_text = volatility_badge_text(r)
         lines.append(
             f"{int(r['rank'])}. {r['name']} ({r['ticker']}) | "
             f"{layer_label(r['layer'])} | 5日 {r['ret5_pct']}% / 20日 {r['ret20_pct']}% | "
+            f"{vol_text} | "
             f"{early_gem_reason(r)} | {watch_price_plan_text(r, 'short')}"
         )
     return "\n".join(lines).strip()
@@ -1819,20 +1876,22 @@ def build_short_term_message(df_rank: pd.DataFrame, market_regime: dict, us_mark
     lines.append("")
     for _, r in short_candidates.iterrows():
         action = short_term_action_label(r)
+        vol_text = volatility_badge_text(r)
         lines.append(
             f"{int(r['rank'])}. {r['name']} ({r['ticker']}) {action} | "
             f"5日 {r['ret5_pct']}% / 量比 {r['volume_ratio20']} | "
-            f"{r['regime']} | {watch_price_plan_text(r, 'short')}"
+            f"{vol_text} | {r['regime']} | {watch_price_plan_text(r, 'short')}"
         )
     if not short_backups.empty:
         lines.append("")
         lines.append("短線觀察 (最多5檔)")
         for _, r in short_backups.iterrows():
             action = short_term_action_label(r)
+            vol_text = volatility_badge_text(r)
             lines.append(
                 f"{int(r['rank'])}. {r['name']} ({r['ticker']}) {action} | "
                 f"5日 {r['ret5_pct']}% / 量比 {r['volume_ratio20']} | "
-                f"{r['regime']} | {watch_price_plan_text(r, 'short')}"
+                f"{vol_text} | {r['regime']} | {watch_price_plan_text(r, 'short')}"
             )
     return "\n".join(lines).strip()
 
@@ -1854,20 +1913,22 @@ def build_midlong_message(df_rank: pd.DataFrame, market_regime: dict, us_market:
     lines.append("")
     for _, r in midlong_candidates.iterrows():
         action = midlong_action_label(r)
+        vol_text = volatility_badge_text(r)
         lines.append(
             f"{int(r['rank'])}. {r['name']} ({r['ticker']}) {action} | "
             f"20日 {r['ret20_pct']}% / 量比 {r['volume_ratio20']} | "
-            f"{r['regime']} | {watch_price_plan_text(r, 'midlong')}"
+            f"{vol_text} | {r['regime']} | {watch_price_plan_text(r, 'midlong')}"
         )
     if not midlong_backups.empty:
         lines.append("")
         lines.append("中長線觀察 (最多5檔)")
         for _, r in midlong_backups.iterrows():
             action = midlong_action_label(r)
+            vol_text = volatility_badge_text(r)
             lines.append(
                 f"{int(r['rank'])}. {r['name']} ({r['ticker']}) {action} | "
                 f"20日 {r['ret20_pct']}% / 量比 {r['volume_ratio20']} | "
-                f"{r['regime']} | {watch_price_plan_text(r, 'midlong')}"
+                f"{vol_text} | {r['regime']} | {watch_price_plan_text(r, 'midlong')}"
             )
     return "\n".join(lines).strip()
 
@@ -1882,6 +1943,9 @@ def build_macro_message(market_regime: dict, us_market: dict, df_rank: Optional[
         f"操作重點：{scenario['focus']}",
         f"出場提醒：{scenario['exit_note']}",
     ]
+    heat_bias = heat_bias_message(df_rank, scenario)
+    if heat_bias:
+        lines.append(heat_bias)
     lines.extend(runtime_context_lines())
     if us_market.get("tech_bias"):
         lines.append(us_market["tech_bias"])
@@ -2012,9 +2076,10 @@ def build_portfolio_review_df(
         market_scenario = build_market_scenario(market_regime, us_market, df_rank)
 
     market_cols = [
-        "ticker", "name", "close", "signals", "regime", "risk_score", "ret5_pct", "ret20_pct", "volume_ratio20"
+        "ticker", "name", "close", "signals", "regime", "risk_score",
+        "ret5_pct", "ret20_pct", "volume_ratio20", "atr_pct", "volatility_tag"
     ]
-    market_df = df_rank[market_cols].copy() if not df_rank.empty else pd.DataFrame(columns=market_cols)
+    market_df = df_rank.reindex(columns=market_cols).copy() if not df_rank.empty else pd.DataFrame(columns=market_cols)
     review = PORTFOLIO.merge(market_df, on="ticker", how="left")
     review["name"] = review["name"].fillna(review["ticker"].str.split(".").str[0])
 
@@ -2052,6 +2117,9 @@ def build_portfolio_message(
         scenario = build_market_scenario(market_regime, us_market, df_rank)
         lines.append(f"持股節奏：{scenario['label']} | {scenario['stance']}")
         lines.append(f"今天重點：{scenario['exit_note']}")
+        heat_bias = heat_bias_message(df_rank, scenario)
+        if heat_bias:
+            lines.append(heat_bias)
     if review.empty:
         lines.append("portfolio.csv 目前沒有可分析的持股。")
         return "\n".join(lines)
@@ -2061,9 +2129,10 @@ def build_portfolio_message(
         if pd.isna(current_close):
             lines.append(f"{r['ticker'].split('.')[0]} {r['advice']} | 尚未抓到行情，已同步加入觀察清單")
             continue
+        vol_text = volatility_badge_text(r)
         lines.append(
             f"{r['name']} ({r['ticker'].split('.')[0]}) [{r['holding_style']}] {r['advice']} | "
-            f"現價 {round(float(current_close), 2)} / 成本 {round(float(r['avg_cost']), 2)} | "
+            f"{vol_text} | 現價 {round(float(current_close), 2)} / 成本 {round(float(r['avg_cost']), 2)} | "
             f"報酬 {r['unrealized_pnl_pct']}% / 目標 {r['target_profit_pct']}%"
         )
     return "\n".join(lines).strip()
@@ -2691,7 +2760,7 @@ def build_portfolio_report_markdown(df_rank: pd.DataFrame, market_regime: dict, 
         lines.append(
             f"- {r['name']} ({r['ticker'].split('.')[0]}) | {r['holding_style']} | 現價 {round(float(current_close), 2)} | "
             f"成本 {round(float(r['avg_cost']), 2)} | 報酬 {r['unrealized_pnl_pct']}% | "
-            f"目標 {r['target_profit_pct']}% | 建議 {r['advice']}"
+            f"目標 {r['target_profit_pct']}% | 波動 {volatility_badge_text(r)} | 建議 {r['advice']}"
         )
     return "\n".join(lines)
 
