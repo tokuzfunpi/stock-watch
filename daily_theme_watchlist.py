@@ -447,17 +447,43 @@ SPECIAL_ETF_TICKERS = [
 SCHEDULE_TARGET_TIMES = ["08:45", "14:00"]
 
 
-def yf_download_one(ticker: str, period: str) -> pd.DataFrame:
+def alternate_taiwan_ticker(ticker: str) -> str:
+    symbol = str(ticker or "").strip().upper()
+    if "." not in symbol:
+        return ""
+    base, suffix = symbol.split(".", 1)
+    if not (len(base) == 4 and base.isdigit()):
+        return ""
+    if suffix == "TW":
+        return f"{base}.TWO"
+    if suffix == "TWO":
+        return f"{base}.TW"
+    return ""
+
+
+def _download_daily_ohlcv(ticker: str, period: str) -> pd.DataFrame:
     df = yf.download(
         ticker, period=period, interval="1d",
         auto_adjust=True, progress=False, threads=False,
     )
     if df.empty:
-        raise ValueError(f"No data returned for {ticker}")
+        return df
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = df.columns.get_level_values(0)
     df = df.rename(columns=str.title)
-    df = df[["Open", "High", "Low", "Close", "Volume"]].dropna().copy()
+    return df[["Open", "High", "Low", "Close", "Volume"]].dropna().copy()
+
+
+def yf_download_one(ticker: str, period: str) -> pd.DataFrame:
+    df = _download_daily_ohlcv(ticker, period)
+    if df.empty:
+        alt_ticker = alternate_taiwan_ticker(ticker)
+        if alt_ticker:
+            df = _download_daily_ohlcv(alt_ticker, period)
+            if not df.empty:
+                logger.warning("Ticker fallback: %s -> %s", ticker, alt_ticker)
+        if df.empty:
+            raise ValueError(f"No data returned for {ticker}")
     if len(df) < 250:
         raise ValueError(f"Insufficient history for {ticker}: {len(df)} rows")
     return df

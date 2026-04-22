@@ -12,6 +12,7 @@ import pandas as pd
 
 from daily_theme_watchlist import (
     add_indicators,
+    alternate_taiwan_ticker,
     adjust_strategy_by_scenario,
     apply_feedback_adjustment,
     build_feedback_summary,
@@ -48,6 +49,7 @@ from daily_theme_watchlist import (
     upsert_alert_tracking,
     watch_price_plan,
     watch_price_plan_text,
+    yf_download_one,
 )
 
 UPDATE_CHAT_ID_MAP_PATH = Path(__file__).resolve().parent.parent / "update_chat_id_map.py"
@@ -306,6 +308,8 @@ class PortfolioTests(unittest.TestCase):
         self.assertEqual(normalize_ticker_symbol("50"), "0050.TW")
         self.assertEqual(normalize_ticker_symbol("878"), "00878.TW")
         self.assertEqual(normalize_ticker_symbol("00772B"), "00772B.TWO")
+        self.assertEqual(alternate_taiwan_ticker("3491.TW"), "3491.TWO")
+        self.assertEqual(alternate_taiwan_ticker("3491.TWO"), "3491.TW")
 
     def test_sync_watchlist_with_portfolio_adds_missing_symbols(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -1082,7 +1086,7 @@ class PushMessageTests(unittest.TestCase):
             [
                 {
                     "rank": 7,
-                    "ticker": "3491.TW",
+                    "ticker": "3491.TWO",
                     "name": "昇達科",
                     "group": "satellite",
                     "layer": "midlong_core",
@@ -1113,8 +1117,33 @@ class PushMessageTests(unittest.TestCase):
                 message = build_macro_message(market_regime, us_market, df_rank)
 
         self.assertIn("新加入追蹤觀察", message)
-        self.assertIn("昇達科 (3491.TW)", message)
+        self.assertIn("昇達科 (3491.TWO)", message)
         self.assertIn("初步看法", message)
+
+    def test_yf_download_one_falls_back_to_two_suffix(self) -> None:
+        dates = pd.date_range("2025-01-01", periods=260, freq="B")
+        df_hist = pd.DataFrame(
+            {
+                "Open": [100.0] * 260,
+                "High": [101.0] * 260,
+                "Low": [99.0] * 260,
+                "Close": [100.0] * 260,
+                "Volume": [1000.0] * 260,
+            },
+            index=dates,
+        )
+
+        def fake_download(ticker: str, **_: object) -> pd.DataFrame:
+            if ticker == "3491.TW":
+                return pd.DataFrame()
+            if ticker == "3491.TWO":
+                return df_hist
+            raise AssertionError(f"unexpected ticker {ticker}")
+
+        with patch("daily_theme_watchlist.yf.download", side_effect=fake_download):
+            out = yf_download_one("3491.TW", "3y")
+
+        self.assertEqual(len(out), 260)
 
     def test_special_etf_message_renders_requested_tickers(self) -> None:
         df = pd.DataFrame(
