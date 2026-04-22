@@ -944,6 +944,43 @@ requirements.txt
 - `midlong / 續抱` 與 `midlong / 可分批` 近期有改善訊號
 - 代表 recency weighting 目前看起來是在「校正近況」，不是把排序帶歪
 
+## 2026-04-22 補充：verification 已接上 scenario 切片
+
+今天已把 verification 的 scenario 資料鏈補到「未來可用」的狀態：
+
+- `verify_recommendations.py`
+  - 新快照會把當天 `scenario_label` 一起寫進 `reco_snapshots.csv`
+- `evaluate_recommendations.py`
+  - 會把 snapshot / alert tracking 裡可取得的 `scenario_label` 一起帶進 `reco_outcomes.csv`
+  - 如果沒有新 outcome row，也會做 metadata refresh，盡量把 `scenario_label` / `market_heat` 補齊
+- `summarize_outcomes.py`
+  - 已新增：
+    - `Overall By Scenario (all dates)`
+    - `Overall By Scenario + Action (all dates, top 80)`
+
+### 目前看到的限制
+
+- 現有歷史 outcomes 幾乎仍是 `scenario_label = unknown`
+- 這不是程式壞掉，而是因為：
+  - `scenario_label` 是後期才正式接進 verification 流程
+  - 舊資料大多沒有可追溯的 scenario metadata
+
+### 維護判斷
+
+這裡先停在「讓新資料自然長出 scenario 切片」是合理的。
+
+不建議現在做的事：
+
+- 用推估方式硬回填舊的 `scenario_label`
+- 為了讓報表立刻漂亮，去猜舊資料當時屬於哪個盤勢
+
+因為這會開始進入高風險資料污染區。
+
+更好的做法是：
+
+- 讓新 outcomes 持續累積
+- 等 `By Scenario + Action` 有足夠非 `unknown` 樣本後，再決定要不要往主排序加更深的 adaptive 權重
+
 ### 維護原則
 
 如果之後還要繼續吸收 `testv` / Gemini 的設計，請維持下面原則：

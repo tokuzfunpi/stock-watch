@@ -23,6 +23,9 @@
 - `feedback_score` 已納入 `pl_ratio`
 - `feedback_score` 已加入保守版 recency weighting
 - `feedback_score` + `feedback_pl_ratio` 已進候選池微調
+- verification summary 已新增：
+  - `Overall By Scenario`
+  - `Overall By Scenario + Action`
 
 ## 2) 目前正式上線、真的會改每日結果的部分
 
@@ -152,8 +155,9 @@
 ### 若要再往前推，建議順序
 
 1. 觀察新的 `feedback_score`（含 `pl_ratio` + recency weighting）是否讓候選更合理
-2. 再評估要不要讓 feedback 進一步影響 `daily_rank` 主排序
-3. 最後才考慮讓 ATR 更深地進 `portfolio` 出場邏輯
+2. 先累積更多有 `scenario_label` 的新 outcomes，讓 `By Scenario + Action` 真正可用
+3. 再評估要不要讓 feedback 進一步影響 `daily_rank` 主排序
+4. 最後才考慮讓 ATR 更深地進 `portfolio` 出場邏輯
 
 ## 7) 不建議現在直接做的事
 
@@ -162,6 +166,7 @@
   - scenario thresholds
   - feedback 主排序
   - ATR deeper exits
+- 不要為了補歷史資料而用推估方式硬回填舊的 `scenario_label`
 - 不要在沒有 verification 支撐時，直接大改 `detect_row()` 核心條件
 
 ## 8) 給 Gemini 的一句話
