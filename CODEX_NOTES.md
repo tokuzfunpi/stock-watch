@@ -63,6 +63,12 @@
   - 全域行為設定中心
   - 目前 `always_notify` 是 `true`
   - 大盤濾網、通知門檻、回測 horizon 都在這裡
+  - `scenario_policy` 可調整：
+    - 修正盤短線上限
+    - Heat Bias 偏強時短線上限
+    - 修正盤中長線上限
+    - 修正盤樣本提醒門檻
+    - 新加入追蹤股摘要顯示上限
 - `watchlist.csv`
   - 股票池
   - 群組有 `theme`、`core`、`etf`、`satellite`
