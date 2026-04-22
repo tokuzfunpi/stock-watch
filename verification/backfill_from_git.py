@@ -113,6 +113,7 @@ def append_snapshot_rows(
         "signal_date",
         "source",
         "source_sha",
+        "scenario_label",
         "watch_type",
         "rank",
         "ticker",
@@ -127,6 +128,9 @@ def append_snapshot_rows(
         "action",
         "reco_status",
     ]
+    for col in keep:
+        if col not in combined.columns:
+            combined[col] = ""
     combined = combined[[c for c in keep if c in combined.columns]].copy()
     append_csv_with_existing_header(snapshot_csv, combined)
     return int(len(combined))

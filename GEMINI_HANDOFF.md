@@ -85,8 +85,15 @@
 - 已有：
   - Telegram / CLI / macro 提示
   - verification 的 `Heat Bias Check (hot - normal)`
+  - verification 的 `Heat Bias By Scenario`
+  - verification 的 `Heat Bias By Date`
 
 但還**沒有**直接控制主排序或直接淘汰標的。
+
+另外，short 候選池現在已經有保守限流：
+
+- `明顯修正盤`：最多 1 檔 short
+- `Heat Bias 偏強`：最多 2 檔 short
 
 ### C. ATR
 
@@ -204,6 +211,32 @@
   - ATR deeper exits
 - 不要為了補歷史資料而用推估方式硬回填舊的 `scenario_label`
 - 不要在沒有 verification 支撐時，直接大改 `detect_row()` 核心條件
+
+## 8.5) 明確禁止重帶的改動
+
+這段請直接當 hard guardrails：
+
+1. 不要再把 `vol_tag` 這種未定義變數塞回訊息模板
+   - `testv` 曾在 short/midlong Telegram 文字裡插入 `vol_tag`
+   - 但那個變數沒有定義，會把通知流程炸掉
+   - 如果要改訊息格式，只能重用已存在且有測試覆蓋的 `volatility_badge_text(...)`
+
+2. 不要把新的 Heat Bias 分析寫成「一出錯就整段吞掉」
+   - `summarize_outcomes.py` 的 `hot vs normal` / `scenario + heat` 是核心驗證，不是可有可無的 decoration
+   - 不要用會把 `heat_bias_check`、`heat_bias_by_scenario` 一起清空的大範圍 `except` 包住錯誤 merge
+   - 先讓 merge 寫對，再加最小範圍的防呆
+
+3. 不要宣稱 `portfolio_check.py` 已經做了更深的 scenario exit 自動化
+   - 目前主程式只有文字建議與節奏調整
+   - 更深層的 `trim_price` / 自動收緊出場價，現在還沒正式落地
+
+4. 不要把文件當成程式已完成的證據
+   - `GEMINI.md` / 更新筆記可以是設計方向
+   - 但只有 `main` 上真的存在、且測試過的東西，才算已整合能力
+
+5. 不要再改動本機執行環境描述
+   - 這個 repo 本機固定用 `/Users/tokuzfunpi/codes/nvidia/311env`
+   - 文件與指令請都沿用這個 venv，不要再換回泛用 `python3.11`
 
 ## 9) 給 Gemini 的一句話
 

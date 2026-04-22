@@ -109,6 +109,39 @@ class SummarizeOutcomesTests(unittest.TestCase):
         self.assertIn("overall_by_scenario_action", parts)
         self.assertFalse(parts["overall_by_scenario_action"].empty)
 
+    def test_heat_bias_by_scenario_and_date_are_computed(self) -> None:
+        df = pd.DataFrame(
+            [
+                {
+                    "signal_date": "2026-04-17",
+                    "horizon_days": 5,
+                    "watch_type": "midlong",
+                    "reco_status": "ok",
+                    "market_heat": "hot",
+                    "scenario_label": "強勢延伸盤",
+                    "action": "續抱",
+                    "realized_ret_pct": 5.0,
+                    "status": "ok",
+                },
+                {
+                    "signal_date": "2026-04-17",
+                    "horizon_days": 5,
+                    "watch_type": "midlong",
+                    "reco_status": "ok",
+                    "market_heat": "normal",
+                    "scenario_label": "強勢延伸盤",
+                    "action": "續抱",
+                    "realized_ret_pct": 1.0,
+                    "status": "ok",
+                },
+            ]
+        )
+        parts = summarize_outcomes(df)
+        self.assertFalse(parts["heat_bias_by_scenario"].empty)
+        self.assertFalse(parts["heat_bias_by_date"].empty)
+        self.assertEqual(float(parts["heat_bias_by_scenario"].iloc[0]["delta_avg_ret_hot_minus_normal"]), 4.0)
+        self.assertEqual(float(parts["heat_bias_by_date"].iloc[0]["delta_avg_ret_hot_minus_normal"]), 4.0)
+
     def test_build_summary_markdown_renders_sections(self) -> None:
         df = pd.DataFrame(
             [
@@ -135,12 +168,12 @@ class SummarizeOutcomesTests(unittest.TestCase):
                     "status": "ok",
                 },
                 {
-                    "signal_date": "2026-04-15",
+                    "signal_date": "2026-04-16",
                     "horizon_days": 1,
                     "watch_type": "short",
                     "reco_status": "ok",
                     "market_heat": "normal",
-                    "scenario_label": "高檔震盪盤",
+                    "scenario_label": "強勢延伸盤",
                     "action": "等拉回",
                     "realized_ret_pct": 1.0,
                     "status": "ok",
@@ -156,6 +189,8 @@ class SummarizeOutcomesTests(unittest.TestCase):
         self.assertIn("## Overall By Market Heat", md)
         self.assertIn("## Overall By Scenario", md)
         self.assertIn("## Heat Bias Check (hot - normal)", md)
+        self.assertIn("## Heat Bias By Scenario (hot - normal)", md)
+        self.assertIn("## Heat Bias By Date (hot - normal, top 20)", md)
         self.assertIn("## Weekly Checkpoint", md)
         self.assertIn("## Overall By Action", md)
         self.assertIn("## Overall By Scenario + Action", md)

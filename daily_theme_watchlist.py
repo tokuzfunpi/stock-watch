@@ -729,6 +729,25 @@ def heat_bias_message(df_rank: Optional[pd.DataFrame], scenario: dict) -> str:
     return ""
 
 
+def effective_short_top_n(
+    df_rank: pd.DataFrame,
+    market_regime: Optional[dict] = None,
+    us_market: Optional[dict] = None,
+) -> int:
+    top_n = int(CONFIG.notify.top_n_short)
+    if market_regime is None or us_market is None or df_rank.empty:
+        return top_n
+
+    scenario = build_market_scenario(market_regime, us_market, df_rank)
+    if str(scenario.get("label", "") or "") == "明顯修正盤":
+        return min(top_n, 1)
+
+    heat_bias = heat_bias_message(df_rank, scenario)
+    if "Heat Bias 偏強" in heat_bias:
+        return min(top_n, 2)
+    return top_n
+
+
 def detect_row(
     df: pd.DataFrame,
     ticker: str,
@@ -1414,13 +1433,17 @@ def rank_midlong_pool(df_rank: pd.DataFrame) -> pd.DataFrame:
     return df.drop(columns=["_grade_rank", "_signal_rank"])
 
 
-def select_short_term_candidates(df_rank: pd.DataFrame) -> pd.DataFrame:
-    rule = CONFIG.notify
+def select_short_term_candidates(
+    df_rank: pd.DataFrame,
+    market_regime: Optional[dict] = None,
+    us_market: Optional[dict] = None,
+) -> pd.DataFrame:
     df = rank_short_term_pool(df_rank)
     if df.empty:
         return df
     buyable_mask = df.apply(is_short_term_buyable, axis=1)
-    return apply_feedback_adjustment(df[buyable_mask].copy(), "short").head(rule.top_n_short).copy()
+    top_n_short = effective_short_top_n(df_rank, market_regime, us_market)
+    return apply_feedback_adjustment(df[buyable_mask].copy(), "short").head(top_n_short).copy()
 
 
 def select_short_term_backup_candidates(df_rank: pd.DataFrame, exclude_tickers: Optional[set[str]] = None) -> pd.DataFrame:
@@ -1454,14 +1477,22 @@ def select_midlong_backup_candidates(df_rank: pd.DataFrame, exclude_tickers: Opt
     return apply_feedback_adjustment(df.copy(), "midlong").head(5).copy()
 
 
-def select_push_candidates(df_rank: pd.DataFrame) -> pd.DataFrame:
-    short_candidates = select_short_term_candidates(df_rank)
+def select_push_candidates(
+    df_rank: pd.DataFrame,
+    market_regime: Optional[dict] = None,
+    us_market: Optional[dict] = None,
+) -> pd.DataFrame:
+    short_candidates = select_short_term_candidates(df_rank, market_regime, us_market)
     midlong_candidates = select_midlong_candidates(df_rank)
     return pd.concat([short_candidates, midlong_candidates], ignore_index=True)
 
 
-def build_candidate_sets(df_rank: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    short_candidates = select_short_term_candidates(df_rank)
+def build_candidate_sets(
+    df_rank: pd.DataFrame,
+    market_regime: Optional[dict] = None,
+    us_market: Optional[dict] = None,
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    short_candidates = select_short_term_candidates(df_rank, market_regime, us_market)
     short_backups = select_short_term_backup_candidates(
         df_rank,
         exclude_tickers=set(short_candidates["ticker"].astype(str)),
@@ -1837,12 +1868,22 @@ def build_special_etf_message(df_rank: pd.DataFrame, market_regime: dict, us_mar
     return "\n".join(lines).strip()
 
 
-def should_alert(df_rank: pd.DataFrame, current_state: str, last_state: str, market_regime: dict) -> bool:
+def should_alert(
+    df_rank: pd.DataFrame,
+    current_state: str,
+    last_state: str,
+    market_regime: dict,
+    us_market: Optional[dict] = None,
+) -> bool:
     if CONFIG.always_notify:
         return True
     if current_state == last_state:
         return False
-    short_candidates, short_backups, midlong_candidates, midlong_backups = build_candidate_sets(df_rank)
+    short_candidates, short_backups, midlong_candidates, midlong_backups = build_candidate_sets(
+        df_rank,
+        market_regime,
+        us_market,
+    )
     feedback_summary = build_feedback_summary()
     feedback_summary = build_feedback_summary()
     candidates = pd.concat([short_candidates, short_backups, midlong_candidates, midlong_backups], ignore_index=True)
@@ -1856,7 +1897,7 @@ def should_alert(df_rank: pd.DataFrame, current_state: str, last_state: str, mar
 
 
 def build_short_term_message(df_rank: pd.DataFrame, market_regime: dict, us_market: dict) -> str:
-    short_candidates, short_backups, _, _ = build_candidate_sets(df_rank)
+    short_candidates, short_backups, _, _ = build_candidate_sets(df_rank, market_regime, us_market)
     total_a = int((df_rank["grade"] == "A").sum()) if not df_rank.empty else 0
     total_b = int((df_rank["grade"] == "B").sum()) if not df_rank.empty else 0
     total_up = int((df_rank["status_change"] == "UP").sum()) if "status_change" in df_rank.columns else 0
@@ -1897,7 +1938,7 @@ def build_short_term_message(df_rank: pd.DataFrame, market_regime: dict, us_mark
 
 
 def build_midlong_message(df_rank: pd.DataFrame, market_regime: dict, us_market: dict) -> str:
-    _, _, midlong_candidates, midlong_backups = build_candidate_sets(df_rank)
+    _, _, midlong_candidates, midlong_backups = build_candidate_sets(df_rank, market_regime, us_market)
     total_b = int((df_rank["grade"] == "B").sum()) if not df_rank.empty else 0
     lines = [
         "📣 中長線可布局",
@@ -2583,7 +2624,11 @@ def build_daily_report_markdown(
             f"{r['signals']} / 量比 {r['volume_ratio20']} |"
         )
 
-    short_candidates, short_backups, midlong_candidates, midlong_backups = build_candidate_sets(df_rank)
+    short_candidates, short_backups, midlong_candidates, midlong_backups = build_candidate_sets(
+        df_rank,
+        market_regime,
+        us_market or {},
+    )
     feedback_summary = build_feedback_summary()
 
     lines.extend(["", "## Short-Term Candidates", ""])
@@ -2754,7 +2799,11 @@ def build_daily_report_html(
 ) -> str:
     steady_html = "<p>None</p>" if bt_steady is None or bt_steady.empty else dataframe_to_html(bt_steady)
     attack_html = "<p>None</p>" if bt_attack is None or bt_attack.empty else dataframe_to_html(bt_attack)
-    short_candidates, short_backups, midlong_candidates, midlong_backups = build_candidate_sets(df_rank)
+    short_candidates, short_backups, midlong_candidates, midlong_backups = build_candidate_sets(
+        df_rank,
+        market_regime,
+        us_market or {},
+    )
     short_html = "<p>None</p>" if short_candidates.empty else dataframe_to_html(short_candidates)
     short_backup_html = "<p>None</p>" if short_backups.empty else dataframe_to_html(short_backups)
     midlong_html = "<p>None</p>" if midlong_candidates.empty else dataframe_to_html(midlong_candidates)
@@ -2937,7 +2986,11 @@ def main() -> int:
         logger.info("=== 今日排行榜 ===\n%s", df_rank.to_string(index=False))
         logger.info("Market regime: %s", market_regime["comment"])
 
-        short_candidates, short_backups, midlong_candidates, _ = build_candidate_sets(df_rank)
+        short_candidates, short_backups, midlong_candidates, _ = build_candidate_sets(
+            df_rank,
+            market_regime,
+            us_market,
+        )
         market_scenario = build_market_scenario(market_regime, us_market, df_rank)
         upsert_alert_tracking(short_candidates, midlong_candidates, market_scenario)
         save_reports(df_rank, market_regime, bt_steady, bt_attack, us_market)
@@ -2950,7 +3003,7 @@ def main() -> int:
         current_state = build_state(df_rank, market_regime)
         last_state = load_last_state()
 
-        if should_alert(df_rank, current_state, last_state, market_regime):
+        if should_alert(df_rank, current_state, last_state, market_regime, us_market):
             send_telegram_message(build_macro_message(market_regime, us_market, df_rank))
             send_telegram_message(build_short_term_message(df_rank, market_regime, us_market))
             send_telegram_message(build_early_gem_message(df_rank, market_regime, us_market))

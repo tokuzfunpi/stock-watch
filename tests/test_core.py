@@ -788,6 +788,81 @@ class SelectPushCandidatesTests(unittest.TestCase):
         self.assertGreaterEqual(list(out["ticker"]).count("BOTH1.TW"), 2)
         self.assertIn("MID2.TW", list(out["ticker"]))
 
+    def test_select_push_candidates_caps_short_list_in_correction_scenario(self) -> None:
+        df = pd.DataFrame(
+            [
+                {
+                    "rank": 1,
+                    "ticker": "SHORT1.TW",
+                    "name": "Short One",
+                    "group": "theme",
+                    "layer": "short_attack",
+                    "grade": "A",
+                    "setup_score": 8,
+                    "risk_score": 2,
+                    "ret5_pct": 9.0,
+                    "ret10_pct": 10.0,
+                    "ret20_pct": 12.0,
+                    "volume_ratio20": 1.5,
+                    "signals": "ACCEL,TREND",
+                    "rank_change": 1,
+                    "setup_change": 1,
+                    "regime": "轉強速度有出來",
+                    "date": "2026-04-22",
+                    "close": 100.0,
+                },
+                {
+                    "rank": 2,
+                    "ticker": "SHORT2.TW",
+                    "name": "Short Two",
+                    "group": "theme",
+                    "layer": "short_attack",
+                    "grade": "A",
+                    "setup_score": 7,
+                    "risk_score": 2,
+                    "ret5_pct": 8.0,
+                    "ret10_pct": 9.0,
+                    "ret20_pct": 10.0,
+                    "volume_ratio20": 1.4,
+                    "signals": "ACCEL,TREND",
+                    "rank_change": 1,
+                    "setup_change": 1,
+                    "regime": "轉強速度有出來",
+                    "date": "2026-04-22",
+                    "close": 90.0,
+                },
+                {
+                    "rank": 3,
+                    "ticker": "MID1.TW",
+                    "name": "Mid One",
+                    "group": "theme",
+                    "layer": "midlong_core",
+                    "grade": "B",
+                    "setup_score": 7,
+                    "risk_score": 2,
+                    "ret5_pct": 2.0,
+                    "ret10_pct": 6.0,
+                    "ret20_pct": 9.0,
+                    "volume_ratio20": 0.9,
+                    "signals": "TREND",
+                    "rank_change": 1,
+                    "setup_change": 1,
+                    "regime": "中段延續中",
+                    "date": "2026-04-22",
+                    "close": 80.0,
+                },
+            ]
+        )
+
+        market_regime = {"comment": "加權回檔", "ret20_pct": 2.0, "volume_ratio20": 0.9, "is_bullish": False}
+        us_market = {"summary": "美股昨晚偏弱，科技股續殺。"}
+
+        out = select_push_candidates(df, market_regime, us_market)
+
+        short_names = [ticker for ticker in list(out["ticker"]) if ticker.startswith("SHORT")]
+        self.assertEqual(len(short_names), 1)
+        self.assertIn("MID1.TW", list(out["ticker"]))
+
     def test_midlong_candidates_allow_lower_volume_ratio_when_trend_is_valid(self) -> None:
         df = pd.DataFrame(
             [
