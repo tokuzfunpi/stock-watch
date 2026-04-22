@@ -63,9 +63,11 @@ def summarize_outcomes(outcomes: pd.DataFrame) -> dict[str, pd.DataFrame]:
             "overall_by_market_heat": empty,
             "overall_by_scenario": empty,
             "overall_by_scenario_action": empty,
+            "overall_by_scenario_heat": empty,
             "delta_ok_minus_below": empty,
             "delta_ok_minus_below_by_date": empty,
             "heat_bias_check": empty,
+            "heat_bias_by_scenario": empty,
         }
 
     df = outcomes.copy()
@@ -83,9 +85,11 @@ def summarize_outcomes(outcomes: pd.DataFrame) -> dict[str, pd.DataFrame]:
             "overall_by_market_heat": empty,
             "overall_by_scenario": empty,
             "overall_by_scenario_action": empty,
+            "overall_by_scenario_heat": empty,
             "delta_ok_minus_below": empty,
             "delta_ok_minus_below_by_date": empty,
             "heat_bias_check": empty,
+            "heat_bias_by_scenario": empty,
         }
 
     if "watch_type" in df.columns:
@@ -103,9 +107,11 @@ def summarize_outcomes(outcomes: pd.DataFrame) -> dict[str, pd.DataFrame]:
             "overall_by_market_heat": empty,
             "overall_by_scenario": empty,
             "overall_by_scenario_action": empty,
+            "overall_by_scenario_heat": empty,
             "delta_ok_minus_below": empty,
             "delta_ok_minus_below_by_date": empty,
             "heat_bias_check": empty,
+            "heat_bias_by_scenario": empty,
         }
 
     # Split analysis: ok vs below_threshold (forced-fill).
@@ -123,7 +129,7 @@ def summarize_outcomes(outcomes: pd.DataFrame) -> dict[str, pd.DataFrame]:
 
     if "scenario_label" in df.columns:
         df["scenario_label"] = df["scenario_label"].astype(str).str.strip()
-        df.loc[(df["scenario_label"] == "") | (df["scenario_label"] == "b''"), "scenario_label"] = "unknown"
+        df.loc[(df["scenario_label"] == "") | (df["scenario_label"] == "b''") | (df["scenario_label"] == "nan"), "scenario_label"] = "unknown"
     else:
         df["scenario_label"] = "unknown"
 
@@ -226,6 +232,21 @@ def summarize_outcomes(outcomes: pd.DataFrame) -> dict[str, pd.DataFrame]:
     for c in ["avg_ret", "med_ret"]:
         overall_by_scenario[c] = overall_by_scenario[c].round(2)
 
+    overall_by_scenario_heat = (
+        df.groupby(["horizon_days", "watch_type", "scenario_label", "market_heat"], dropna=False)
+        .agg(
+            n=("realized_ret_pct", "count"),
+            win_rate=("win", "mean"),
+            avg_ret=("realized_ret_pct", "mean"),
+            med_ret=("realized_ret_pct", "median"),
+        )
+        .reset_index()
+        .sort_values(by=["horizon_days", "watch_type", "scenario_label", "market_heat"], ascending=[True, True, True, True])
+    )
+    overall_by_scenario_heat["win_rate"] = (overall_by_scenario_heat["win_rate"] * 100).round(1)
+    for c in ["avg_ret", "med_ret"]:
+        overall_by_scenario_heat[c] = overall_by_scenario_heat[c].round(2)
+
     overall_by_scenario_action = (
         df.groupby(["horizon_days", "watch_type", "scenario_label", "action"], dropna=False)
         .agg(
@@ -278,6 +299,7 @@ def summarize_outcomes(outcomes: pd.DataFrame) -> dict[str, pd.DataFrame]:
     delta_ok_minus_below = pd.DataFrame()
     delta_ok_minus_below_by_date = pd.DataFrame()
     heat_bias_check = pd.DataFrame()
+    heat_bias_by_scenario = pd.DataFrame()
     try:
         delta_base = overall_by_signal_status.copy()
         delta_base = delta_base[delta_base["reco_status"].isin(["ok", "below_threshold"])].copy()
@@ -388,8 +410,54 @@ def summarize_outcomes(outcomes: pd.DataFrame) -> dict[str, pd.DataFrame]:
                         ).round(2),
                     }
                 ).sort_values(by=["horizon_days", "watch_type"])
+
+        # Heat Bias By Scenario
+        h_s_base = overall_by_scenario_heat.copy()
+        h_s_base = h_s_base[h_s_base["market_heat"].isin(["normal", "hot"])].copy()
+        if not h_s_base.empty:
+            norm_s = h_s_base[h_s_base["market_heat"] == "normal"].copy()
+            hot_s = h_s_base[h_s_base["market_heat"] == "hot"].copy()
+            m_h_s = hot_s.merge(
+                on=["horizon_days", "watch_type", "scenario_label"],
+                how="inner",
+                suffixes=("_hot", "_normal"),
+            )
+            if not m_h_s.empty:
+                min_n_hs = pd.concat([pd.to_numeric(m_h_s["n_hot"], errors="coerce"), pd.to_numeric(m_h_s["n_normal"], errors="coerce")], axis=1).min(axis=1)
+                heat_bias_by_scenario = pd.DataFrame(
+                    {
+                        "horizon": m_h_s["horizon_days"],
+                        "type": m_h_s["watch_type"],
+                        "scenario": m_h_s["scenario_label"],
+                        "hot_n": m_h_s["n_hot"],
+                        "norm_n": m_h_s["n_normal"],
+                        "min_n": min_n_hs.astype("Int64"),
+                        "delta_win": (pd.to_numeric(m_h_s["win_rate_hot"], errors="coerce") - pd.to_numeric(m_h_s["win_rate_normal"], errors="coerce")).round(1),
+                        "delta_ret": (pd.to_numeric(m_h_s["avg_ret_hot"], errors="coerce") - pd.to_numeric(m_h_s["avg_ret_normal"], errors="coerce")).round(2),
+                    }
+                ).sort_values(by=["horizon", "type", "scenario"])
+
+        # Heat Bias By Date (Top 20 dates)
+        d_h_base = df.groupby(["signal_date", "market_heat"]).agg(
+            n=("realized_ret_pct", "count"),
+            avg_ret=("realized_ret_pct", "mean")
+        ).reset_index()
+        d_h_base = d_h_base[d_h_base["market_heat"].isin(["normal", "hot"])].copy()
+        if not d_h_base.empty:
+            norm_d = d_h_base[d_h_base["market_heat"] == "normal"].copy()
+            hot_d = d_h_base[d_h_base["market_heat"] == "hot"].copy()
+            m_d = hot_d.merge(norm_d, on="signal_date", how="inner", suffixes=("_hot", "_normal"))
+            if not m_d.empty:
+                heat_bias_by_date = pd.DataFrame({
+                    "date": m_d["signal_date"],
+                    "hot_n": m_d["n_hot"],
+                    "norm_n": m_d["n_normal"],
+                    "delta_ret": (m_d["avg_ret_hot"] - m_d["avg_ret_normal"]).round(2)
+                }).sort_values(by="date", ascending=False)
     except Exception:
         heat_bias_check = pd.DataFrame()
+        heat_bias_by_scenario = pd.DataFrame()
+        heat_bias_by_date = pd.DataFrame()
 
     return {
         "by_action": by_action,
@@ -401,9 +469,12 @@ def summarize_outcomes(outcomes: pd.DataFrame) -> dict[str, pd.DataFrame]:
         "overall_by_market_heat": overall_by_market_heat,
         "overall_by_scenario": overall_by_scenario,
         "overall_by_scenario_action": overall_by_scenario_action,
+        "overall_by_scenario_heat": overall_by_scenario_heat,
         "delta_ok_minus_below": delta_ok_minus_below,
         "delta_ok_minus_below_by_date": delta_ok_minus_below_by_date,
         "heat_bias_check": heat_bias_check,
+        "heat_bias_by_scenario": heat_bias_by_scenario,
+        "heat_bias_by_date": heat_bias_by_date,
     }
 
 
@@ -498,6 +569,10 @@ def build_summary_markdown(outcomes: pd.DataFrame, source: str, now_local: datet
         lines.extend(["## Overall By Scenario (all dates)", _table_markdown(parts["overall_by_scenario"]).rstrip(), ""])
     if not parts["heat_bias_check"].empty:
         lines.extend(["## Heat Bias Check (hot - normal)", _table_markdown(parts["heat_bias_check"]).rstrip(), ""])
+    if not parts["heat_bias_by_scenario"].empty:
+        lines.extend(["## Heat Bias By Scenario (hot - normal)", _table_markdown(parts["heat_bias_by_scenario"]).rstrip(), ""])
+    if not parts["heat_bias_by_date"].empty:
+        lines.extend(["## Heat Bias By Date (hot - normal, top 20)", _table_markdown(parts["heat_bias_by_date"].head(20)).rstrip(), ""])
     if not parts["overall_by_signal_status"].empty:
         lines.extend(["## Overall By Signal + reco_status (all dates)", _table_markdown(parts["overall_by_signal_status"]).rstrip(), ""])
     if not parts["delta_ok_minus_below"].empty:

@@ -2,38 +2,33 @@
 
 這個計畫旨在將 `stock-watch` 轉向環境感知與自我校正的動能交易系統。
 
-## Phase 1: 數據閉環與量化驗證 (The Foundation)
+## Phase 1: 數據閉環與量化驗證 (The Foundation) - [Current Focus: ✅ Core Done]
 **關鍵點：** 在進行行為變更前，透過數據確認現有邏輯的有效性。
 
-1.  **量化 Heat Bias 衝擊**：
-    *   在 `summarize_outcomes.py` 中實作 `hot` vs `normal` 的勝率/報酬差。
-    *   目的：確認熱盤時的推薦是否僅是大盤抬轎（High 1D return but poor 5D/20D outcome）。
-2.  **價位帶有效性驗證 (Price-band Verification)**：
-    *   分析 `alert_tracking.csv` 的 `add_price` (加碼) 與 `stop_price` (失效)。
-    *   目的：驗證 ATR 調節後的價位是否真的捕捉到買點，或有效過濾掉轉弱標的。
-3.  **Action-level Delta 分析**：
-    *   比較 `reco_status=ok` 與 `below_threshold` (強制補滿檔數用) 的實質表現差異。
+1.  **量化 Heat Bias 衝擊**：(✅ 已實作於 `summarize_outcomes.py`)
+    *   **發現**：Midlong 5D 報酬在 `hot` (15.1%) 與 `normal` (-0.2%) 之間存在巨大斷層。證實「市場熱度」是當前策略表現的主驅動力。
+2.  **情境感知追蹤**：(✅ 已修復鏈條)
+    *   `scenario_label` 現在能正確在 snapshot -> outcome 中傳遞。今日 (04-22) 已識別為「明顯修正盤」。
+3.  **價位帶有效性驗證**：(🛠 待處理)
+    *   分析 ATR 調節後的 `add_price` 觸發率與隨後勝率。
+4.  **Action-level Delta 分析**：(✅ 已實作)
+    *   發現 `below_threshold` 在某些短線情境下表現不輸給 `ok` 樣本，暗示門檻有優化空間。
 
-## Phase 2: 反饋機制升級 (Intelligence Refinement)
+## Phase 2: 反饋機制升級 (Intelligence Refinement) - [Codex Started]
 **關鍵點：** 引入「期望值」思維，讓系統學習市場近期的脾氣。
 
-1.  **P/L Ratio 正式納入評分公式**：
-    *   將盈虧比從 tie-breaker 提升為 `feedback_score` 的核心變數。
-    *   公式預想：`score = (win_rate_component + return_component + pl_ratio_bias) * shrink`。
-2.  **Rolling Window Feedback**：
-    *   將反饋計算從全歷史改為「近 60 筆」或「近 30 交易日」。
-    *   目的：避免半年前的舊行情干擾當前的參數判定。
+1.  **P/L Ratio 正式納入評分公式**：(✅ Codex 已初步整合)
+    *   公式：`score = (win_rate_component + return_component + pl_ratio_bias) * shrink`。
+2.  **Rolling Window Feedback**：(✅ Codex 已初步整合)
+    *   加入 `recency weighting`。後續應觀察在「明顯修正盤」中，近況權重是否會過快導致系統「恐懼」。
 
-## Phase 3: 自動化防呆與限流 (Safety Valve)
+## Phase 3: 自動化防呆與限流 (Safety Valve) - [Next Critical Step]
 **關鍵點：** 將「警告文字」轉化為「系統保護行為」。
 
 1.  **基於 Heat Bias 的推播限流**：
-    *   當 `heat_bias_message` 判定為「極度過熱」或「明顯修正盤」時，自動縮減推薦檔數（例如 Top 5 -> Top 2 或 0）。
+    *   當 Scenario 為「明顯修正盤」或 Heat Bias 過高時，自動將推播檔數 `top_n_short` 從 5 降至 2 或 0。
 2.  **情境感知持股管理自動化**：
-    *   讓 `portfolio_check.py` 根據 scenario 自動調節出場節奏（例如修正盤時，停利點自動收緊，主動建議先降部位）。
+    *   `portfolio_check.py` 聯動 scenario，在修正盤自動收緊 `trim_price`。
 
 ## Phase 4: 中長線與細節調優 (Fine-tuning)
 **關鍵點：** 基於大樣本進行最後的閾值校準。
-
-1.  **20D 門檻校準**：根據長期累積的 outcomes，調整 midlong 訊號的 `setup_score` 與 `risk_score` 門檻。
-2.  **ATR 選股聯動**：評估是否讓 ATR 直接參與 `detect_row` 的初步篩選，排除波動過於混亂的標的。
