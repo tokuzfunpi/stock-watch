@@ -16,7 +16,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from daily_theme_watchlist import LOCAL_TZ, logger
+from daily_theme_watchlist import ALERT_TRACK_CSV, LOCAL_TZ, logger
 
 
 @dataclass(frozen=True)
@@ -97,6 +97,57 @@ def enrich_market_heat_columns(df: pd.DataFrame) -> pd.DataFrame:
         out.at[idx, "market_heat"] = heat
         if str(out.at[idx, "market_heat_reason"]).strip() == "":
             out.at[idx, "market_heat_reason"] = reason
+    return out
+
+
+def enrich_scenario_label_columns(
+    df: pd.DataFrame,
+    snapshots: pd.DataFrame | None = None,
+    alert_tracking_csv: Path | None = None,
+) -> pd.DataFrame:
+    if df.empty:
+        return df
+
+    out = df.copy()
+    if "scenario_label" not in out.columns:
+        out["scenario_label"] = ""
+    out["scenario_label"] = out["scenario_label"].astype(str).str.strip()
+    out.loc[(out["scenario_label"] == "") | (out["scenario_label"] == "b''") | (out["scenario_label"] == "nan"), "scenario_label"] = ""
+
+    merge_keys = ["signal_date", "watch_type", "ticker"]
+    missing_mask = out["scenario_label"] == ""
+
+    if snapshots is not None and not snapshots.empty and all(c in snapshots.columns for c in merge_keys + ["scenario_label"]):
+        snap = snapshots[merge_keys + ["scenario_label"]].copy()
+        for c in merge_keys:
+            snap[c] = snap[c].astype(str).str.strip()
+        snap["scenario_label"] = snap["scenario_label"].astype(str).str.strip()
+        snap = snap[(snap["scenario_label"] != "") & (snap["scenario_label"] != "b''") & (snap["scenario_label"] != "nan")]
+        if not snap.empty and missing_mask.any():
+            snap = snap.drop_duplicates(subset=merge_keys, keep="last")
+            merged = out.loc[missing_mask, merge_keys].astype(str).merge(snap, on=merge_keys, how="left")
+            out.loc[missing_mask, "scenario_label"] = merged["scenario_label"].fillna("").tolist()
+            missing_mask = out["scenario_label"] == ""
+
+    tracking_path = alert_tracking_csv or ALERT_TRACK_CSV
+    if missing_mask.any() and tracking_path.exists():
+        try:
+            hist = pd.read_csv(tracking_path, dtype={"alert_date": "string", "watch_type": "string", "ticker": "string", "scenario_label": "string"})
+        except Exception:
+            hist = pd.DataFrame()
+        if not hist.empty and all(c in hist.columns for c in ["alert_date", "watch_type", "ticker", "scenario_label"]):
+            hist = hist[["alert_date", "watch_type", "ticker", "scenario_label"]].copy()
+            hist = hist.rename(columns={"alert_date": "signal_date"})
+            for c in merge_keys:
+                hist[c] = hist[c].astype(str).str.strip()
+            hist["scenario_label"] = hist["scenario_label"].astype(str).str.strip()
+            hist = hist[(hist["scenario_label"] != "") & (hist["scenario_label"] != "b''") & (hist["scenario_label"] != "nan")]
+            if not hist.empty:
+                hist = hist.drop_duplicates(subset=merge_keys, keep="last")
+                merged = out.loc[missing_mask, merge_keys].astype(str).merge(hist, on=merge_keys, how="left")
+                out.loc[missing_mask, "scenario_label"] = merged["scenario_label"].fillna("").tolist()
+
+    out.loc[out["scenario_label"] == "", "scenario_label"] = "unknown"
     return out
 
 
@@ -564,6 +615,7 @@ def main(argv: list[str] | None = None) -> int:
                     "ret20_pct": getattr(r, "ret20_pct", None),
                     "volume_ratio20": getattr(r, "volume_ratio20", None),
                     "signals": str(getattr(r, "signals", "")),
+                    "scenario_label": str(getattr(r, "scenario_label", "")),
                     "market_heat": market_heat,
                     "market_heat_reason": market_heat_reason,
                     "out_close": out_close,
@@ -606,6 +658,13 @@ def main(argv: list[str] | None = None) -> int:
         out_df = out_df[keep_rows].copy()
 
     if out_df.empty:
+        refreshed = existing.copy()
+        refreshed = enrich_market_heat_columns(refreshed)
+        refreshed = enrich_scenario_label_columns(refreshed, snapshots=snapshots)
+        if not refreshed.equals(existing):
+            refreshed.to_csv(outcomes_csv, index=False, encoding="utf-8")
+            print(f"Refreshed metadata columns in {outcomes_csv} (no new outcome rows).")
+            return 0
         print("No new outcome rows (already evaluated or already OK).")
         return 0
 
@@ -632,6 +691,7 @@ def main(argv: list[str] | None = None) -> int:
         final_df = pd.concat([keep_existing, out_df], ignore_index=True)
 
     final_df = enrich_market_heat_columns(final_df)
+    final_df = enrich_scenario_label_columns(final_df, snapshots=snapshots)
     final_df.to_csv(outcomes_csv, index=False, encoding="utf-8")
 
     ok_rows = out_df[out_df["status"] == "ok"]

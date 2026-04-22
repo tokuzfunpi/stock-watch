@@ -45,6 +45,7 @@ class SummarizeOutcomesTests(unittest.TestCase):
                     "watch_type": "short",
                     "reco_status": "ok",
                     "market_heat": "normal",
+                    "scenario_label": "高檔震盪盤",
                     "action": "等拉回",
                     "realized_ret_pct": 1.0,
                     "status": "ok",
@@ -55,6 +56,7 @@ class SummarizeOutcomesTests(unittest.TestCase):
                     "watch_type": "short",
                     "reco_status": "below_threshold",
                     "market_heat": "hot",
+                    "scenario_label": "高檔震盪盤",
                     "action": "等拉回",
                     "realized_ret_pct": 0.0,
                     "status": "ok",
@@ -79,6 +81,7 @@ class SummarizeOutcomesTests(unittest.TestCase):
                     "watch_type": "short",
                     "reco_status": "ok",
                     "market_heat": "hot",
+                    "scenario_label": "強勢延伸盤",
                     "action": "等拉回",
                     "realized_ret_pct": 3.0,
                     "status": "ok",
@@ -89,6 +92,7 @@ class SummarizeOutcomesTests(unittest.TestCase):
                     "watch_type": "short",
                     "reco_status": "ok",
                     "market_heat": "normal",
+                    "scenario_label": "高檔震盪盤",
                     "action": "等拉回",
                     "realized_ret_pct": 1.0,
                     "status": "ok",
@@ -100,6 +104,10 @@ class SummarizeOutcomesTests(unittest.TestCase):
         self.assertFalse(heat.empty)
         self.assertIn("delta_avg_ret_hot_minus_normal", heat.columns)
         self.assertEqual(float(heat.iloc[0]["delta_avg_ret_hot_minus_normal"]), 2.0)
+        self.assertIn("overall_by_scenario", parts)
+        self.assertFalse(parts["overall_by_scenario"].empty)
+        self.assertIn("overall_by_scenario_action", parts)
+        self.assertFalse(parts["overall_by_scenario_action"].empty)
 
     def test_build_summary_markdown_renders_sections(self) -> None:
         df = pd.DataFrame(
@@ -110,6 +118,7 @@ class SummarizeOutcomesTests(unittest.TestCase):
                     "watch_type": "midlong",
                     "reco_status": "ok",
                     "market_heat": "warm",
+                    "scenario_label": "權值撐盤、個股轉弱",
                     "action": "續抱",
                     "realized_ret_pct": -2.0,
                     "status": "ok",
@@ -120,6 +129,7 @@ class SummarizeOutcomesTests(unittest.TestCase):
                     "watch_type": "short",
                     "reco_status": "ok",
                     "market_heat": "hot",
+                    "scenario_label": "強勢延伸盤",
                     "action": "等拉回",
                     "realized_ret_pct": 3.0,
                     "status": "ok",
@@ -130,6 +140,7 @@ class SummarizeOutcomesTests(unittest.TestCase):
                     "watch_type": "short",
                     "reco_status": "ok",
                     "market_heat": "normal",
+                    "scenario_label": "高檔震盪盤",
                     "action": "等拉回",
                     "realized_ret_pct": 1.0,
                     "status": "ok",
@@ -142,8 +153,10 @@ class SummarizeOutcomesTests(unittest.TestCase):
         self.assertIn("## Notes", md)
         self.assertIn("market_heat", md)
         self.assertIn("## Overall By Market Heat", md)
+        self.assertIn("## Overall By Scenario", md)
         self.assertIn("## Heat Bias Check (hot - normal)", md)
         self.assertIn("## Weekly Checkpoint", md)
         self.assertIn("## Overall By Action", md)
+        self.assertIn("## Overall By Scenario + Action", md)
         self.assertIn("reco_status", md)
         self.assertIn("## By Action", md)

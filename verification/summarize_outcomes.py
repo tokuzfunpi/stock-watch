@@ -61,6 +61,8 @@ def summarize_outcomes(outcomes: pd.DataFrame) -> dict[str, pd.DataFrame]:
             "overall_by_signal_status": empty,
             "overall_by_action_status": empty,
             "overall_by_market_heat": empty,
+            "overall_by_scenario": empty,
+            "overall_by_scenario_action": empty,
             "delta_ok_minus_below": empty,
             "delta_ok_minus_below_by_date": empty,
             "heat_bias_check": empty,
@@ -79,6 +81,8 @@ def summarize_outcomes(outcomes: pd.DataFrame) -> dict[str, pd.DataFrame]:
             "overall_by_signal_status": empty,
             "overall_by_action_status": empty,
             "overall_by_market_heat": empty,
+            "overall_by_scenario": empty,
+            "overall_by_scenario_action": empty,
             "delta_ok_minus_below": empty,
             "delta_ok_minus_below_by_date": empty,
             "heat_bias_check": empty,
@@ -90,17 +94,19 @@ def summarize_outcomes(outcomes: pd.DataFrame) -> dict[str, pd.DataFrame]:
         if df.empty:
             empty = pd.DataFrame()
             return {
-                "by_action": empty,
-                "by_signal": empty,
-                "overall_by_action": empty,
-                "overall_by_signal": empty,
-                "overall_by_signal_status": empty,
-                "overall_by_action_status": empty,
-                "overall_by_market_heat": empty,
-                "delta_ok_minus_below": empty,
-                "delta_ok_minus_below_by_date": empty,
-                "heat_bias_check": empty,
-            }
+            "by_action": empty,
+            "by_signal": empty,
+            "overall_by_action": empty,
+            "overall_by_signal": empty,
+            "overall_by_signal_status": empty,
+            "overall_by_action_status": empty,
+            "overall_by_market_heat": empty,
+            "overall_by_scenario": empty,
+            "overall_by_scenario_action": empty,
+            "delta_ok_minus_below": empty,
+            "delta_ok_minus_below_by_date": empty,
+            "heat_bias_check": empty,
+        }
 
     # Split analysis: ok vs below_threshold (forced-fill).
     if "reco_status" in df.columns:
@@ -114,6 +120,12 @@ def summarize_outcomes(outcomes: pd.DataFrame) -> dict[str, pd.DataFrame]:
         df.loc[~df["market_heat"].isin(["normal", "warm", "hot"]), "market_heat"] = "unknown"
     else:
         df["market_heat"] = "unknown"
+
+    if "scenario_label" in df.columns:
+        df["scenario_label"] = df["scenario_label"].astype(str).str.strip()
+        df.loc[(df["scenario_label"] == "") | (df["scenario_label"] == "b''"), "scenario_label"] = "unknown"
+    else:
+        df["scenario_label"] = "unknown"
 
     df["realized_ret_pct"] = pd.to_numeric(df["realized_ret_pct"], errors="coerce")
     df["horizon_days"] = pd.to_numeric(df["horizon_days"], errors="coerce").astype("Int64")
@@ -198,6 +210,38 @@ def summarize_outcomes(outcomes: pd.DataFrame) -> dict[str, pd.DataFrame]:
     overall_by_market_heat["win_rate"] = (overall_by_market_heat["win_rate"] * 100).round(1)
     for c in ["avg_ret", "med_ret"]:
         overall_by_market_heat[c] = overall_by_market_heat[c].round(2)
+
+    overall_by_scenario = (
+        df.groupby(["horizon_days", "watch_type", "scenario_label"], dropna=False)
+        .agg(
+            n=("realized_ret_pct", "count"),
+            win_rate=("win", "mean"),
+            avg_ret=("realized_ret_pct", "mean"),
+            med_ret=("realized_ret_pct", "median"),
+        )
+        .reset_index()
+        .sort_values(by=["horizon_days", "watch_type", "scenario_label"], ascending=[True, True, True])
+    )
+    overall_by_scenario["win_rate"] = (overall_by_scenario["win_rate"] * 100).round(1)
+    for c in ["avg_ret", "med_ret"]:
+        overall_by_scenario[c] = overall_by_scenario[c].round(2)
+
+    overall_by_scenario_action = (
+        df.groupby(["horizon_days", "watch_type", "scenario_label", "action"], dropna=False)
+        .agg(
+            n=("realized_ret_pct", "count"),
+            win_rate=("win", "mean"),
+            avg_ret=("realized_ret_pct", "mean"),
+            med_ret=("realized_ret_pct", "median"),
+            min_ret=("realized_ret_pct", "min"),
+            max_ret=("realized_ret_pct", "max"),
+        )
+        .reset_index()
+        .sort_values(by=["horizon_days", "watch_type", "scenario_label", "n", "avg_ret"], ascending=[True, True, True, False, False])
+    )
+    overall_by_scenario_action["win_rate"] = (overall_by_scenario_action["win_rate"] * 100).round(1)
+    for c in ["avg_ret", "med_ret", "min_ret", "max_ret"]:
+        overall_by_scenario_action[c] = overall_by_scenario_action[c].round(2)
 
     overall_by_signal_status = (
         df.groupby(["horizon_days", "watch_type", "reco_status"], dropna=False)
@@ -355,6 +399,8 @@ def summarize_outcomes(outcomes: pd.DataFrame) -> dict[str, pd.DataFrame]:
         "overall_by_signal_status": overall_by_signal_status,
         "overall_by_action_status": overall_by_action_status,
         "overall_by_market_heat": overall_by_market_heat,
+        "overall_by_scenario": overall_by_scenario,
+        "overall_by_scenario_action": overall_by_scenario_action,
         "delta_ok_minus_below": delta_ok_minus_below,
         "delta_ok_minus_below_by_date": delta_ok_minus_below_by_date,
         "heat_bias_check": heat_bias_check,
@@ -421,6 +467,8 @@ def build_summary_markdown(outcomes: pd.DataFrame, source: str, now_local: datet
     lines.extend(["## Overall By Signal (all dates)", _table_markdown(parts["overall_by_signal"]).rstrip(), ""])
     if not parts["overall_by_market_heat"].empty:
         lines.extend(["## Overall By Market Heat (all dates)", _table_markdown(parts["overall_by_market_heat"]).rstrip(), ""])
+    if not parts["overall_by_scenario"].empty:
+        lines.extend(["## Overall By Scenario (all dates)", _table_markdown(parts["overall_by_scenario"]).rstrip(), ""])
     if not parts["heat_bias_check"].empty:
         lines.extend(["## Heat Bias Check (hot - normal)", _table_markdown(parts["heat_bias_check"]).rstrip(), ""])
     if not parts["overall_by_signal_status"].empty:
@@ -445,6 +493,8 @@ def build_summary_markdown(outcomes: pd.DataFrame, source: str, now_local: datet
     lines.extend(["## Overall By Action (all dates, top 80)", _table_markdown(parts["overall_by_action"].head(80)).rstrip(), ""])
     if not parts["overall_by_action_status"].empty:
         lines.extend(["## Overall By Action + reco_status (all dates, top 80)", _table_markdown(parts["overall_by_action_status"].head(80)).rstrip(), ""])
+    if not parts["overall_by_scenario_action"].empty:
+        lines.extend(["## Overall By Scenario + Action (all dates, top 80)", _table_markdown(parts["overall_by_scenario_action"].head(80)).rstrip(), ""])
     lines.extend(["## By Signal (watch_type)", _table_markdown(parts["by_signal"].head(30)).rstrip(), ""])
     lines.extend(["## By Action (top 50)", _table_markdown(parts["by_action"].head(50)).rstrip(), ""])
     lines.append("")

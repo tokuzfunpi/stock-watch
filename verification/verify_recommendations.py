@@ -15,8 +15,11 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from daily_theme_watchlist import (
+    build_market_scenario,
     LOCAL_TZ,
     CONFIG,
+    get_market_regime,
+    get_us_market_reference,
     is_midlong_buyable,
     is_short_term_buyable,
     rank_midlong_pool,
@@ -528,6 +531,12 @@ def main(argv: list[str] | None = None) -> int:
 
     df_rank = pd.read_csv(rank_csv)
     now_local = datetime.now(LOCAL_TZ)
+    try:
+        market_regime = get_market_regime()
+        us_market = get_us_market_reference()
+        scenario_label = str(build_market_scenario(market_regime, us_market, df_rank).get("label", "unknown"))
+    except Exception:
+        scenario_label = "unknown"
 
     short_forced = select_forced_recommendations(df_rank, watch_type="short", top_n=int(args.top_n_short)) if not df_rank.empty else df_rank.head(0).copy()
     midlong_forced = select_forced_recommendations(df_rank, watch_type="midlong", top_n=int(args.top_n_midlong)) if not df_rank.empty else df_rank.head(0).copy()
@@ -607,11 +616,13 @@ def main(argv: list[str] | None = None) -> int:
             combined["signal_date"] = asof_date
             combined["source"] = str(rank_csv)
             combined["source_sha"] = ""
+            combined["scenario_label"] = scenario_label
             keep = [
                 "generated_at",
                 "signal_date",
                 "source",
                 "source_sha",
+                "scenario_label",
                 "watch_type",
                 "rank",
                 "ticker",
