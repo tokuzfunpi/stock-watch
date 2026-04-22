@@ -2386,7 +2386,7 @@ def upsert_alert_tracking(
     hist.to_csv(ALERT_TRACK_CSV, index=False, encoding="utf-8-sig")
 
 
-def run_watchlist() -> pd.DataFrame:
+def run_watchlist(strat: Optional[StrategyConfig] = None) -> pd.DataFrame:
     rows: List[dict] = []
     prev_rank = load_previous_rank()
     for item in WATCHLIST:
@@ -2394,7 +2394,7 @@ def run_watchlist() -> pd.DataFrame:
         try:
             df = yf_download_one(ticker, CONFIG.yf_period)
             df = add_indicators(df)
-            row = detect_row(df, ticker, name, group, item["layer"])
+            row = detect_row(df, ticker, name, group, item["layer"], strat=strat)
             rows.append(row)
             append_stock_log(row)
             logger.debug("OK: %s %s", ticker, name)
