@@ -860,3 +860,46 @@ requirements.txt
 - workflow 已改為全手動觸發（不使用 GitHub schedule）
 - config 已改成固定發 Telegram 通知
 - workflow 已改成使用 `requirements.txt` 並先跑測試
+
+## 2026-04-22 補充：`testv/CODEX_HANDOFF.md` 對齊重點
+
+今天另外直接讀過 GitHub 上的 `testv/CODEX_HANDOFF.md`。這份 handoff 和目前 `main` 的整合方向**基本一致**，可當作設計共識參考，但不要把 `testv` 當成可整包 merge 的來源。
+
+### 這份 handoff 的核心訊息
+
+- 採用「**保守版 adaptive strategy**」節奏是正確的
+- 核心原則是：**驗算（verification）先行，沒有數據支撐的不進主排序**
+- 短線 / 中線的主要 horizon 仍然是：
+  - `short = 5D`
+  - `midlong = 20D`
+  - `1D` 只當輔助，不要追逐 `1D` 假動能
+- `testv` 的下一步規劃可概括成兩段：
+  - **Phase 1：**量化 `Heat Bias`、驗證 ATR 價位帶是否真的有用
+  - **Phase 2：**把 `pl_ratio` 正式納入 `feedback_score`，再考慮 rolling window
+
+### 和目前 `main` 的對照
+
+目前 `main` 已經落地：
+
+- `StrategyConfig` / `config.strategy`
+- `scenario-aware thresholds` 已正式進 `run_watchlist()`
+- ATR / `volatility_tag`
+- ATR 輕量價位帶（只動 `add_price` / `stop_price`）
+- `market_heat`、`Heat Bias` 提示與 verification summary 的 `Heat Bias Check`
+- `pl_ratio` 已進 `feedback_summary.csv`
+- `feedback_score` + `pl_ratio` tie-breaker 已進候選池微調
+
+目前 `main` **還沒有**完全照 `testv` handoff 的更深版本做：
+
+- `pl_ratio` 直接進 `feedback_score` 公式
+- rolling window / recency weighting
+- feedback 直接主導 `daily_rank.csv` 主排序
+
+### 維護原則
+
+如果之後還要繼續吸收 `testv` / Gemini 的設計，請維持下面原則：
+
+- **不要整包 merge `testv`**
+- **先做 report / verification，再做 ranking**
+- **先觀察 `5D` / `20D` 結果，再考慮放大 adaptive 權重**
+- **20D 樣本不足時，不要急著重調中線門檻**
