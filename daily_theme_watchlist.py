@@ -10,7 +10,7 @@ import os
 import re
 import sys
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
@@ -128,6 +128,20 @@ class GroupWeights:
 
 
 @dataclass
+class StrategyConfig:
+    base_low250_mult: float
+    base_range20_max: float
+    rebreak_vol_ratio: float
+    surge_ret20: float
+    surge_vol_ratio: float
+    trend_ret20: float
+    accel_ret5: float
+    accel_ret10: float
+    accel_vol_ratio_fast: float
+    accel_vol_ratio_slow: float
+
+
+@dataclass
 class AppConfig:
     yf_period: str
     state_enabled: bool
@@ -138,11 +152,13 @@ class AppConfig:
     notify: NotificationRule
     backtest: BacktestConfig
     group_weights: GroupWeights
+    strategy: StrategyConfig
 
 
 def load_config(path: Path) -> AppConfig:
     raw = json.loads(path.read_text(encoding="utf-8"))
     notify_raw = raw["notify"]
+    strat_raw = raw.get("strategy", {})
     return AppConfig(
         yf_period=raw.get("yf_period", "3y"),
         state_enabled=bool(raw.get("state_enabled", True)),
@@ -162,6 +178,18 @@ def load_config(path: Path) -> AppConfig:
         ),
         backtest=BacktestConfig(**raw["backtest"]),
         group_weights=GroupWeights(**raw["group_weights"]),
+        strategy=StrategyConfig(
+            base_low250_mult=float(strat_raw.get("base_low250_mult", 1.20)),
+            base_range20_max=float(strat_raw.get("base_range20_max", 0.15)),
+            rebreak_vol_ratio=float(strat_raw.get("rebreak_vol_ratio", 1.35)),
+            surge_ret20=float(strat_raw.get("surge_ret20", 0.22)),
+            surge_vol_ratio=float(strat_raw.get("surge_vol_ratio", 1.55)),
+            trend_ret20=float(strat_raw.get("trend_ret20", 0.08)),
+            accel_ret5=float(strat_raw.get("accel_ret5", 0.08)),
+            accel_ret10=float(strat_raw.get("accel_ret10", 0.12)),
+            accel_vol_ratio_fast=float(strat_raw.get("accel_vol_ratio_fast", 1.3)),
+            accel_vol_ratio_slow=float(strat_raw.get("accel_vol_ratio_slow", 1.2)),
+        ),
     )
 
 
@@ -541,6 +569,17 @@ def add_indicators(df: pd.DataFrame, ma_period: int = 20) -> pd.DataFrame:
     out["DistToLow250"] = out["Close"] / out["Low250D"] - 1.0
     out["VolumeRatio20"] = out["Volume"] / out["AvgVol20"]
 
+    tr = pd.concat(
+        [
+            out["High"] - out["Low"],
+            (out["High"] - out["Close"].shift(1)).abs(),
+            (out["Low"] - out["Close"].shift(1)).abs(),
+        ],
+        axis=1,
+    ).max(axis=1)
+    out["ATR14"] = tr.rolling(14).mean()
+    out["ATR_Pct"] = out["ATR14"] / out["Close"]
+
     if ma_period not in [5, 10, 20, 60, 120, 250]:
         out[f"MA{ma_period}"] = out["Close"].rolling(ma_period).mean()
     return out
@@ -623,7 +662,28 @@ def speculative_risk_label(score: int) -> str:
     return "正常"
 
 
-def detect_row(df: pd.DataFrame, ticker: str, name: str, group: str, layer: str) -> dict:
+def volatility_label(atr_pct: float) -> str:
+    if atr_pct <= 0:
+        return "未知"
+    if atr_pct < 2.0:
+        return "穩健"
+    if atr_pct < 4.0:
+        return "標準"
+    if atr_pct < 6.5:
+        return "活潑"
+    return "劇烈"
+
+
+def detect_row(
+    df: pd.DataFrame,
+    ticker: str,
+    name: str,
+    group: str,
+    layer: str,
+    strat: Optional[StrategyConfig] = None,
+) -> dict:
+    if strat is None:
+        strat = CONFIG.strategy
     x = df.iloc[-1]
     prev = df.iloc[-2] if len(df) >= 2 else x
 
@@ -648,40 +708,40 @@ def detect_row(df: pd.DataFrame, ticker: str, name: str, group: str, layer: str)
 
     base_signal = bool(
         low250 is not None
-        and close_ <= low250 * 1.20
+        and close_ <= low250 * strat.base_low250_mult
         and avg_vol20 > 0
         and volume < avg_vol20
-        and range20 < 0.15
+        and range20 < strat.base_range20_max
     )
     rebreak_signal = bool(
         ma20 is not None and ma60 is not None and avg_vol20 > 0
         and close_ > ma20 and close_ > ma60
-        and vol_ratio20 > 1.35
+        and vol_ratio20 > strat.rebreak_vol_ratio
         and pd.notna(prev.get("MA20"))
         and float(prev["Close"]) <= float(prev["MA20"])
     )
-    surge_signal = bool(ret20 > 0.22 and vol_ratio20 > 1.55)
+    surge_signal = bool(ret20 > strat.surge_ret20 and vol_ratio20 > strat.surge_vol_ratio)
     trend_signal = bool(
         ma20 is not None and ma60 is not None
-        and close_ > ma20 and ma20 > ma60 and ret20 > 0.08
+        and close_ > ma20 and ma20 > ma60 and ret20 > strat.trend_ret20
     )
     accel_signal = bool(
-        (ret5 > 0.08 and vol_ratio20 > 1.3 and ret20 > 0)
-        or (ret10 > 0.12 and vol_ratio20 > 1.2 and ret20 > 0)
+        (ret5 > strat.accel_ret5 and vol_ratio20 > strat.accel_vol_ratio_fast and ret20 > 0)
+        or (ret10 > strat.accel_ret10 and vol_ratio20 > strat.accel_vol_ratio_slow and ret20 > 0)
     )
     pullback_signal = bool(drawdown120 <= -0.20)
 
     setup_score = 0
-    if low250 is not None and close_ <= low250 * 1.20:
+    if low250 is not None and close_ <= low250 * strat.base_low250_mult:
         setup_score += 2
-    elif low250 is not None and close_ <= low250 * 1.35:
+    elif low250 is not None and close_ <= low250 * (strat.base_low250_mult + 0.15):
         setup_score += 1
 
     if avg_vol20 > 0 and volume < avg_vol20:
         setup_score += 1
-    if range20 < 0.15:
+    if range20 < strat.base_range20_max:
         setup_score += 1
-    if range20 < 0.10:
+    if range20 < max(strat.base_range20_max - 0.05, 0.0):
         setup_score += 1
     if ma20 is not None and close_ > ma20:
         setup_score += 1
@@ -783,6 +843,7 @@ def detect_row(df: pd.DataFrame, ticker: str, name: str, group: str, layer: str)
         signals=",".join(signals) if signals else "NONE",
         group=group,
     )
+    atr_pct = round(float(x["ATR_Pct"]) * 100, 2) if pd.notna(x.get("ATR_Pct")) else 0.0
 
     return {
         "date": df.index[-1].strftime("%Y-%m-%d"),
@@ -810,6 +871,8 @@ def detect_row(df: pd.DataFrame, ticker: str, name: str, group: str, layer: str)
         "regime": regime,
         "spec_risk_score": int(spec_score),
         "spec_risk_label": speculative_risk_label(spec_score),
+        "atr_pct": atr_pct,
+        "volatility_tag": volatility_label(atr_pct),
     }
 
 
@@ -1162,6 +1225,58 @@ def build_market_scenario(market_regime: dict, us_market: dict, df_rank: Optiona
     }
 
 
+def adjust_strategy_by_scenario(base_strat: StrategyConfig, scenario: dict) -> StrategyConfig:
+    strat = replace(base_strat)
+    label = str(scenario.get("label", "") or "")
+
+    if label == "明顯修正盤":
+        strat.rebreak_vol_ratio += 0.10
+        strat.trend_ret20 += 0.01
+        strat.accel_ret5 += 0.01
+        strat.accel_ret10 += 0.02
+        strat.accel_vol_ratio_fast += 0.15
+        strat.accel_vol_ratio_slow += 0.10
+    elif label == "權值撐盤、個股轉弱":
+        strat.rebreak_vol_ratio += 0.05
+        strat.accel_ret5 += 0.005
+        strat.accel_vol_ratio_fast += 0.10
+        strat.accel_vol_ratio_slow += 0.05
+    elif label == "高檔震盪盤":
+        strat.rebreak_vol_ratio += 0.05
+        strat.accel_ret5 += 0.01
+        strat.accel_vol_ratio_fast += 0.05
+        strat.accel_vol_ratio_slow += 0.05
+    elif label == "強勢延伸盤":
+        strat.rebreak_vol_ratio = max(strat.rebreak_vol_ratio - 0.05, 1.0)
+        strat.accel_ret5 = max(strat.accel_ret5 - 0.005, 0.0)
+        strat.accel_ret10 = max(strat.accel_ret10 - 0.01, strat.accel_ret5)
+        strat.accel_vol_ratio_fast = max(strat.accel_vol_ratio_fast - 0.05, 1.0)
+        strat.accel_vol_ratio_slow = max(strat.accel_vol_ratio_slow - 0.05, 1.0)
+    return strat
+
+
+def strategy_preview_lines(base_strat: StrategyConfig, scenario: dict) -> list[str]:
+    adjusted = adjust_strategy_by_scenario(base_strat, scenario)
+    field_labels = {
+        "rebreak_vol_ratio": "rebreak 量比",
+        "trend_ret20": "trend 20D",
+        "accel_ret5": "accel 5D",
+        "accel_ret10": "accel 10D",
+        "accel_vol_ratio_fast": "accel 快速量比",
+        "accel_vol_ratio_slow": "accel 緩速量比",
+    }
+    changed: list[str] = []
+    for field, label in field_labels.items():
+        before = getattr(base_strat, field)
+        after = getattr(adjusted, field)
+        if round(before, 4) == round(after, 4):
+            continue
+        changed.append(f"{label}: {before:.2f} → {after:.2f}")
+    if not changed:
+        return ["- 今日情境下，adaptive preview 不調整門檻。"]
+    return [f"- {line}" for line in changed]
+
+
 def reorder_priority_groups(df_rank: pd.DataFrame) -> pd.DataFrame:
     rule = CONFIG.notify
     df = df_rank.copy()
@@ -1502,12 +1617,22 @@ def watch_price_plan(row: pd.Series, watch_type: str) -> dict[str, float | str]:
     ma60 = float(row.get("ma60", ma20) or ma20)
     ret5 = float(row.get("ret5_pct", 0.0) or 0.0)
     ret20 = float(row.get("ret20_pct", 0.0) or 0.0)
+    atr_pct = float(row.get("atr_pct", 0.0) or 0.0)
     risk = int(row.get("risk_score", 0) or 0)
     signals = str(row.get("signals", "") or "")
     holding_style = str(row.get("holding_style", "") or holding_style_label(row))
 
     if close_ <= 0:
         return {"add_price": 0.0, "trim_price": 0.0, "stop_price": 0.0, "note": ""}
+
+    if atr_pct >= 6.0:
+        atr_scale = 1.35
+    elif atr_pct >= 4.0:
+        atr_scale = 1.2
+    elif 0 < atr_pct <= 2.0:
+        atr_scale = 0.9
+    else:
+        atr_scale = 1.0
 
     if watch_type == "short":
         if holding_style == "進攻持股":
@@ -1532,9 +1657,12 @@ def watch_price_plan(row: pd.Series, watch_type: str) -> dict[str, float | str]:
             stop_pct = 0.05 if risk <= 2 else 0.06
             note = "短線先等回檔，不追現價。"
 
+        pullback_pct *= atr_scale
+        stop_pct *= atr_scale
         add_price = max(ma20, close_ * (1 - pullback_pct))
         trim_price = close_ * (1 + trim_pct)
-        stop_price = min(ma20 * 0.98, close_ * (1 - stop_pct))
+        support_buffer = 0.02 * atr_scale
+        stop_price = min(ma20 * (1 - support_buffer), close_ * (1 - stop_pct))
     else:
         if holding_style == "進攻持股":
             pullback_pct = 0.06 if ret20 >= 10 else 0.05
@@ -1556,9 +1684,12 @@ def watch_price_plan(row: pd.Series, watch_type: str) -> dict[str, float | str]:
             stop_pct = 0.08 if risk <= 2 else 0.1
             note = "中線用分批看，不用急著一次買滿。"
 
+        pullback_pct *= atr_scale
+        stop_pct *= atr_scale
         add_price = max(ma20, ma60, close_ * (1 - pullback_pct))
         trim_price = close_ * (1 + trim_pct)
-        stop_price = min(ma20 * 0.97, ma60 * 0.97, close_ * (1 - stop_pct))
+        support_buffer = 0.03 * atr_scale
+        stop_price = min(ma20 * (1 - support_buffer), ma60 * (1 - support_buffer), close_ * (1 - stop_pct))
 
     return {
         "add_price": round(add_price, 2),
@@ -1997,8 +2128,15 @@ def build_feedback_summary() -> pd.DataFrame:
             if action_df.empty:
                 continue
             samples = int(action_df.shape[0])
+            positive = action_df[action_df["target_return"] > 0]["target_return"]
+            negative = action_df[action_df["target_return"] <= 0]["target_return"]
             win_rate_pct = round(float(action_df["target_return"].gt(0).mean()) * 100, 2)
             avg_return_pct = round(float(action_df["target_return"].mean()), 2)
+            avg_win_return_pct = round(float(positive.mean()), 2) if not positive.empty else 0.0
+            avg_loss_return_pct = round(float(negative.mean()), 2) if not negative.empty else 0.0
+            gross_win = float(positive.sum()) if not positive.empty else 0.0
+            gross_loss = abs(float(negative.sum())) if not negative.empty else 0.0
+            pl_ratio = round(gross_win / gross_loss, 2) if gross_loss > 0 else (round(gross_win, 2) if gross_win > 0 else 0.0)
             shrink = min(samples / 8.0, 1.0)
             feedback_score = round((((win_rate_pct - 50.0) / 10.0) + (avg_return_pct / 5.0)) * shrink, 2)
             rows.append(
@@ -2008,6 +2146,9 @@ def build_feedback_summary() -> pd.DataFrame:
                     "samples": samples,
                     "win_rate_pct": win_rate_pct,
                     "avg_return_pct": avg_return_pct,
+                    "avg_win_return_pct": avg_win_return_pct,
+                    "avg_loss_return_pct": avg_loss_return_pct,
+                    "pl_ratio": pl_ratio,
                     "feedback_score": feedback_score,
                     "feedback_label": feedback_label_from_score(feedback_score, samples),
                 }
@@ -2078,10 +2219,15 @@ def summarize_events(events_df: pd.DataFrame, horizons: List[int]) -> pd.DataFra
 
 
 
-def upsert_alert_tracking(short_candidates: pd.DataFrame, midlong_candidates: pd.DataFrame) -> None:
+def upsert_alert_tracking(
+    short_candidates: pd.DataFrame,
+    midlong_candidates: pd.DataFrame,
+    market_scenario: Optional[dict] = None,
+) -> None:
     cols = [
         "alert_date", "watch_type", "ticker", "name", "group", "grade", "rank", "setup_score", "risk_score",
         "layer", "signals", "regime", "action_label", "feedback_score", "feedback_label",
+        "scenario_label",
         "add_price", "trim_price", "stop_price",
         "alert_close", "ret1_future_pct", "ret5_future_pct", "ret20_future_pct", "status"
     ]
@@ -2098,6 +2244,7 @@ def upsert_alert_tracking(short_candidates: pd.DataFrame, midlong_candidates: pd
         ("short", short_candidates),
         ("midlong", midlong_candidates),
     ]
+    scenario_label = str((market_scenario or {}).get("label", "") or "")
 
     for watch_type, candidates in candidate_groups:
         if candidates is None or candidates.empty:
@@ -2125,6 +2272,7 @@ def upsert_alert_tracking(short_candidates: pd.DataFrame, midlong_candidates: pd
                 "action_label": feedback_action_label(r, watch_type),
                 "feedback_score": float(r.get("feedback_score", 0.0)),
                 "feedback_label": str(r.get("feedback_label", "樣本不足")),
+                "scenario_label": scenario_label,
                 "add_price": watch_price_plan(r, watch_type).get("add_price"),
                 "trim_price": watch_price_plan(r, watch_type).get("trim_price"),
                 "stop_price": watch_price_plan(r, watch_type).get("stop_price"),
@@ -2261,8 +2409,15 @@ def run_backtest_dual() -> tuple[Optional[pd.DataFrame], Optional[pd.DataFrame]]
     return steady_summary, attack_summary
 
 
-def build_daily_report_markdown(df_rank: pd.DataFrame, market_regime: dict, bt_steady: Optional[pd.DataFrame], bt_attack: Optional[pd.DataFrame]) -> str:
+def build_daily_report_markdown(
+    df_rank: pd.DataFrame,
+    market_regime: dict,
+    bt_steady: Optional[pd.DataFrame],
+    bt_attack: Optional[pd.DataFrame],
+    us_market: Optional[dict] = None,
+) -> str:
     today = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    scenario = build_market_scenario(market_regime, us_market or {}, df_rank)
     lines = [
         "# Daily 20D v2.2 Attack Report",
         f"- Generated: {today}",
@@ -2270,14 +2425,14 @@ def build_daily_report_markdown(df_rank: pd.DataFrame, market_regime: dict, bt_s
         "",
         "## Top Ranking",
         "",
-        "| 排名 | 等級 | 股票 | 分類 | 近況 | 5日 | 20日 | 投機風險 | 重點 |",
-        "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+        "| 排名 | 等級 | 股票 | 分類 | 近況 | 5日 | 20日 | 波動 | 投機風險 | 重點 |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
     for _, r in df_rank.iterrows():
         lines.append(
             f"| {int(r['rank'])} | {r['grade']} | {r['name']} ({r['ticker']}) | "
             f"{layer_label(r['layer'])} | {r['regime']} | "
-            f"{r['ret5_pct']}% | {r['ret20_pct']}% | {r['spec_risk_label']} | "
+            f"{r['ret5_pct']}% | {r['ret20_pct']}% | {r.get('volatility_tag', '')} ({r.get('atr_pct', '')}%) | {r['spec_risk_label']} | "
             f"{r['signals']} / 量比 {r['volume_ratio20']} |"
         )
 
@@ -2367,15 +2522,19 @@ def build_daily_report_markdown(df_rank: pd.DataFrame, market_regime: dict, bt_s
     if feedback_summary.empty:
         lines.append("- None")
     else:
-        lines.append("| 類型 | 操作 | 樣本 | 勝率 | 平均報酬 | 回饋分數 | 判讀 |")
-        lines.append("| --- | --- | --- | --- | --- | --- | --- |")
+        lines.append("| 類型 | 操作 | 樣本 | 勝率 | 平均報酬 | 盈虧比 | 回饋分數 | 判讀 |")
+        lines.append("| --- | --- | --- | --- | --- | --- | --- | --- |")
         for _, r in feedback_summary.iterrows():
             action_label = "整體" if str(r["action_label"]) == "__all__" else str(r["action_label"])
             watch_type = "短線" if str(r["watch_type"]) == "short" else "中長線"
             lines.append(
                 f"| {watch_type} | {action_label} | {int(r['samples'])} | {r['win_rate_pct']}% | "
-                f"{r['avg_return_pct']}% | {r['feedback_score']} | {r['feedback_label']} |"
+                f"{r['avg_return_pct']}% | {r['pl_ratio']} | {r['feedback_score']} | {r['feedback_label']} |"
             )
+
+    lines.extend(["", "## Adaptive Strategy Preview (report only)", ""])
+    lines.append(f"- 情境：{scenario['label']} | 目前節奏：{scenario['stance']}")
+    lines.extend(strategy_preview_lines(CONFIG.strategy, scenario))
 
     lines.extend([
         "",
@@ -2439,7 +2598,13 @@ def build_daily_report_markdown(df_rank: pd.DataFrame, market_regime: dict, bt_s
     return "\n".join(lines)
 
 
-def build_daily_report_html(df_rank: pd.DataFrame, market_regime: dict, bt_steady: Optional[pd.DataFrame], bt_attack: Optional[pd.DataFrame]) -> str:
+def build_daily_report_html(
+    df_rank: pd.DataFrame,
+    market_regime: dict,
+    bt_steady: Optional[pd.DataFrame],
+    bt_attack: Optional[pd.DataFrame],
+    us_market: Optional[dict] = None,
+) -> str:
     steady_html = "<p>None</p>" if bt_steady is None or bt_steady.empty else dataframe_to_html(bt_steady)
     attack_html = "<p>None</p>" if bt_attack is None or bt_attack.empty else dataframe_to_html(bt_attack)
     short_candidates, short_backups, midlong_candidates, midlong_backups = build_candidate_sets(df_rank)
@@ -2453,6 +2618,10 @@ def build_daily_report_html(df_rank: pd.DataFrame, market_regime: dict, bt_stead
     gem_html = "<p>None</p>" if gem_candidates.empty else dataframe_to_html(gem_candidates)
     feedback_summary = build_feedback_summary()
     feedback_html = "<p>None</p>" if feedback_summary.empty else dataframe_to_html(feedback_summary)
+    scenario = build_market_scenario(market_regime, us_market or {}, df_rank)
+    adaptive_preview_html = "<br>".join(
+        [f"情境：{scenario['label']} | 目前節奏：{scenario['stance']}"] + strategy_preview_lines(CONFIG.strategy, scenario)
+    )
     return f"""<!doctype html>
 <html><head><meta charset="utf-8"><title>Daily 20D v2.2 Attack Report</title>
 <style>
@@ -2471,14 +2640,21 @@ th {{ background: #f4f4f4; }}
 <h2>ETF / 債券觀察</h2>{special_etf_html}
 <h2>Early Gem Watch</h2>{gem_html}
 <h2>Prediction Feedback</h2>{feedback_html}
+<h2>Adaptive Strategy Preview (report only)</h2><p>{adaptive_preview_html}</p>
 <h2>Steady Backtest</h2>{steady_html}
 <h2>Attack Backtest</h2>{attack_html}
 </body></html>"""
 
 
-def save_reports(df_rank: pd.DataFrame, market_regime: dict, bt_steady: Optional[pd.DataFrame], bt_attack: Optional[pd.DataFrame]) -> None:
-    REPORT_MD.write_text(build_daily_report_markdown(df_rank, market_regime, bt_steady, bt_attack), encoding="utf-8")
-    REPORT_HTML.write_text(build_daily_report_html(df_rank, market_regime, bt_steady, bt_attack), encoding="utf-8")
+def save_reports(
+    df_rank: pd.DataFrame,
+    market_regime: dict,
+    bt_steady: Optional[pd.DataFrame],
+    bt_attack: Optional[pd.DataFrame],
+    us_market: Optional[dict] = None,
+) -> None:
+    REPORT_MD.write_text(build_daily_report_markdown(df_rank, market_regime, bt_steady, bt_attack, us_market), encoding="utf-8")
+    REPORT_HTML.write_text(build_daily_report_html(df_rank, market_regime, bt_steady, bt_attack, us_market), encoding="utf-8")
 
 
 def build_portfolio_report_markdown(df_rank: pd.DataFrame, market_regime: dict, us_market: dict) -> str:
@@ -2613,8 +2789,14 @@ def main() -> int:
         logger.info("Market regime: %s", market_regime["comment"])
 
         short_candidates, short_backups, midlong_candidates, _ = build_candidate_sets(df_rank)
-        upsert_alert_tracking(short_candidates, midlong_candidates)
-        save_reports(df_rank, market_regime, bt_steady, bt_attack)
+        market_scenario = build_market_scenario(market_regime, us_market, df_rank)
+        upsert_alert_tracking(short_candidates, midlong_candidates, market_scenario)
+        save_reports(df_rank, market_regime, bt_steady, bt_attack, us_market)
+        logger.info(
+            "Adaptive preview (%s): %s",
+            market_scenario["label"],
+            " | ".join(line.removeprefix("- ") for line in strategy_preview_lines(CONFIG.strategy, market_scenario)),
+        )
 
         current_state = build_state(df_rank, market_regime)
         last_state = load_last_state()

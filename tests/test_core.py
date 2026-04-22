@@ -11,6 +11,7 @@ import pandas as pd
 
 from daily_theme_watchlist import (
     add_indicators,
+    adjust_strategy_by_scenario,
     apply_feedback_adjustment,
     build_feedback_summary,
     build_daily_report_markdown,
@@ -40,7 +41,9 @@ from daily_theme_watchlist import (
     select_short_term_candidates,
     select_push_candidates,
     split_message,
+    CONFIG,
     sync_watchlist_with_portfolio,
+    upsert_alert_tracking,
     watch_price_plan,
     watch_price_plan_text,
 )
@@ -75,7 +78,16 @@ class DetectRowTests(unittest.TestCase):
         self.assertEqual(out["name"], "Accel Name")
         self.assertIn("ACCEL", out["signals"])
         self.assertGreater(out["setup_score"], 0)
+        self.assertIn("atr_pct", out)
+        self.assertIn("volatility_tag", out)
         self.assertIn("date", out)
+
+    def test_adjust_strategy_by_scenario_is_preview_only_helper(self) -> None:
+        scenario = {"label": "明顯修正盤"}
+        adjusted = adjust_strategy_by_scenario(CONFIG.strategy, scenario)
+
+        self.assertGreater(adjusted.rebreak_vol_ratio, CONFIG.strategy.rebreak_vol_ratio)
+        self.assertGreater(adjusted.accel_vol_ratio_fast, CONFIG.strategy.accel_vol_ratio_fast)
 
 
 class GradeSignalTests(unittest.TestCase):
@@ -141,6 +153,12 @@ class FeedbackTests(unittest.TestCase):
 
                 self.assertFalse(summary.empty)
                 self.assertIn("feedback_score", summary.columns)
+                self.assertIn("pl_ratio", summary.columns)
+                short_all = summary[
+                    (summary["watch_type"] == "short")
+                    & (summary["action_label"] == "__all__")
+                ].iloc[0]
+                self.assertAlmostEqual(float(short_all["pl_ratio"]), 3.33, places=2)
 
                 candidates = pd.DataFrame(
                     [
@@ -153,6 +171,50 @@ class FeedbackTests(unittest.TestCase):
 
                 self.assertEqual(adjusted.iloc[0]["ticker"], "CHASE.TW")
                 self.assertIn("feedback_label", adjusted.columns)
+
+    def test_upsert_alert_tracking_persists_scenario_label(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            alert_csv = Path(tmpdir) / "alert_tracking.csv"
+            short_candidates = pd.DataFrame(
+                [
+                    {
+                        "date": "2026-04-22",
+                        "ticker": "2356.TW",
+                        "name": "英業達",
+                        "group": "theme",
+                        "grade": "A",
+                        "rank": 1,
+                        "setup_score": 12,
+                        "risk_score": 1,
+                        "layer": "short_attack",
+                        "signals": "ACCEL",
+                        "regime": "轉強速度有出來",
+                        "feedback_score": 0.0,
+                        "feedback_label": "樣本不足",
+                        "close": 52.0,
+                        "ma20": 50.0,
+                        "ma60": 48.0,
+                        "ret5_pct": 6.0,
+                        "ret20_pct": 10.0,
+                        "atr_pct": 4.5,
+                        "volume_ratio20": 1.3,
+                        "setup_change": 1,
+                        "rank_change": 1,
+                    }
+                ]
+            )
+
+            with patch("daily_theme_watchlist.ALERT_TRACK_CSV", alert_csv), patch(
+                "daily_theme_watchlist.yf_download_one", return_value=pd.DataFrame()
+            ):
+                upsert_alert_tracking(
+                    short_candidates,
+                    pd.DataFrame(),
+                    {"label": "高檔震盪盤"},
+                )
+
+            saved = pd.read_csv(alert_csv)
+            self.assertEqual(saved.iloc[0]["scenario_label"], "高檔震盪盤")
 
 
 class PortfolioTests(unittest.TestCase):
@@ -472,6 +534,43 @@ class ChatIdMapUpdateTests(unittest.TestCase):
         self.assertLessEqual(core_plan["add_price"], defensive_plan["add_price"])
         self.assertLessEqual(attack_plan["trim_price"], core_plan["trim_price"])
         self.assertLessEqual(defensive_plan["trim_price"], core_plan["trim_price"])
+
+    def test_watch_price_plan_uses_atr_to_widen_add_and_stop(self) -> None:
+        low_vol = pd.Series(
+            {
+                "ticker": "3013.TW",
+                "group": "theme",
+                "signals": "ACCEL,TREND",
+                "close": 100.0,
+                "ma20": 95.0,
+                "ma60": 92.0,
+                "ret5_pct": 9.0,
+                "ret20_pct": 14.0,
+                "risk_score": 2,
+                "atr_pct": 2.0,
+            }
+        )
+        high_vol = pd.Series(
+            {
+                "ticker": "3013.TW",
+                "group": "theme",
+                "signals": "ACCEL,TREND",
+                "close": 100.0,
+                "ma20": 95.0,
+                "ma60": 92.0,
+                "ret5_pct": 9.0,
+                "ret20_pct": 14.0,
+                "risk_score": 2,
+                "atr_pct": 6.0,
+            }
+        )
+
+        low_plan = watch_price_plan(low_vol, "short")
+        high_plan = watch_price_plan(high_vol, "short")
+
+        self.assertLess(high_plan["add_price"], low_plan["add_price"])
+        self.assertLess(high_plan["stop_price"], low_plan["stop_price"])
+        self.assertEqual(high_plan["trim_price"], low_plan["trim_price"])
 
     def test_portfolio_advice_flags_high_risk_target_hit(self) -> None:
         row = pd.Series(
@@ -922,9 +1021,17 @@ class PushMessageTests(unittest.TestCase):
             ]
         )
 
-        report = build_daily_report_markdown(df, {"comment": "加權指數目前偏多"}, None, None)
+        report = build_daily_report_markdown(
+            df,
+            {"comment": "加權指數目前偏多", "ret20_pct": 12.0, "volume_ratio20": 1.2, "is_bullish": True},
+            None,
+            None,
+            {"summary": "美股偏弱"},
+        )
 
         self.assertIn("## Prediction Feedback", report)
+        self.assertIn("## Adaptive Strategy Preview (report only)", report)
+        self.assertIn("情境：高檔震盪盤", report)
 
 
 class SplitMessageTests(unittest.TestCase):
