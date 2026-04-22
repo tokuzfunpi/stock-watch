@@ -269,6 +269,35 @@ class FeedbackTests(unittest.TestCase):
             self.assertGreater(float(high["pl_ratio"]), float(low["pl_ratio"]))
             self.assertGreater(float(high["feedback_score"]), float(low["feedback_score"]))
 
+    def test_build_feedback_summary_blends_recent_window_signal(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            alert_csv = Path(tmpdir) / "alert_tracking.csv"
+            feedback_csv = Path(tmpdir) / "feedback_summary.csv"
+            pd.DataFrame(
+                [
+                    {"alert_date": "2026-04-01", "watch_type": "short", "action_label": "近況轉弱", "ret1_future_pct": 0.0, "ret5_future_pct": 6.0},
+                    {"alert_date": "2026-04-02", "watch_type": "short", "action_label": "近況轉弱", "ret1_future_pct": 0.0, "ret5_future_pct": 5.0},
+                    {"alert_date": "2026-04-03", "watch_type": "short", "action_label": "近況轉弱", "ret1_future_pct": 0.0, "ret5_future_pct": 4.0},
+                    {"alert_date": "2026-04-20", "watch_type": "short", "action_label": "近況轉弱", "ret1_future_pct": 0.0, "ret5_future_pct": -3.0},
+                    {"alert_date": "2026-04-21", "watch_type": "short", "action_label": "近況轉弱", "ret1_future_pct": 0.0, "ret5_future_pct": -4.0},
+                    {"alert_date": "2026-04-22", "watch_type": "short", "action_label": "近況轉弱", "ret1_future_pct": 0.0, "ret5_future_pct": -5.0},
+                ]
+            ).to_csv(alert_csv, index=False)
+
+            with patch("daily_theme_watchlist.ALERT_TRACK_CSV", alert_csv), patch(
+                "daily_theme_watchlist.FEEDBACK_SUMMARY_CSV", feedback_csv
+            ):
+                summary = build_feedback_summary()
+
+            row = summary[
+                (summary["watch_type"] == "short")
+                & (summary["action_label"] == "近況轉弱")
+            ].iloc[0]
+            self.assertIn("recent_feedback_score", summary.columns)
+            self.assertIn("base_feedback_score", summary.columns)
+            self.assertEqual(int(row["recent_samples"]), 6)
+            self.assertLess(float(row["recent_feedback_score"]), float(row["base_feedback_score"]))
+
 
 class PortfolioTests(unittest.TestCase):
     def test_normalize_ticker_symbol_supports_plain_codes(self) -> None:

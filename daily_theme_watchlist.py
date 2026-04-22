@@ -2169,6 +2169,69 @@ def feedback_label_from_score(score: float, samples: int) -> str:
     return "中性"
 
 
+def feedback_window_size(watch_type: str) -> int:
+    return 12 if watch_type == "short" else 8
+
+
+def compute_feedback_score_components(
+    returns: pd.Series,
+    sample_scale: int,
+    use_weights: bool = False,
+) -> dict[str, float]:
+    if returns.empty:
+        return {
+            "win_rate_pct": 0.0,
+            "avg_return_pct": 0.0,
+            "avg_win_return_pct": 0.0,
+            "avg_loss_return_pct": 0.0,
+            "pl_ratio": 0.0,
+            "feedback_score": 0.0,
+        }
+
+    working = returns.astype(float).reset_index(drop=True)
+    weights = pd.Series([1.0] * len(working))
+    if use_weights and len(working) > 1:
+        floor = 0.65
+        step = (1.0 - floor) / max(len(working) - 1, 1)
+        weights = pd.Series([1.0 - (step * i) for i in range(len(working))])
+
+    positive_mask = working > 0
+    negative_mask = ~positive_mask
+    positive = working[positive_mask]
+    negative = working[negative_mask]
+    positive_weights = weights[positive_mask]
+    negative_weights = weights[negative_mask]
+
+    total_weight = float(weights.sum()) or 1.0
+    win_rate_pct = round(float(weights[positive_mask].sum() / total_weight) * 100, 2)
+    avg_return_pct = round(float((working * weights).sum() / total_weight), 2)
+    avg_win_return_pct = round(float((positive * positive_weights).sum() / positive_weights.sum()), 2) if not positive.empty else 0.0
+    avg_loss_return_pct = round(float((negative * negative_weights).sum() / negative_weights.sum()), 2) if not negative.empty else 0.0
+    gross_win = float((positive * positive_weights).sum()) if not positive.empty else 0.0
+    gross_loss = abs(float((negative * negative_weights).sum())) if not negative.empty else 0.0
+    pl_ratio = round(gross_win / gross_loss, 2) if gross_loss > 0 else (round(gross_win, 2) if gross_win > 0 else 0.0)
+    shrink = min(sample_scale / 8.0, 1.0)
+    pl_ratio_capped = min(max(pl_ratio, 0.0), 4.0)
+    pl_ratio_component = (pl_ratio_capped - 1.0) / 4.0
+    feedback_score = round(
+        (
+            ((win_rate_pct - 50.0) / 10.0)
+            + (avg_return_pct / 5.0)
+            + pl_ratio_component
+        )
+        * shrink,
+        2,
+    )
+    return {
+        "win_rate_pct": win_rate_pct,
+        "avg_return_pct": avg_return_pct,
+        "avg_win_return_pct": avg_win_return_pct,
+        "avg_loss_return_pct": avg_loss_return_pct,
+        "pl_ratio": pl_ratio,
+        "feedback_score": feedback_score,
+    }
+
+
 def build_feedback_summary() -> pd.DataFrame:
     if not ALERT_TRACK_CSV.exists():
         return pd.DataFrame()
@@ -2187,35 +2250,33 @@ def build_feedback_summary() -> pd.DataFrame:
             continue
         if "action_label" not in subset.columns:
             subset["action_label"] = ""
+        subset["alert_date"] = pd.to_datetime(subset.get("alert_date"), errors="coerce")
         subset["target_return"] = subset.apply(lambda r: history_target_return(r)[0], axis=1)
         subset = subset[subset["target_return"].notna()].copy()
         if subset.empty:
             continue
+        subset = subset.sort_values("alert_date", ascending=False, kind="mergesort").reset_index(drop=True)
 
         for action_label in ["__all__"] + sorted(set(subset["action_label"].astype(str))):
             action_df = subset if action_label == "__all__" else subset[subset["action_label"].astype(str) == action_label].copy()
             if action_df.empty:
                 continue
             samples = int(action_df.shape[0])
-            positive = action_df[action_df["target_return"] > 0]["target_return"]
-            negative = action_df[action_df["target_return"] <= 0]["target_return"]
-            win_rate_pct = round(float(action_df["target_return"].gt(0).mean()) * 100, 2)
-            avg_return_pct = round(float(action_df["target_return"].mean()), 2)
-            avg_win_return_pct = round(float(positive.mean()), 2) if not positive.empty else 0.0
-            avg_loss_return_pct = round(float(negative.mean()), 2) if not negative.empty else 0.0
-            gross_win = float(positive.sum()) if not positive.empty else 0.0
-            gross_loss = abs(float(negative.sum())) if not negative.empty else 0.0
-            pl_ratio = round(gross_win / gross_loss, 2) if gross_loss > 0 else (round(gross_win, 2) if gross_win > 0 else 0.0)
-            shrink = min(samples / 8.0, 1.0)
-            pl_ratio_capped = min(max(pl_ratio, 0.0), 4.0)
-            pl_ratio_component = (pl_ratio_capped - 1.0) / 4.0
+            base_metrics = compute_feedback_score_components(
+                action_df["target_return"],
+                sample_scale=samples,
+                use_weights=False,
+            )
+            recent_window = feedback_window_size(watch_type)
+            recent_df = action_df.head(recent_window).copy()
+            recent_samples = int(recent_df.shape[0])
+            recent_metrics = compute_feedback_score_components(
+                recent_df["target_return"],
+                sample_scale=recent_samples,
+                use_weights=True,
+            )
             feedback_score = round(
-                (
-                    ((win_rate_pct - 50.0) / 10.0)
-                    + (avg_return_pct / 5.0)
-                    + pl_ratio_component
-                )
-                * shrink,
+                (base_metrics["feedback_score"] * 0.7) + (recent_metrics["feedback_score"] * 0.3),
                 2,
             )
             rows.append(
@@ -2223,11 +2284,17 @@ def build_feedback_summary() -> pd.DataFrame:
                     "watch_type": watch_type,
                     "action_label": action_label,
                     "samples": samples,
-                    "win_rate_pct": win_rate_pct,
-                    "avg_return_pct": avg_return_pct,
-                    "avg_win_return_pct": avg_win_return_pct,
-                    "avg_loss_return_pct": avg_loss_return_pct,
-                    "pl_ratio": pl_ratio,
+                    "recent_samples": recent_samples,
+                    "win_rate_pct": base_metrics["win_rate_pct"],
+                    "avg_return_pct": base_metrics["avg_return_pct"],
+                    "avg_win_return_pct": base_metrics["avg_win_return_pct"],
+                    "avg_loss_return_pct": base_metrics["avg_loss_return_pct"],
+                    "pl_ratio": base_metrics["pl_ratio"],
+                    "recent_win_rate_pct": recent_metrics["win_rate_pct"],
+                    "recent_avg_return_pct": recent_metrics["avg_return_pct"],
+                    "recent_pl_ratio": recent_metrics["pl_ratio"],
+                    "base_feedback_score": base_metrics["feedback_score"],
+                    "recent_feedback_score": recent_metrics["feedback_score"],
                     "feedback_score": feedback_score,
                     "feedback_label": feedback_label_from_score(feedback_score, samples),
                 }
