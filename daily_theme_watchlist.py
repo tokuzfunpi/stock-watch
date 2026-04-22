@@ -2207,7 +2207,17 @@ def build_feedback_summary() -> pd.DataFrame:
             gross_loss = abs(float(negative.sum())) if not negative.empty else 0.0
             pl_ratio = round(gross_win / gross_loss, 2) if gross_loss > 0 else (round(gross_win, 2) if gross_win > 0 else 0.0)
             shrink = min(samples / 8.0, 1.0)
-            feedback_score = round((((win_rate_pct - 50.0) / 10.0) + (avg_return_pct / 5.0)) * shrink, 2)
+            pl_ratio_capped = min(max(pl_ratio, 0.0), 4.0)
+            pl_ratio_component = (pl_ratio_capped - 1.0) / 4.0
+            feedback_score = round(
+                (
+                    ((win_rate_pct - 50.0) / 10.0)
+                    + (avg_return_pct / 5.0)
+                    + pl_ratio_component
+                )
+                * shrink,
+                2,
+            )
             rows.append(
                 {
                     "watch_type": watch_type,

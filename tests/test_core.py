@@ -237,6 +237,38 @@ class FeedbackTests(unittest.TestCase):
         self.assertEqual(adjusted.iloc[0]["ticker"], "CHASE.TW")
         self.assertIn("feedback_pl_ratio", adjusted.columns)
 
+    def test_build_feedback_summary_includes_pl_ratio_in_feedback_score(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            alert_csv = Path(tmpdir) / "alert_tracking.csv"
+            feedback_csv = Path(tmpdir) / "feedback_summary.csv"
+            pd.DataFrame(
+                [
+                    {"watch_type": "short", "action_label": "高盈虧比", "ret1_future_pct": 0.0, "ret5_future_pct": 6.0},
+                    {"watch_type": "short", "action_label": "高盈虧比", "ret1_future_pct": 0.0, "ret5_future_pct": 4.0},
+                    {"watch_type": "short", "action_label": "高盈虧比", "ret1_future_pct": 0.0, "ret5_future_pct": -2.0},
+                    {"watch_type": "short", "action_label": "低盈虧比", "ret1_future_pct": 0.0, "ret5_future_pct": 4.0},
+                    {"watch_type": "short", "action_label": "低盈虧比", "ret1_future_pct": 0.0, "ret5_future_pct": 4.0},
+                    {"watch_type": "short", "action_label": "低盈虧比", "ret1_future_pct": 0.0, "ret5_future_pct": -4.0},
+                ]
+            ).to_csv(alert_csv, index=False)
+
+            with patch("daily_theme_watchlist.ALERT_TRACK_CSV", alert_csv), patch(
+                "daily_theme_watchlist.FEEDBACK_SUMMARY_CSV", feedback_csv
+            ):
+                summary = build_feedback_summary()
+
+            high = summary[
+                (summary["watch_type"] == "short")
+                & (summary["action_label"] == "高盈虧比")
+            ].iloc[0]
+            low = summary[
+                (summary["watch_type"] == "short")
+                & (summary["action_label"] == "低盈虧比")
+            ].iloc[0]
+
+            self.assertGreater(float(high["pl_ratio"]), float(low["pl_ratio"]))
+            self.assertGreater(float(high["feedback_score"]), float(low["feedback_score"]))
+
 
 class PortfolioTests(unittest.TestCase):
     def test_normalize_ticker_symbol_supports_plain_codes(self) -> None:
