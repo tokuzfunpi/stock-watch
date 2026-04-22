@@ -1,28 +1,29 @@
-# CODEX Handoff (From Gemini)
+# CODEX Handoff (From Gemini) - Sync 2
 
-## 1. 任務現況
-- 已接收 `GEMINI_HANDOFF.md` 的所有指示。
-- 已完成 `main` 分支與 `origin/main` 的同步，解決了合併衝突。
-- 目前系統已具備：ATR 波動標籤、情境感知 (Scenario-aware) 門檻調整、盈虧比 (P/L Ratio) 追蹤、以及基礎的驗算 (Verification) 工具。
+## 1. 任務現況與同步 (Main Sync)
+- 已完成本地 `main` 分支與 `origin/main` 的完全對齊，工作目錄已清理乾淨。
+- **觀察到重要更新**：Codex 已快速將 `pl_ratio` 與 `recency weighting` (近況權重) 整合進 `feedback_score`。這代表系統已具備初步的「學習與遺忘」能力，能更快反應近期盤勢。
 
-## 2. 策略共識分析
-我非常認同「保守版自適應」的開發節奏。系統目前不應追求極致的複雜度，而是追求**預測與實際結果的閉環驗證**。
+## 2. 核心想法與建議 (Thoughts & Recommendations)
+目前 `main` 的演進速度非常理想。既然「反饋改行為」已經上線，我建議接下來的重心應放在**「防呆與穩健性」**：
 
-- **核心原則**：驗證驅動改動。沒有數據支撐的「自適應」一律不進入主排序邏輯。
-- **短期目標**：穩住 `5D` (short) 與 `20D` (midlong) 的獲利期望值，避免追逐 `1D` 的虛假動能。
+### A. 數據驗證的急迫性 (Phase 1 優先)
+隨著系統開始依據「近況」調整推薦，我們更需要確認：
+- **Heat Bias 排除**：近期的成功是否單純因為大盤太強？我將優先在 `summarize_outcomes.py` 中實作 `hot - normal` 的效能差分析。
+- **價位帶壓力測試**：目前的 ATR 調節倍數是否能在震盪盤中有效保護利潤。
 
-## 3. 下一步執行計畫 (ADAPTIVE_ENGINE_PLAN.md)
-詳細計畫請參考 `ADAPTIVE_ENGINE_PLAN.md`。接下來的工作將按以下順序執行：
+### B. 限流保護機制 (Phase 3 提波)
+建議在 `select_push_candidates` 中加入「Heat Bias 限流」：
+- 當偵測到極度過熱或明顯修正時，主動縮減推薦檔數。這比單純在訊息中顯示警告更有保護作用。
 
-### Phase 1: 數據閉環 (當前重點)
-- **量化 Heat Bias**：在 `summarize_outcomes.py` 中區分 `hot` vs `normal` 樣本，確認大盤熱度對勝率的實質影響。
-- **價位帶回測**：驗證 ATR 調節後的 `add_price` 與 `stop_price` 是否真的有用。
+### C. 關於 20D 樣本
+目前的近況權重對 20D 來說可能過於敏感（因為 20D 的結果回收較慢），建議維持 Codex 的「保守比例混合」原則。
 
-### Phase 2: 反饋優化
-- 將 `pl_ratio` 正式納入 `feedback_score` 公式。
-- 引入 Rolling Window，讓系統對「近期」行情更敏感。
+## 3. 下一步執行計畫 (ADAPTIVE_ENGINE_PLAN.md 保持有效)
+我將維持原定的四階段計畫，但會因應 `main` 的現況微調執行細節：
+- **Phase 1**：實作 `Summarize Outcomes` 的 Heat Bias 分析（當前任務）。
+- **Phase 2**：觀察新的 `feedback_score` 在 `alert_tracking.csv` 中的表現。
+- **Phase 3**：開發過熱限流保護邏輯。
 
-## 4. 給 CODEX 的提醒
-- **不要整包合併 `testv`**：該分支僅作為設計參考。
-- **維持 `main` 的簡潔**：所有的改進必須通過 `Phase 1` 的量化驗證後，才能進入 `Phase 3` 的自動化限流與調優。
-- **關注 20D 樣本**：目前中長線樣本仍不足，調優需保持耐心。
+## 4. 給 CODEX 的留言
+`main` 目前的「保守自適應」架構非常紮實。我會繼續在不破壞主排序的原則下，強化驗證工具，為未來的「回饋進主排序」打下基礎。
