@@ -3210,7 +3210,6 @@ def main() -> int:
             send_telegram_message(build_short_term_message(df_rank, market_regime, us_market))
             send_telegram_message(build_early_gem_message(df_rank, market_regime, us_market))
             send_telegram_message(build_midlong_message(df_rank, market_regime, us_market))
-            send_telegram_message(build_special_etf_message(df_rank, market_regime, us_market))
             logger.info("Notification sent.")
         else:
             logger.info("No notification sent.")

@@ -1382,6 +1382,60 @@ class PushMessageTests(unittest.TestCase):
         self.assertIn("strat", kwargs)
         self.assertGreater(kwargs["strat"].rebreak_vol_ratio, CONFIG.strategy.rebreak_vol_ratio)
 
+    def test_main_does_not_send_special_etf_telegram_message(self) -> None:
+        df = pd.DataFrame(
+            [
+                {
+                    "rank": 1,
+                    "ticker": "TEST1.TW",
+                    "name": "Test One",
+                    "group": "theme",
+                    "layer": "short_attack",
+                    "grade": "A",
+                    "setup_score": 8,
+                    "risk_score": 2,
+                    "ret5_pct": 9.0,
+                    "ret10_pct": 12.0,
+                    "ret20_pct": 15.0,
+                    "volume_ratio20": 1.6,
+                    "signals": "ACCEL,TREND",
+                    "rank_change": 1,
+                    "setup_change": 1,
+                    "status_change": "UP",
+                    "regime": "轉強速度有出來",
+                    "date": "2026-04-22",
+                    "close": 100.0,
+                    "spec_risk_label": "正常",
+                    "atr_pct": 4.8,
+                    "volatility_tag": "活潑",
+                }
+            ]
+        )
+        market_regime = {"comment": "加權指數目前偏多", "ret20_pct": 12.0, "volume_ratio20": 1.2, "is_bullish": True}
+        us_market = {"summary": "美股偏強"}
+
+        with patch("daily_theme_watchlist.load_last_success_date", return_value=""), patch(
+            "daily_theme_watchlist.current_run_signature", return_value="sig"
+        ), patch("daily_theme_watchlist.get_market_regime", return_value=market_regime), patch(
+            "daily_theme_watchlist.get_us_market_reference", return_value=us_market
+        ), patch("daily_theme_watchlist.run_watchlist", return_value=df), patch(
+            "daily_theme_watchlist.run_backtest_dual", return_value=(None, None)
+        ), patch("daily_theme_watchlist.upsert_alert_tracking"), patch(
+            "daily_theme_watchlist.save_reports"
+        ), patch("daily_theme_watchlist.build_state", return_value="state"), patch(
+            "daily_theme_watchlist.load_last_state", return_value=""
+        ), patch("daily_theme_watchlist.should_alert", return_value=True), patch(
+            "daily_theme_watchlist.save_last_state"
+        ), patch("daily_theme_watchlist.save_last_success_date"), patch(
+            "daily_theme_watchlist.send_telegram_message"
+        ) as send_mock, patch("daily_theme_watchlist.logger"):
+            result = watchlist_main()
+
+        self.assertEqual(result, 0)
+        self.assertEqual(send_mock.call_count, 4)
+        sent_messages = [call.args[0] for call in send_mock.call_args_list]
+        self.assertTrue(all("ETF / 債券觀察" not in msg for msg in sent_messages))
+
 
 class SplitMessageTests(unittest.TestCase):
     def test_split_message_respects_limit(self) -> None:
