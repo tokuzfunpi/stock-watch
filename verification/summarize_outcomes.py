@@ -432,6 +432,33 @@ def build_summary_markdown(outcomes: pd.DataFrame, source: str, now_local: datet
         ]
     )
 
+    try:
+        ok_cov = ok.copy()
+        if "scenario_label" in ok_cov.columns:
+            ok_cov["scenario_label"] = ok_cov["scenario_label"].astype(str).str.strip()
+            ok_cov.loc[
+                (ok_cov["scenario_label"] == "")
+                | (ok_cov["scenario_label"] == "b''")
+                | (ok_cov["scenario_label"] == "nan"),
+                "scenario_label",
+            ] = "unknown"
+        else:
+            ok_cov["scenario_label"] = "unknown"
+        known_mask = ok_cov["scenario_label"] != "unknown"
+        scenario_cov = pd.DataFrame(
+            [
+                {
+                    "ok_rows": int(len(ok_cov)),
+                    "known_scenario_rows": int(known_mask.sum()),
+                    "unknown_scenario_rows": int((~known_mask).sum()),
+                    "known_scenario_rate_pct": round((float(known_mask.mean()) * 100.0), 1) if len(ok_cov) else 0.0,
+                }
+            ]
+        )
+        lines.extend(["## Scenario Coverage", _table_markdown(scenario_cov).rstrip(), ""])
+    except Exception:
+        pass
+
     lines.extend(
         [
             "## Notes",
