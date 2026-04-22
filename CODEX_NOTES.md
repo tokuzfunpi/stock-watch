@@ -981,6 +981,38 @@ requirements.txt
 - 讓新 outcomes 持續累積
 - 等 `By Scenario + Action` 有足夠非 `unknown` 樣本後，再決定要不要往主排序加更深的 adaptive 權重
 
+## 2026-04-22 補充：handoff 後續研究方向
+
+目前最適合交給 Gemini / 其他 agent 的，不是直接改 production 排序，而是做下面這幾種分析型工作：
+
+1. **Scenario × Action 研究**
+   - 等 `Scenario Coverage` 的 `known_scenario_rate_pct` 長起來後，
+   - 分析不同盤勢下哪種 action 最穩
+
+2. **Heat Bias vs Scenario 的拆解**
+   - 釐清「熱盤墊高」和「盤勢情境」哪個才是主因
+   - 避免把 hot market 的效果誤判成 scenario-aware 邏輯有效
+
+3. **Feedback 權重敏感度**
+   - 先做離線比較，不直接改主流程
+   - 例如比較：
+     - `70/30`
+     - `80/20`
+     - `60/40`
+   - 看 recency weighting 是否過強或過弱
+
+4. **ATR 價位帶回顧**
+   - 比較 ATR band 與舊版 band 的 add/stop 合理性
+
+### 目前不建議交出去做的高風險任務
+
+- 用推估方式補舊 `scenario_label`
+- 直接讓 feedback 進 `daily_rank.csv` 主排序
+- 一次同時大改：
+  - scenario thresholds
+  - feedback ranking
+  - ATR exits
+
 ### 維護原則
 
 如果之後還要繼續吸收 `testv` / Gemini 的設計，請維持下面原則：

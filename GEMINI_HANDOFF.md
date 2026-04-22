@@ -26,6 +26,7 @@
 - verification summary 已新增：
   - `Overall By Scenario`
   - `Overall By Scenario + Action`
+  - `Scenario Coverage`
 
 ## 2) 目前正式上線、真的會改每日結果的部分
 
@@ -151,6 +152,7 @@
 - 候選名單是否更合理
 - `5D / 20D` 結果是否改善
 - 是否只是讓熱盤時的熱門股更容易被推前
+- `Scenario Coverage` 的 `known_scenario_rate_pct` 是否開始上升
 
 ### 若要再往前推，建議順序
 
@@ -159,7 +161,41 @@
 3. 再評估要不要讓 feedback 進一步影響 `daily_rank` 主排序
 4. 最後才考慮讓 ATR 更深地進 `portfolio` 出場邏輯
 
-## 7) 不建議現在直接做的事
+## 7) 如果要請 Gemini 做研究 / 測試，最值得做的題目
+
+建議 Gemini 先做 **分析型任務**，不要直接改主排序：
+
+1. **`By Scenario + Action` 差異解讀**
+   - 當 `known_scenario_rate_pct` 變高後，
+   - 分析不同 scenario 下：
+     - `等拉回`
+     - `開高不追`
+     - `可分批`
+     - `續抱`
+     哪些 action 最穩
+
+2. **Heat Bias 與 Scenario 交叉觀察**
+   - 比較：
+     - `hot vs normal`
+     - `scenario_label`
+   - 看哪一個才是真正的主因
+   - 避免把熱盤效果誤判成 scenario 效果
+
+3. **Feedback 權重敏感度測試**
+   - 不改 production code
+   - 只做離線比較：
+     - `70/30`
+     - `80/20`
+     - `60/40`
+   - 看候選名單是否變得更穩，還是開始過度追逐近況
+
+4. **ATR band 驗證**
+   - 離線比較 ATR band 與舊版 band：
+     - `add_price`
+     - `stop_price`
+   - 看哪一版更接近「合理加碼 / 合理失效」
+
+## 8) 不建議現在直接做的事
 
 - 不要整包 merge `testv`
 - 不要一次同時改：
@@ -169,7 +205,7 @@
 - 不要為了補歷史資料而用推估方式硬回填舊的 `scenario_label`
 - 不要在沒有 verification 支撐時，直接大改 `detect_row()` 核心條件
 
-## 8) 給 Gemini 的一句話
+## 9) 給 Gemini 的一句話
 
 現在的 `main` 已經開始變成「保守版 adaptive strategy system」，  
 但最重要的工作不是再加更多花樣，而是確認：
