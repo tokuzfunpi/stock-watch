@@ -1684,6 +1684,7 @@ def build_short_term_message(df_rank: pd.DataFrame, market_regime: dict, us_mark
 
     lines.append("")
     lines.append("解讀：這一區只放今天相對可考慮出手的短線標的；太熱或只適合續看的，會放到短線觀察。")
+    lines.append("短線主看 5 個交易日；1D 只當輔助參考。")
     lines.append("")
     for _, r in short_candidates.iterrows():
         action = short_term_action_label(r)
@@ -1718,6 +1719,7 @@ def build_midlong_message(df_rank: pd.DataFrame, market_regime: dict, us_market:
 
     lines.append("")
     lines.append("解讀：這一區偏向可布局的趨勢股；強但不一定適合現在進場的，會放到中長線觀察。")
+    lines.append("中線主看 20 個交易日；1D / 5D 只當輔助觀察。")
     lines.append("")
     for _, r in midlong_candidates.iterrows():
         action = midlong_action_label(r)
