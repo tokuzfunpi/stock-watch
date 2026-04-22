@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 import daily_theme_watchlist as dtw
 import pandas as pd
+import portfolio_check as portfolio_check_module
 
 from daily_theme_watchlist import (
     add_indicators,
@@ -1494,6 +1495,54 @@ class SplitMessageTests(unittest.TestCase):
         parts = split_message(message, limit=100)
 
         self.assertEqual(parts, [message])
+
+
+class PortfolioCheckTests(unittest.TestCase):
+    def test_portfolio_check_applies_scenario_adjusted_strategy(self) -> None:
+        market_regime = {"comment": "加權指數目前偏多", "ret20_pct": 12.0, "volume_ratio20": 1.2, "is_bullish": True, "session_phase": "postclose"}
+        us_market = {"summary": "美股偏弱"}
+        df_rank = pd.DataFrame(
+            [
+                {
+                    "rank": 1,
+                    "ticker": "2330.TW",
+                    "name": "台積電",
+                    "group": "core",
+                    "layer": "midlong_core",
+                    "grade": "B",
+                    "setup_score": 7,
+                    "risk_score": 2,
+                    "ret5_pct": 4.0,
+                    "ret10_pct": 6.0,
+                    "ret20_pct": 10.0,
+                    "volume_ratio20": 1.1,
+                    "signals": "TREND",
+                    "rank_change": 1,
+                    "setup_change": 1,
+                    "status_change": "UP",
+                    "regime": "中段延續中",
+                    "date": "2026-04-22",
+                    "close": 950.0,
+                    "spec_risk_label": "正常",
+                    "atr_pct": 2.0,
+                    "volatility_tag": "標準",
+                }
+            ]
+        )
+
+        with patch.object(portfolio_check_module, "PORTFOLIO", pd.DataFrame([{"ticker": "2330.TW", "shares": 1, "avg_cost": 900, "target_profit_pct": 15}])), patch(
+            "portfolio_check.get_market_regime", return_value=market_regime
+        ), patch("portfolio_check.get_us_market_reference", return_value=us_market), patch(
+            "portfolio_check.run_watchlist", return_value=df_rank
+        ) as run_watchlist_mock, patch("portfolio_check.save_portfolio_reports"), patch(
+            "builtins.print"
+        ), patch("portfolio_check.logger"):
+            result = portfolio_check_module.main()
+
+        self.assertEqual(result, 0)
+        _, kwargs = run_watchlist_mock.call_args
+        self.assertIn("strat", kwargs)
+        self.assertGreater(kwargs["strat"].rebreak_vol_ratio, CONFIG.strategy.rebreak_vol_ratio)
 
 
 if __name__ == "__main__":
