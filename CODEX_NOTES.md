@@ -258,6 +258,218 @@
 
 - 先看最近這種建議的勝率是否高於 50%
 - 再看平均報酬率是否為正
+
+## 2026-04-22 更新紀錄（給未來 Codex 接手）
+
+這一段是今天密集調整後的交接摘要，目標是讓未來接手的人不用重翻整串對話。
+
+### 一、今天完成的功能更新
+
+#### 1) Verification / outcomes 分析線
+
+- `verification/evaluate_recommendations.py`
+  - 新增 `market_heat` / `market_heat_reason`
+  - 依 `ret5_pct` / `ret20_pct` / `risk_score` / `volume_ratio20` 將樣本標成：
+    - `normal`
+    - `warm`
+    - `hot`
+  - 舊的 `reco_outcomes.csv` 重新跑 `evaluate` 後，也會自動補上這些欄位
+
+- `verification/summarize_outcomes.py`
+  - 新增 `Overall By Market Heat (all dates)`
+  - `Notes` 補上：若 `hot/warm` 樣本很多，近期績效可能被強勢盤墊高
+  - 既有功能仍保留：
+    - `Coverage By Horizon`
+    - `Overall By Signal + reco_status`
+    - `Delta (ok - below_threshold) By Signal`
+    - `Delta ... By Signal Date`
+    - `Weekly Checkpoint (min_n>=5)`
+
+- 驗證解讀（目前最新共識）
+  - `short` 主看 `5D`
+  - `midlong` 主看 `20D`
+  - `1D` 只作輔助觀察，不單獨當策略成敗依據
+  - 目前 `20D` 仍需時間慢慢累積 OK rows；不要因為 1D / 5D 漂亮就過度調 midlong
+
+#### 2) 市場情境判斷（大盤 4 情境）
+
+- `daily_theme_watchlist.py`
+  - 新增 `build_market_scenario(...)`
+  - 每日會把盤勢分成 4 類：
+    - `強勢延伸盤`
+    - `高檔震盪盤`
+    - `權值撐盤、個股轉弱`
+    - `明顯修正盤`
+  - 判斷依據：
+    - `market_regime`（`ret20_pct` / `volume_ratio20` / `is_bullish`）
+    - 美股前一晚摘要
+    - 今日候選池前段樣本的熱度 / 強度分布
+
+- `build_macro_message(...)`
+  - Telegram / CLI 的 macro 訊息現在會多帶：
+    - `盤勢情境`
+    - `操作重點`
+    - `出場提醒`
+
+#### 3) 持股檢查升級成 scenario-aware
+
+- `portfolio_advice_label(...)`
+  - 不再只看個股自身報酬 / 風險，也會依當日盤勢情境調整建議
+
+- `build_portfolio_message(...)`
+  - 現在會先顯示：
+    - `持股節奏`
+    - `今天重點`
+
+- 持股建議語氣已升級成更接近交易管理：
+  - `分批落袋`
+  - `續抱但設停利`
+  - `續抱但盯盤`
+  - `有賺先收一點`
+  - `先降部位`
+  - `保守觀察`
+
+#### 4) 持股分類（進攻 / 核心 / 防守）
+
+- 新增 `holding_style_label(...)`
+  - `進攻持股`：題材 / 高波動 / `ACCEL` 類
+  - `核心持股`：主流趨勢股 / 核心權值 / 結構較穩的中線股
+  - `防守持股`：ETF / 金融 / 債券
+
+- 持股訊息現在會直接顯示：
+  - `[進攻持股]`
+  - `[核心持股]`
+  - `[防守持股]`
+
+#### 5) 觀察股 / 追蹤股價位帶（非單一預測價）
+
+- 新增：
+  - `watch_price_plan(...)`
+  - `watch_price_plan_text(...)`
+
+- 每檔追蹤股現在會有三個價位：
+  - `加碼參考價`
+  - `減碼參考價`
+  - `失效價`
+
+- 定義：
+  - `加碼參考`：拉回到這附近才考慮補
+  - `減碼參考`：漲到這附近可先收一部分
+  - `失效`：跌到這附近代表原本這次追蹤邏輯要重看
+
+- 目前已接入：
+  - `短線可買`
+  - `短線觀察`
+  - `中長線可布局`
+  - `中長線觀察`
+  - `早期轉強觀察`
+  - `daily_report.md`
+  - `alert_tracking.csv`（新增 `add_price` / `trim_price` / `stop_price`）
+
+#### 6) 價位帶也已分持股風格
+
+`watch_price_plan(...)` 現在不再所有股票共用同一套算法，而是先看 `holding_style`：
+
+- `進攻持股`
+  - `add_price` 更低：等更深回檔
+  - `trim_price` 更近：較早收
+  - `stop_price` 更緊：做錯不要拖
+
+- `核心持股`
+  - 介於進攻與防守之間，偏平衡
+
+- `防守持股`
+  - `add_price` 較高：小回檔即可觀察
+  - `trim_price` 較近：偏配置思維，不預期大幅噴出
+  - `stop_price` 不走激進波動邏輯
+
+### 二、今天確認過的策略共識
+
+#### 1) Short 不做「可追」
+
+目前 short 的主邏輯已收斂成：
+
+- 真正可買主池：幾乎只保留 `等拉回`
+- 其它 action（例如 `開高不追` / `分批落袋` / `續追蹤`）主要是風險提示或觀察用途
+
+這是因為目前驗算結果顯示：
+
+- `short / 等拉回` 最穩
+- `可追` 容易在 1D 被震盪洗掉
+
+#### 2) 英業達（2356）案例解讀
+
+今天有特別釐清 `2356.TW 英業達`：
+
+- 它會出現在 `早期轉強觀察`
+- 也會在 short 那側被看見
+- 但**不是 short 主推可買股**
+
+原因：
+
+- 它屬於 `short_attack`
+- `grade=A`, `setup_score=12`, `risk_score=1`
+- `ret5=6.17`, `ret20=10.63`, `volume_ratio20=1.57`
+- `signals=ACCEL`
+
+所以它是：
+
+- 有動能
+- 有潛力
+- 已開始轉強
+- 但還比較像「觀察升級中的候選股」
+- 不是今天最標準的 `等拉回` 主推股
+
+### 三、今天已推上 GitHub 的 commits
+
+依時間順序（只列今天主要功能）：
+
+- `e34770c` — `Add market scenario and heat-aware exits`
+- `9cee576` — `Refine style-specific watch price bands`
+- `a1956b7` — `Clarify time windows in notifications`
+
+> 注意：remote 上也有 `Update stock watch artifacts [skip ci]` 這類產物 commit，不是主要邏輯變更。
+
+### 四、目前本地文件狀態
+
+- `verification/LOCAL_RUNBOOK.md`
+  - 已補：
+    - `short = 5D`
+    - `midlong = 20D`
+    - `1D = 輔助觀察`
+    - `進攻 / 核心 / 防守持股` 的白話解讀
+    - `加碼參考 / 減碼參考 / 失效` 的白話解讀
+  - 這是本機 runbook，未必都已推上 GitHub；若未來需要共享，請確認使用者是否要一起提交
+
+### 五、下次 Codex 最適合接著做的事
+
+以下是高價值、但今天還沒做的後續項目：
+
+1. **Heat Bias Check**
+   - 在 `summarize_outcomes.py` 補一段：
+     - `hot - normal` 的勝率 / 報酬差
+   - 用來直接量化「熱盤把結果墊高多少」
+
+2. **Price-band validation**
+   - 用 `alert_tracking.csv` 回頭驗證：
+     - `add_price` 是否真的比現價追更好
+     - `trim_price` 是否有助於保留報酬
+     - `stop_price` 是否能有效避免大回撤
+
+3. **20D threshold tuning**
+   - 等 `20D` 的 OK rows 累積到足夠樣本後
+   - 再開始調 `midlong` 的 `續抱 / 可分批` 門檻
+
+4. **Action-level delta**
+   - 如果要更精細調整，可在 summary 增加：
+     - `ok - below_threshold` by `action`
+   - 用來找出到底是哪種 action 在稀釋 / 墊高績效
+
+### 六、目前不建議做的事
+
+- 不要因為短期強多盤績效太漂亮就放寬 short 門檻
+- 不要用 `1D` 的表現去調 `midlong`
+- 不要把 `失效價` 當成「公司完蛋價」；它只是這次交易 / 觀察邏輯的失效點
 - 樣本太少時，效果會被縮小
 
 目前程式裡的縮放概念是：
