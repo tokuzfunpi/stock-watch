@@ -1,5 +1,5 @@
 # Daily 20D v2.2 Attack Report
-- Generated: 2026-04-21 23:25:13
+- Generated: 2026-04-22 00:02:11
 - Market Regime: 加權指數目前偏多，收在 36958.8，20日漲幅 9.7%，量比 1.1。
 
 ## Top Ranking
@@ -53,34 +53,32 @@
 
 ## Short-Term Candidates
 
-- #6 緯穎 6669.TW [theme/短線主攻] | setup 12 risk 3 | 5D 12.38% 10D 24.3% 20D 10.91% | 投機 投機偏高 | ACCEL | rankΔ +6 setupΔ +2
-- #9 普安 2495.TW [theme/短線主攻] | setup 12 risk 3 | 5D 8.15% 10D 38.47% 20D 13.1% | 投機 正常 | TREND,ACCEL | rankΔ +8 setupΔ +3
-- #8 奇鋐 3017.TW [theme/短線主攻] | setup 12 risk 3 | 5D 11.04% 10D 26.35% 20D 25.12% | 投機 正常 | TREND | rankΔ -2 setupΔ +0
-- #15 雙鴻 3324.TWO [theme/短線主攻] | setup 10 risk 0 | 5D 8.81% 10D 14.38% 20D -1.41% | 投機 正常 | NONE | rankΔ -4 setupΔ +0
+- #6 緯穎 6669.TW [theme/短線主攻] | setup 12 risk 3 | 5D 12.38% 10D 24.3% 20D 10.91% | 投機 投機偏高 | ACCEL | rankΔ +0 setupΔ +0
+- #9 普安 2495.TW [theme/短線主攻] | setup 12 risk 3 | 5D 8.15% 10D 38.47% 20D 13.1% | 投機 正常 | TREND,ACCEL | rankΔ +0 setupΔ +0
+- #8 奇鋐 3017.TW [theme/短線主攻] | setup 12 risk 3 | 5D 11.04% 10D 26.35% 20D 25.12% | 投機 正常 | TREND | rankΔ +0 setupΔ +0
+- #15 雙鴻 3324.TWO [theme/短線主攻] | setup 10 risk 0 | 5D 8.81% 10D 14.38% 20D -1.41% | 投機 正常 | NONE | rankΔ +0 setupΔ +0
 
 ## Short-Term Backups
 
-- #2 立碁 8111.TWO [theme/短線主攻] | setup 14 risk 4 | 5D 17.76% 10D 33.5% 20D 24.27% | 投機 疑似炒作風險高 | SURGE,ACCEL | rankΔ +2 setupΔ +1
-- #7 麗臺 2465.TW [theme/短線主攻] | setup 12 risk 4 | 5D 11.55% 10D 24.49% 20D 7.64% | 投機 投機偏高 | ACCEL | rankΔ +1 setupΔ +1
-- #10 英業達 2356.TW [theme/短線主攻] | setup 12 risk 1 | 5D 6.17% 10D 15.91% 20D 10.63% | 投機 正常 | ACCEL | rankΔ +8 setupΔ +3
-- #18 晟銘電 3013.TW [theme/短線主攻] | setup 9 risk 0 | 5D 6.28% 10D 12.82% 20D 10.11% | 投機 正常 | ACCEL,PULLBACK | rankΔ -11 setupΔ -2
-- #19 緯創 3231.TW [theme/短線主攻] | setup 9 risk 2 | 5D 5.86% 10D 17.0% 20D 11.15% | 投機 正常 | ACCEL | rankΔ -6 setupΔ -1
+- #2 立碁 8111.TWO [theme/短線主攻] | setup 14 risk 4 | 5D 17.76% 10D 33.5% 20D 24.27% | 投機 疑似炒作風險高 | SURGE,ACCEL | rankΔ +0 setupΔ +0
+- #7 麗臺 2465.TW [theme/短線主攻] | setup 12 risk 4 | 5D 11.55% 10D 24.49% 20D 7.64% | 投機 投機偏高 | ACCEL | rankΔ +0 setupΔ +0
+- #10 英業達 2356.TW [theme/短線主攻] | setup 12 risk 1 | 5D 6.17% 10D 15.91% 20D 10.63% | 投機 正常 | ACCEL | rankΔ +0 setupΔ +0
+- #18 晟銘電 3013.TW [theme/短線主攻] | setup 9 risk 0 | 5D 6.28% 10D 12.82% 20D 10.11% | 投機 正常 | ACCEL,PULLBACK | rankΔ +0 setupΔ +0
+- #19 緯創 3231.TW [theme/短線主攻] | setup 9 risk 2 | 5D 5.86% 10D 17.0% 20D 11.15% | 投機 正常 | ACCEL | rankΔ +0 setupΔ +0
 
 ## Mid-Long Candidates
 
 - #26 國泰永續高股息 00878.TW [etf/中長線核心] | setup 7 risk 2 | 10D 11.26% 20D 9.08% | 投機 正常 | TREND | rankΔ +0 setupΔ +0
-- #35 台積電 2330.TW [core/中長線核心] | setup 5 risk 1 | 10D 10.22% 20D 11.41% | 投機 正常 | TREND | rankΔ -2 setupΔ +0
-- #37 元大台灣50 0050.TW [etf/中長線核心] | setup 4 risk 2 | 10D 14.33% 20D 11.25% | 投機 正常 | TREND | rankΔ -3 setupΔ +0
-- #31 中信高評級公司債 00772B.TWO [etf/防守觀察] | setup 6 risk 1 | 10D -0.03% 20D 0.38% | 投機 正常 | BASE | rankΔ +11 setupΔ +3
-- #39 中信優先金融債 00773B.TWO [etf/防守觀察] | setup 4 risk 1 | 10D 0.02% 20D 0.1% | 投機 正常 | BASE | rankΔ +4 setupΔ +1
+- #35 台積電 2330.TW [core/中長線核心] | setup 5 risk 1 | 10D 10.22% 20D 11.41% | 投機 正常 | TREND | rankΔ +0 setupΔ +0
+- #37 元大台灣50 0050.TW [etf/中長線核心] | setup 4 risk 2 | 10D 14.33% 20D 11.25% | 投機 正常 | TREND | rankΔ +0 setupΔ +0
 
 ## Mid-Long Backups
 
-- #20 信驊 5274.TWO [satellite/中長線核心] | setup 8 risk 3 | 10D 32.91% 20D 29.74% | 投機 投機偏高 | TREND | rankΔ -5 setupΔ -1
-- #30 兆豐金 2886.TW [core/中長線核心] | setup 6 risk 0 | 10D 0.13% 20D 1.81% | 投機 正常 | NONE | rankΔ -2 setupΔ -1
-- #33 玉山金 2884.TW [core/中長線核心] | setup 5 risk 0 | 10D 1.7% 20D 3.62% | 投機 正常 | NONE | rankΔ -1 setupΔ +0
-- #22 日月光投控 3711.TW [core/中長線核心] | setup 8 risk 5 | 10D 34.09% 20D 37.21% | 投機 投機偏高 | TREND | rankΔ +3 setupΔ +1
-- #21 台達電 2308.TW [core/中長線核心] | setup 8 risk 5 | 10D 33.0% 20D 36.61% | 投機 投機偏高 | TREND | rankΔ -1 setupΔ +0
+- #20 信驊 5274.TWO [satellite/中長線核心] | setup 8 risk 3 | 10D 32.91% 20D 29.74% | 投機 投機偏高 | TREND | rankΔ +0 setupΔ +0
+- #30 兆豐金 2886.TW [core/中長線核心] | setup 6 risk 0 | 10D 0.13% 20D 1.81% | 投機 正常 | NONE | rankΔ +0 setupΔ +0
+- #33 玉山金 2884.TW [core/中長線核心] | setup 5 risk 0 | 10D 1.7% 20D 3.62% | 投機 正常 | NONE | rankΔ +0 setupΔ +0
+- #22 日月光投控 3711.TW [core/中長線核心] | setup 8 risk 5 | 10D 34.09% 20D 37.21% | 投機 投機偏高 | TREND | rankΔ +0 setupΔ +0
+- #21 台達電 2308.TW [core/中長線核心] | setup 8 risk 5 | 10D 33.0% 20D 36.61% | 投機 投機偏高 | TREND | rankΔ +0 setupΔ +0
 
 ## ETF / 債券觀察
 
@@ -94,11 +92,9 @@
 
 ## Early Gem Watch
 
-- #10 英業達 2356.TW [theme/短線主攻] | setup 12 risk 1 | 5D 6.17% 20D 10.63% | 投機 正常 | ACCEL | 理由 剛開始加速 + setup 轉強 + 排名上升
+- #10 英業達 2356.TW [theme/短線主攻] | setup 12 risk 1 | 5D 6.17% 20D 10.63% | 投機 正常 | ACCEL | 理由 剛開始加速
 - #18 晟銘電 3013.TW [theme/短線主攻] | setup 9 risk 0 | 5D 6.28% 20D 10.11% | 投機 正常 | ACCEL,PULLBACK | 理由 剛開始加速 + 量能溫和
-- #24 佳能 2374.TW [theme/短線主攻] | setup 8 risk 0 | 5D 4.03% 20D 6.54% | 投機 正常 | PULLBACK | 理由 setup 轉強 + 排名上升 + 20日漲幅還不算熱
 - #37 元大台灣50 0050.TW [etf/中長線核心] | setup 4 risk 2 | 5D 4.9% 20D 11.25% | 投機 正常 | TREND | 理由 趨勢剛延續 + 量能溫和
-- #27 聯陽 3014.TW [satellite/中長線核心] | setup 7 risk 0 | 5D 2.9% 20D 5.53% | 投機 正常 | NONE | 理由 setup 轉強 + 排名上升 + 20日漲幅還不算熱
 
 ## Prediction Feedback
 
@@ -144,9 +140,9 @@
 
 | Horizon | Trades | Win Rate | Avg Return | Median Return |
 | --- | --- | --- | --- | --- |
-| 1D | 28769 | 47.7% | 0.12% | 0.0% |
-| 5D | 28769 | 51.68% | 0.62% | 0.22% |
-| 20D | 28769 | 55.92% | 2.54% | 0.95% |
+| 1D | 28768 | 47.7% | 0.12% | 0.0% |
+| 5D | 28768 | 51.68% | 0.62% | 0.22% |
+| 20D | 28768 | 55.92% | 2.54% | 0.95% |
 
 ## Attack Backtest
 
