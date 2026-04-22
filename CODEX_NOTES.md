@@ -518,6 +518,128 @@
 - 小步吸收
 - 先進觀察欄位，再進行為
 - 每次改動都能被 verification / outcomes 解讀
+
+### 四、2026-04-22 後續已再往前整合的內容
+
+這一段是晚一點完成、但很關鍵的補充，因為它代表系統已經從「只有觀察」進到「開始小幅改行為」。
+
+#### 1) `scenario_label` 已正式進 `alert_tracking.csv`
+
+- `upsert_alert_tracking(...)` 現在會吃 `market_scenario`
+- `alert_tracking.csv` 已新增：
+  - `scenario_label`
+
+這表示後續可以直接驗證：
+
+- 哪種盤勢下，`short / 等拉回` 最有效
+- 哪種盤勢下，`below_threshold` 比較容易失真
+- 哪種盤勢下，推薦結果可能只是大盤抬轎
+
+#### 2) `pl_ratio` 已進 `feedback_summary.csv`
+
+- `build_feedback_summary()` 現在會輸出：
+  - `avg_win_return_pct`
+  - `avg_loss_return_pct`
+  - `pl_ratio`
+
+- `Prediction Feedback` 報表也已顯示 `盈虧比`
+
+目前這一步先是**觀察層**，不是主排序核心。
+
+#### 3) Heat Bias 已完成閉環
+
+目前三端都已經接上：
+
+- 主流程通知
+  - `build_macro_message(...)` 會顯示 `Heat Bias` 提醒
+- 本機持股 / Telegram / 報表
+  - 都已帶 `volatility_tag` / `🧊⚖️🔥⚡`
+- verification
+  - `verification/summarize_outcomes.py` 已新增：
+    - `Overall By Market Heat`
+    - `Heat Bias Check (hot - normal)`
+
+解讀原則：
+
+- `hot - normal > 0`
+  - 代表熱盤樣本更漂亮，近期績效可能被行情墊高
+- `hot - normal < 0`
+  - 代表過熱開始傷害延續性，追價風險提高
+
+#### 4) `adjust_strategy_by_scenario()` 已正式進主流程
+
+這是目前最重要的演進。
+
+現在 `main()` 已經改成：
+
+1. 先抓 `market_regime`
+2. 先抓 `us_market`
+3. 用這兩個資訊建立 `initial_scenario`
+4. `adjust_strategy_by_scenario(CONFIG.strategy, initial_scenario)`
+5. `run_watchlist(strat=adjusted_strat)`
+
+也就是說：
+
+- `scenario-aware thresholds` **已經正式影響選股**
+- 不再只是 report-only preview
+
+但目前仍是**保守版**：
+
+- 只改少數門檻
+- 不改 feedback 主排序
+- 不整包改策略核心
+
+#### 5) `feedback_score` 已加上 `pl_ratio` tie-breaker
+
+目前 `apply_feedback_adjustment()` 已進一步變成：
+
+- 第一優先：`feedback_score`
+- 第二優先：`feedback_pl_ratio`
+- 第三優先：原本 base order
+
+這一步非常重要，但仍然克制：
+
+- **不改 `daily_rank.csv` 主排序**
+- **只在候選池微調**
+
+也就是：
+
+- `select_short_term_candidates()`
+- `select_midlong_candidates()`
+- backup candidate 選取
+
+這幾層會更偏好：
+
+- 不只勝率高
+- 還更像「大賺小賠」的 action 類型
+
+#### 6) 目前還沒整合的「最後幾塊」
+
+如果之後還要往前推，剩下真正會改行為的大塊主要只有：
+
+- 讓 `pl_ratio` 不只當 tie-breaker，而是直接進 `feedback_score` 公式
+- 讓 feedback / P&L 進一步影響 `daily_rank` 主排序
+- 讓 ATR 更深地進 `portfolio_advice_label()` 的停利 / 減碼邏輯
+- 做更多 `scenario × market_heat × action` 的 outcomes 切片
+
+#### 7) 目前最重要的維護原則
+
+對未來 Codex / Gemini 都一樣：
+
+- 先觀察幾天再做下一步
+- 先確認：
+  - 候選名單是否變得更合理
+  - `5D / 20D` 是否有改善
+  - 是否只是讓熱盤時的熱門股更容易被推前
+
+換句話說：
+
+- 現在系統已經不是純靜態規則版
+- 但也還沒走到「完全自我學習」的高風險版本
+- 目前最好的節奏仍然是：
+  - **小步整合**
+  - **先有 verification**
+  - **再放大到主流程**
 - 不是今天最標準的 `等拉回` 主推股
 
 ### 三、今天已推上 GitHub 的 commits
