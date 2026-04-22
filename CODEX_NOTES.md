@@ -383,6 +383,32 @@
   - `trim_price` 較近：偏配置思維，不預期大幅噴出
   - `stop_price` 不走激進波動邏輯
 
+#### 7) ATR 已輕量接進價位帶（但不碰選股）
+
+- `daily_theme_watchlist.py`
+  - `add_indicators()` 已新增：
+    - `ATR14`
+    - `ATR_Pct`
+  - `detect_row()` 已新增輸出：
+    - `atr_pct`
+    - `volatility_tag`
+
+- `watch_price_plan(...)`
+  - 現在會依 `atr_pct` 對價位帶做輕量調整
+  - 目前設計原則非常重要：
+    - **只影響 `add_price` / `stop_price`**
+    - **不影響 `trim_price`**
+    - **不影響選股、分數、排序**
+
+- 目前 ATR 輕量接法：
+  - 高波動標的：`add_price` 更深、`stop_price` 更寬
+  - 低波動標的：`add_price` / `stop_price` 稍微收斂
+  - 目的只是讓價位帶更貼近股性，不是改策略核心
+
+- 維護原則：
+  - 若未來要再讓 ATR 影響進出場，優先先從價位帶做小步驗證
+  - 不要直接讓 ATR 進入 `detect_row()` 改推薦結果，除非已有 outcomes / feedback 證據支持
+
 ### 二、今天確認過的策略共識
 
 #### 1) Short 不做「可追」
@@ -418,6 +444,80 @@
 - 有潛力
 - 已開始轉強
 - 但還比較像「觀察升級中的候選股」
+
+#### 3) `等拉回` 的實際定義
+
+目前在這套系統裡，`等拉回` 的白話定義是：
+
+- **標的是對的**
+- **但現在不是最舒服的追價點**
+- **要等價格回到更合理的位置再處理**
+
+這不是「不看好」，而是：
+
+- 可以列入 short 主池
+- 但執行上不鼓勵直接追現價
+- 要等回檔、整理、量縮或靠近支撐再看
+
+目前 short 主邏輯的核心共識：
+
+- short 主看 `5D`
+- `等拉回` 是主策略
+- `1D` 只看噪音/延續性，不拿來單獨定策略生死
+
+### 三、`testv` / `GEMINI` 分支如何理解
+
+今天有額外比對過 `testv` branch 與其中的：
+
+- `GEMINI.md`
+- `GEMINI_UPDATES_2026_04_22.md`
+
+這兩份檔的定位不是 `main` 目前的既成事實，而比較像：
+
+- `testv` 的設計藍圖
+- 下一代自適應策略引擎的方向說明
+
+#### 1) 已經在 `main` 落地的 GEMINI 方向
+
+- `StrategyConfig` / `config.strategy`
+- `ATR14` / `ATR_Pct` / `volatility_tag`
+- ATR 輕量進價位帶
+- `build_market_scenario(...)`
+- `holding_style_label(...)`
+- style-specific price bands
+- verification / outcomes / delta / weekly checkpoint
+- `market_heat`
+
+#### 2) 只算部分落地的
+
+- scenario-aware adaptivity
+  - `main` 有 scenario-aware 的通知與持股建議
+  - 但**還沒有正式讓 scenario 動態改 `detect_row()` 的選股門檻**
+- feedback ranking
+  - `main` 有 feedback / outcomes 線
+  - 但**還沒有把 `feedback_score` 變成每日推薦排序主權重**
+- portfolio / watchlist 共用同一套完整 adaptive engine
+  - 方向上正在靠近，但還沒完全統一
+
+#### 3) 還沒落地、先不要直接搬的
+
+- `adjust_strategy_by_scenario()` 直接影響選股門檻
+- `feedback_score` 成為 final push candidate 主排序依據
+- 完整 Heat Bias 警示進入每日推薦主流程
+- `scenario_label` / 價位帶 / feedback 完整閉環直接驅動 daily ranking
+- 直接整包 merge `testv` 的 `daily_theme_watchlist.py`
+
+#### 4) 目前建議的整合態度
+
+一句話：
+
+- **把 `GEMINI` 當成設計參考，不要當成 `main` 已全面採納的規格**
+
+實作上要維持：
+
+- 小步吸收
+- 先進觀察欄位，再進行為
+- 每次改動都能被 verification / outcomes 解讀
 - 不是今天最標準的 `等拉回` 主推股
 
 ### 三、今天已推上 GitHub 的 commits
