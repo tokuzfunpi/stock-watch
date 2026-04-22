@@ -1,10 +1,6 @@
 name: stock-watch
 
 on:
-  schedule:
-    # GitHub Actions cron uses UTC. Add a second weekday run as redundancy because scheduled runs can be delayed or dropped.
-    - cron: "37 0 * * 1-5"
-    - cron: "52 0 * * 1-5"
   workflow_dispatch:
 
 permissions:

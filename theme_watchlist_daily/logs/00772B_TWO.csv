@@ -1,4 +1,7 @@
-﻿date,ticker,name,group,layer,close,ret1_pct,ret5_pct,ret10_pct,ret20_pct,volume,avg_vol20,volume_ratio20,ma20,ma60,ma120,drawdown120_pct,bias20_pct,setup_score,risk_score,signals,score_band,regime,spec_risk_score,spec_risk_label
-2026-04-15,00772B.TWO,中信高評級公司債,etf,defensive_watch,34.31,0.32,-0.26,2.02,1.69,3896000,3368950,1.16,33.96,34.03,33.79,-0.54,1.04,5,1,NONE,開始轉強,還在觀察,0,正常
-2026-04-16,00772B.TWO,中信高評級公司債,etf,defensive_watch,34.21,-0.29,-0.18,0.74,1.66,2044000,3360950,0.61,33.98,34.04,33.8,-0.83,0.67,6,1,BASE,偏強可追蹤,低檔慢慢墊高,0,正常
-2026-04-17,00772B.TWO,中信高評級公司債,etf,defensive_watch,33.97,-0.7,-0.76,-0.32,0.0,1917042,3244752,0.59,33.98,34.04,33.81,-1.53,-0.04,3,1,BASE,一般觀察,低檔慢慢墊高,0,正常
+﻿date,ticker,name,group,layer,close,ret1_pct,ret5_pct,ret10_pct,ret20_pct,volume,avg_vol20,volume_ratio20,ma20,ma60,ma120,drawdown120_pct,bias20_pct,setup_score,risk_score,signals,score_band,regime,spec_risk_score,spec_risk_label,atr_pct,volatility_tag
+2026-04-15,00772B.TWO,中信高評級公司債,etf,defensive_watch,34.31,0.32,-0.26,2.02,1.69,3896000,3368950,1.16,33.96,34.03,33.79,-0.54,1.04,5,1,NONE,開始轉強,還在觀察,0,正常,,
+2026-04-16,00772B.TWO,中信高評級公司債,etf,defensive_watch,34.21,-0.29,-0.18,0.74,1.66,2044000,3360950,0.61,33.98,34.04,33.8,-0.83,0.67,6,1,BASE,偏強可追蹤,低檔慢慢墊高,0,正常,,
+2026-04-17,00772B.TWO,中信高評級公司債,etf,defensive_watch,33.97,-0.7,-0.76,-0.32,0.0,2370000,3267400,0.73,33.98,34.04,33.81,-1.53,-0.04,3,1,BASE,一般觀察,低檔慢慢墊高,0,正常,,
+2026-04-20,00772B.TWO,中信高評級公司債,etf,defensive_watch,33.9,-0.21,-0.41,-0.03,0.18,2764000,3321200,0.83,33.99,34.04,33.81,-1.73,-0.26,3,1,BASE,一般觀察,低檔慢慢墊高,0,正常,,
+2026-04-21,00772B.TWO,中信高評級公司債,etf,defensive_watch,34.01,0.32,-0.14,-0.03,0.38,2314000,3250100,0.71,33.86,33.9,33.68,-1.0,0.44,6,1,BASE,偏強可追蹤,低檔慢慢墊高,0,正常,,
+2026-04-22,00772B.TWO,中信高評級公司債,etf,defensive_watch,33.94,-0.21,-0.67,-0.93,1.79,888061,3090903,0.29,33.89,33.9,33.68,-1.21,0.15,6,1,BASE,偏強可追蹤,低檔慢慢墊高,0,正常,0.54,穩健

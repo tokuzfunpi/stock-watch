@@ -41,6 +41,27 @@
   - 更新 `theme_watchlist_daily/portfolio_report.html`
   - 直接在 CLI 印出大盤摘要與持股建議
 
+Telegram chat id 也支援本機 fallback：
+- 優先讀 `TELEGRAM_CHAT_IDS`
+- 如果 env 沒設，會改讀本機 `chat_ids`
+- `chat_ids` 可用：
+  - 一行一個 id
+  - 或逗號分隔
+
+如果你想保留 `chat_id` 和使用者對照表：
+- repo 內有 `chat_id_map.csv.example`
+- 本機可維護 `chat_id_map.csv`
+- `chat_id_map.csv` 已加入 `.gitignore`，不會被 push
+
+如果你想從 Telegram `getUpdates` 自動更新：
+- repo 內有 `update_chat_id_map.py`
+- 可用其中一種方式提供來源：
+  - 設 `TELEGRAM_GETUPDATES_URL`
+  - 或設 `TELEGRAM_TOKEN`
+  - 或建立本機 `telegram_getupdates_url`
+- 執行：
+  - `python3 update_chat_id_map.py`
+
 補充：
 - `daily_report.md` 會包含 Signals 對照表與 Regime 解釋，方便直接看報表判讀
 - `portfolio.csv` 是本機私有檔，不進 git

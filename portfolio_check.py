@@ -44,12 +44,8 @@ def main() -> int:
             logger.exception("US market reference failed (best effort): %s", exc)
             us_market = {"summary": "美股參考暫時抓不到（best effort）。", "rows": []}
 
-        # Point 3: Scenario-aware thresholds
-        initial_scenario = build_market_scenario(market_regime, us_market)
-        adjusted_strat = adjust_strategy_by_scenario(CONFIG.strategy, initial_scenario)
-
         try:
-            df_rank = run_watchlist(strat=adjusted_strat)
+            df_rank = run_watchlist()
         except Exception as exc:
             warnings.append(f"watchlist: {exc}")
             logger.exception("Watchlist scan failed (best effort): %s", exc)

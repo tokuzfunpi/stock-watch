@@ -84,6 +84,16 @@
   - repo 內提供的公開範例
   - 真正個人持股請放在本機 `portfolio.csv`
   - `portfolio.csv` 已加入 `.gitignore`，避免再被 push
+  - `chat_ids`
+    - 本機保留的 Telegram chat id 筆記
+    - 已加入 `.gitignore`
+  - `chat_id_map.csv`
+    - 本機保留的 `chat_id` 和使用者對照表
+    - repo 內有 `chat_id_map.csv.example` 作為格式範本
+    - 已加入 `.gitignore`
+  - `telegram_getupdates_url`
+    - 本機保留的 Telegram `getUpdates` URL
+    - 已加入 `.gitignore`
   - `theme_watchlist_daily/portfolio_report.md`
   - `theme_watchlist_daily/portfolio_report.html`
   - `theme_watchlist_daily/.yfinance_cache/`
@@ -156,6 +166,18 @@
 - Telegram 只有在下面兩個 env var 都存在時才會真的送：
   - `TELEGRAM_TOKEN`
   - `TELEGRAM_CHAT_IDS`
+- `TELEGRAM_CHAT_IDS` 目前支援雙來源：
+  - 先讀 env
+  - env 沒設時，再讀本機 `chat_ids`
+- `chat_ids` 檔案格式可用：
+  - 一行一個 id
+  - 或逗號分隔
+- `update_chat_id_map.py`
+  - 本機小工具，用 Telegram `getUpdates` 自動更新 `chat_id_map.csv`
+  - 來源優先順序：
+    - `TELEGRAM_GETUPDATES_URL`
+    - `TELEGRAM_TOKEN`
+    - 本機 `telegram_getupdates_url`
 - 目前 config 的 `always_notify=true`
   - 代表 state 沒變也照樣送
   - 但訊息內容仍然只會從 `select_push_candidates()` 選出的標的組成
@@ -236,6 +258,440 @@
 
 - 先看最近這種建議的勝率是否高於 50%
 - 再看平均報酬率是否為正
+
+## 2026-04-22 更新紀錄（給未來 Codex 接手）
+
+這一段是今天密集調整後的交接摘要，目標是讓未來接手的人不用重翻整串對話。
+
+### 一、今天完成的功能更新
+
+#### 1) Verification / outcomes 分析線
+
+- `verification/evaluate_recommendations.py`
+  - 新增 `market_heat` / `market_heat_reason`
+  - 依 `ret5_pct` / `ret20_pct` / `risk_score` / `volume_ratio20` 將樣本標成：
+    - `normal`
+    - `warm`
+    - `hot`
+  - 舊的 `reco_outcomes.csv` 重新跑 `evaluate` 後，也會自動補上這些欄位
+
+- `verification/summarize_outcomes.py`
+  - 新增 `Overall By Market Heat (all dates)`
+  - `Notes` 補上：若 `hot/warm` 樣本很多，近期績效可能被強勢盤墊高
+  - 既有功能仍保留：
+    - `Coverage By Horizon`
+    - `Overall By Signal + reco_status`
+    - `Delta (ok - below_threshold) By Signal`
+    - `Delta ... By Signal Date`
+    - `Weekly Checkpoint (min_n>=5)`
+
+- 驗證解讀（目前最新共識）
+  - `short` 主看 `5D`
+  - `midlong` 主看 `20D`
+  - `1D` 只作輔助觀察，不單獨當策略成敗依據
+  - 目前 `20D` 仍需時間慢慢累積 OK rows；不要因為 1D / 5D 漂亮就過度調 midlong
+
+#### 2) 市場情境判斷（大盤 4 情境）
+
+- `daily_theme_watchlist.py`
+  - 新增 `build_market_scenario(...)`
+  - 每日會把盤勢分成 4 類：
+    - `強勢延伸盤`
+    - `高檔震盪盤`
+    - `權值撐盤、個股轉弱`
+    - `明顯修正盤`
+  - 判斷依據：
+    - `market_regime`（`ret20_pct` / `volume_ratio20` / `is_bullish`）
+    - 美股前一晚摘要
+    - 今日候選池前段樣本的熱度 / 強度分布
+
+- `build_macro_message(...)`
+  - Telegram / CLI 的 macro 訊息現在會多帶：
+    - `盤勢情境`
+    - `操作重點`
+    - `出場提醒`
+
+#### 3) 持股檢查升級成 scenario-aware
+
+- `portfolio_advice_label(...)`
+  - 不再只看個股自身報酬 / 風險，也會依當日盤勢情境調整建議
+
+- `build_portfolio_message(...)`
+  - 現在會先顯示：
+    - `持股節奏`
+    - `今天重點`
+
+- 持股建議語氣已升級成更接近交易管理：
+  - `分批落袋`
+  - `續抱但設停利`
+  - `續抱但盯盤`
+  - `有賺先收一點`
+  - `先降部位`
+  - `保守觀察`
+
+#### 4) 持股分類（進攻 / 核心 / 防守）
+
+- 新增 `holding_style_label(...)`
+  - `進攻持股`：題材 / 高波動 / `ACCEL` 類
+  - `核心持股`：主流趨勢股 / 核心權值 / 結構較穩的中線股
+  - `防守持股`：ETF / 金融 / 債券
+
+- 持股訊息現在會直接顯示：
+  - `[進攻持股]`
+  - `[核心持股]`
+  - `[防守持股]`
+
+#### 5) 觀察股 / 追蹤股價位帶（非單一預測價）
+
+- 新增：
+  - `watch_price_plan(...)`
+  - `watch_price_plan_text(...)`
+
+- 每檔追蹤股現在會有三個價位：
+  - `加碼參考價`
+  - `減碼參考價`
+  - `失效價`
+
+- 定義：
+  - `加碼參考`：拉回到這附近才考慮補
+  - `減碼參考`：漲到這附近可先收一部分
+  - `失效`：跌到這附近代表原本這次追蹤邏輯要重看
+
+- 目前已接入：
+  - `短線可買`
+  - `短線觀察`
+  - `中長線可布局`
+  - `中長線觀察`
+  - `早期轉強觀察`
+  - `daily_report.md`
+  - `alert_tracking.csv`（新增 `add_price` / `trim_price` / `stop_price`）
+
+#### 6) 價位帶也已分持股風格
+
+`watch_price_plan(...)` 現在不再所有股票共用同一套算法，而是先看 `holding_style`：
+
+- `進攻持股`
+  - `add_price` 更低：等更深回檔
+  - `trim_price` 更近：較早收
+  - `stop_price` 更緊：做錯不要拖
+
+- `核心持股`
+  - 介於進攻與防守之間，偏平衡
+
+- `防守持股`
+  - `add_price` 較高：小回檔即可觀察
+  - `trim_price` 較近：偏配置思維，不預期大幅噴出
+  - `stop_price` 不走激進波動邏輯
+
+#### 7) ATR 已輕量接進價位帶（但不碰選股）
+
+- `daily_theme_watchlist.py`
+  - `add_indicators()` 已新增：
+    - `ATR14`
+    - `ATR_Pct`
+  - `detect_row()` 已新增輸出：
+    - `atr_pct`
+    - `volatility_tag`
+
+- `watch_price_plan(...)`
+  - 現在會依 `atr_pct` 對價位帶做輕量調整
+  - 目前設計原則非常重要：
+    - **只影響 `add_price` / `stop_price`**
+    - **不影響 `trim_price`**
+    - **不影響選股、分數、排序**
+
+- 目前 ATR 輕量接法：
+  - 高波動標的：`add_price` 更深、`stop_price` 更寬
+  - 低波動標的：`add_price` / `stop_price` 稍微收斂
+  - 目的只是讓價位帶更貼近股性，不是改策略核心
+
+- 維護原則：
+  - 若未來要再讓 ATR 影響進出場，優先先從價位帶做小步驗證
+  - 不要直接讓 ATR 進入 `detect_row()` 改推薦結果，除非已有 outcomes / feedback 證據支持
+
+### 二、今天確認過的策略共識
+
+#### 1) Short 不做「可追」
+
+目前 short 的主邏輯已收斂成：
+
+- 真正可買主池：幾乎只保留 `等拉回`
+- 其它 action（例如 `開高不追` / `分批落袋` / `續追蹤`）主要是風險提示或觀察用途
+
+這是因為目前驗算結果顯示：
+
+- `short / 等拉回` 最穩
+- `可追` 容易在 1D 被震盪洗掉
+
+#### 2) 英業達（2356）案例解讀
+
+今天有特別釐清 `2356.TW 英業達`：
+
+- 它會出現在 `早期轉強觀察`
+- 也會在 short 那側被看見
+- 但**不是 short 主推可買股**
+
+原因：
+
+- 它屬於 `short_attack`
+- `grade=A`, `setup_score=12`, `risk_score=1`
+- `ret5=6.17`, `ret20=10.63`, `volume_ratio20=1.57`
+- `signals=ACCEL`
+
+所以它是：
+
+- 有動能
+- 有潛力
+- 已開始轉強
+- 但還比較像「觀察升級中的候選股」
+
+#### 3) `等拉回` 的實際定義
+
+目前在這套系統裡，`等拉回` 的白話定義是：
+
+- **標的是對的**
+- **但現在不是最舒服的追價點**
+- **要等價格回到更合理的位置再處理**
+
+這不是「不看好」，而是：
+
+- 可以列入 short 主池
+- 但執行上不鼓勵直接追現價
+- 要等回檔、整理、量縮或靠近支撐再看
+
+目前 short 主邏輯的核心共識：
+
+- short 主看 `5D`
+- `等拉回` 是主策略
+- `1D` 只看噪音/延續性，不拿來單獨定策略生死
+
+### 三、`testv` / `GEMINI` 分支如何理解
+
+今天有額外比對過 `testv` branch 與其中的：
+
+- `GEMINI.md`
+- `GEMINI_UPDATES_2026_04_22.md`
+
+這兩份檔的定位不是 `main` 目前的既成事實，而比較像：
+
+- `testv` 的設計藍圖
+- 下一代自適應策略引擎的方向說明
+
+#### 1) 已經在 `main` 落地的 GEMINI 方向
+
+- `StrategyConfig` / `config.strategy`
+- `ATR14` / `ATR_Pct` / `volatility_tag`
+- ATR 輕量進價位帶
+- `build_market_scenario(...)`
+- `holding_style_label(...)`
+- style-specific price bands
+- verification / outcomes / delta / weekly checkpoint
+- `market_heat`
+
+#### 2) 只算部分落地的
+
+- scenario-aware adaptivity
+  - `main` 有 scenario-aware 的通知與持股建議
+  - 但**還沒有正式讓 scenario 動態改 `detect_row()` 的選股門檻**
+- feedback ranking
+  - `main` 有 feedback / outcomes 線
+  - 但**還沒有把 `feedback_score` 變成每日推薦排序主權重**
+- portfolio / watchlist 共用同一套完整 adaptive engine
+  - 方向上正在靠近，但還沒完全統一
+
+#### 3) 還沒落地、先不要直接搬的
+
+- `adjust_strategy_by_scenario()` 直接影響選股門檻
+- `feedback_score` 成為 final push candidate 主排序依據
+- 完整 Heat Bias 警示進入每日推薦主流程
+- `scenario_label` / 價位帶 / feedback 完整閉環直接驅動 daily ranking
+- 直接整包 merge `testv` 的 `daily_theme_watchlist.py`
+
+#### 4) 目前建議的整合態度
+
+一句話：
+
+- **把 `GEMINI` 當成設計參考，不要當成 `main` 已全面採納的規格**
+
+實作上要維持：
+
+- 小步吸收
+- 先進觀察欄位，再進行為
+- 每次改動都能被 verification / outcomes 解讀
+
+### 四、2026-04-22 後續已再往前整合的內容
+
+這一段是晚一點完成、但很關鍵的補充，因為它代表系統已經從「只有觀察」進到「開始小幅改行為」。
+
+#### 1) `scenario_label` 已正式進 `alert_tracking.csv`
+
+- `upsert_alert_tracking(...)` 現在會吃 `market_scenario`
+- `alert_tracking.csv` 已新增：
+  - `scenario_label`
+
+這表示後續可以直接驗證：
+
+- 哪種盤勢下，`short / 等拉回` 最有效
+- 哪種盤勢下，`below_threshold` 比較容易失真
+- 哪種盤勢下，推薦結果可能只是大盤抬轎
+
+#### 2) `pl_ratio` 已進 `feedback_summary.csv`
+
+- `build_feedback_summary()` 現在會輸出：
+  - `avg_win_return_pct`
+  - `avg_loss_return_pct`
+  - `pl_ratio`
+
+- `Prediction Feedback` 報表也已顯示 `盈虧比`
+
+目前這一步先是**觀察層**，不是主排序核心。
+
+#### 3) Heat Bias 已完成閉環
+
+目前三端都已經接上：
+
+- 主流程通知
+  - `build_macro_message(...)` 會顯示 `Heat Bias` 提醒
+- 本機持股 / Telegram / 報表
+  - 都已帶 `volatility_tag` / `🧊⚖️🔥⚡`
+- verification
+  - `verification/summarize_outcomes.py` 已新增：
+    - `Overall By Market Heat`
+    - `Heat Bias Check (hot - normal)`
+
+解讀原則：
+
+- `hot - normal > 0`
+  - 代表熱盤樣本更漂亮，近期績效可能被行情墊高
+- `hot - normal < 0`
+  - 代表過熱開始傷害延續性，追價風險提高
+
+#### 4) `adjust_strategy_by_scenario()` 已正式進主流程
+
+這是目前最重要的演進。
+
+現在 `main()` 已經改成：
+
+1. 先抓 `market_regime`
+2. 先抓 `us_market`
+3. 用這兩個資訊建立 `initial_scenario`
+4. `adjust_strategy_by_scenario(CONFIG.strategy, initial_scenario)`
+5. `run_watchlist(strat=adjusted_strat)`
+
+也就是說：
+
+- `scenario-aware thresholds` **已經正式影響選股**
+- 不再只是 report-only preview
+
+但目前仍是**保守版**：
+
+- 只改少數門檻
+- 不改 feedback 主排序
+- 不整包改策略核心
+
+#### 5) `feedback_score` 已加上 `pl_ratio` tie-breaker
+
+目前 `apply_feedback_adjustment()` 已進一步變成：
+
+- 第一優先：`feedback_score`
+- 第二優先：`feedback_pl_ratio`
+- 第三優先：原本 base order
+
+這一步非常重要，但仍然克制：
+
+- **不改 `daily_rank.csv` 主排序**
+- **只在候選池微調**
+
+也就是：
+
+- `select_short_term_candidates()`
+- `select_midlong_candidates()`
+- backup candidate 選取
+
+這幾層會更偏好：
+
+- 不只勝率高
+- 還更像「大賺小賠」的 action 類型
+
+#### 6) 目前還沒整合的「最後幾塊」
+
+如果之後還要往前推，剩下真正會改行為的大塊主要只有：
+
+- 讓 `pl_ratio` 不只當 tie-breaker，而是直接進 `feedback_score` 公式
+- 讓 feedback / P&L 進一步影響 `daily_rank` 主排序
+- 讓 ATR 更深地進 `portfolio_advice_label()` 的停利 / 減碼邏輯
+- 做更多 `scenario × market_heat × action` 的 outcomes 切片
+
+#### 7) 目前最重要的維護原則
+
+對未來 Codex / Gemini 都一樣：
+
+- 先觀察幾天再做下一步
+- 先確認：
+  - 候選名單是否變得更合理
+  - `5D / 20D` 是否有改善
+  - 是否只是讓熱盤時的熱門股更容易被推前
+
+換句話說：
+
+- 現在系統已經不是純靜態規則版
+- 但也還沒走到「完全自我學習」的高風險版本
+- 目前最好的節奏仍然是：
+  - **小步整合**
+  - **先有 verification**
+  - **再放大到主流程**
+- 不是今天最標準的 `等拉回` 主推股
+
+### 三、今天已推上 GitHub 的 commits
+
+依時間順序（只列今天主要功能）：
+
+- `e34770c` — `Add market scenario and heat-aware exits`
+- `9cee576` — `Refine style-specific watch price bands`
+- `a1956b7` — `Clarify time windows in notifications`
+
+> 注意：remote 上也有 `Update stock watch artifacts [skip ci]` 這類產物 commit，不是主要邏輯變更。
+
+### 四、目前本地文件狀態
+
+- `verification/LOCAL_RUNBOOK.md`
+  - 已補：
+    - `short = 5D`
+    - `midlong = 20D`
+    - `1D = 輔助觀察`
+    - `進攻 / 核心 / 防守持股` 的白話解讀
+    - `加碼參考 / 減碼參考 / 失效` 的白話解讀
+  - 這是本機 runbook，未必都已推上 GitHub；若未來需要共享，請確認使用者是否要一起提交
+
+### 五、下次 Codex 最適合接著做的事
+
+以下是高價值、但今天還沒做的後續項目：
+
+1. **Heat Bias Check**
+   - 在 `summarize_outcomes.py` 補一段：
+     - `hot - normal` 的勝率 / 報酬差
+   - 用來直接量化「熱盤把結果墊高多少」
+
+2. **Price-band validation**
+   - 用 `alert_tracking.csv` 回頭驗證：
+     - `add_price` 是否真的比現價追更好
+     - `trim_price` 是否有助於保留報酬
+     - `stop_price` 是否能有效避免大回撤
+
+3. **20D threshold tuning**
+   - 等 `20D` 的 OK rows 累積到足夠樣本後
+   - 再開始調 `midlong` 的 `續抱 / 可分批` 門檻
+
+4. **Action-level delta**
+   - 如果要更精細調整，可在 summary 增加：
+     - `ok - below_threshold` by `action`
+   - 用來找出到底是哪種 action 在稀釋 / 墊高績效
+
+### 六、目前不建議做的事
+
+- 不要因為短期強多盤績效太漂亮就放寬 short 門檻
+- 不要用 `1D` 的表現去調 `midlong`
+- 不要把 `失效價` 當成「公司完蛋價」；它只是這次交易 / 觀察邏輯的失效點
 - 樣本太少時，效果會被縮小
 
 目前程式裡的縮放概念是：
@@ -295,11 +751,11 @@
 workflow 檔案：
 
 - `.github/workflows/stock-watch.yml`
+- `.github/workflows/verify-recommendations.yml`（驗算檢查：手動跑）
 
-目前排程：
+目前執行方式：
 
-- `37 0 * * 1-5`
-- 對應台灣時間平日 `08:37`
+- 只保留 `workflow_dispatch`（全手動觸發），不使用 GitHub `schedule`
 
 目前 workflow 會做的事：
 
@@ -334,7 +790,17 @@ python3 -m unittest discover -s tests
 python3 backtest_runner.py
 python3 daily_theme_watchlist.py
 python3 portfolio_check.py
+python3 verification/verify_recommendations.py
+python3 verification/evaluate_recommendations.py
+python3 verification/summarize_outcomes.py
 ```
+
+驗算檢查輸出（本機）：
+
+- `verification/watchlist_daily/verification_report.md`
+- `verification/watchlist_daily/reco_snapshots.csv`
+- `verification/watchlist_daily/reco_outcomes.csv`（需另外跑 evaluate）
+- `verification/watchlist_daily/outcomes_summary.md`
 
 依賴套件目前記在：
 
@@ -391,6 +857,167 @@ requirements.txt
 - `backtest_runner.py` 已改成匯入正確的 module 與 backtest function
 - 通知候選條件已把 `ACCEL` 和 attack backtest 對齊
 - alert tracking 已改成使用 row 的市場日期
-- workflow 排程已調整為台灣時間 `08:37`
+- workflow 已改為全手動觸發（不使用 GitHub schedule）
 - config 已改成固定發 Telegram 通知
 - workflow 已改成使用 `requirements.txt` 並先跑測試
+
+## 2026-04-22 補充：`testv/CODEX_HANDOFF.md` 對齊重點
+
+今天另外直接讀過 GitHub 上的 `testv/CODEX_HANDOFF.md`。這份 handoff 和目前 `main` 的整合方向**基本一致**，可當作設計共識參考，但不要把 `testv` 當成可整包 merge 的來源。
+
+### 這份 handoff 的核心訊息
+
+- 採用「**保守版 adaptive strategy**」節奏是正確的
+- 核心原則是：**驗算（verification）先行，沒有數據支撐的不進主排序**
+- 短線 / 中線的主要 horizon 仍然是：
+  - `short = 5D`
+  - `midlong = 20D`
+  - `1D` 只當輔助，不要追逐 `1D` 假動能
+- `testv` 的下一步規劃可概括成兩段：
+  - **Phase 1：**量化 `Heat Bias`、驗證 ATR 價位帶是否真的有用
+  - **Phase 2：**把 `pl_ratio` 正式納入 `feedback_score`，再考慮 rolling window
+
+### 和目前 `main` 的對照
+
+目前 `main` 已經落地：
+
+- `StrategyConfig` / `config.strategy`
+- `scenario-aware thresholds` 已正式進 `run_watchlist()`
+- ATR / `volatility_tag`
+- ATR 輕量價位帶（只動 `add_price` / `stop_price`）
+- `market_heat`、`Heat Bias` 提示與 verification summary 的 `Heat Bias Check`
+- `pl_ratio` 已進 `feedback_summary.csv`
+- `feedback_score` + `pl_ratio` tie-breaker 已進候選池微調
+
+目前 `main` **還沒有**完全照 `testv` handoff 的更深版本做：
+
+- feedback 直接主導 `daily_rank.csv` 主排序
+
+## 2026-04-22 補充：feedback score 已升級
+
+今天已完成 `testv/CODEX_HANDOFF.md` 提到的 Phase 2 前半段，且已推上 `main`：
+
+- `pl_ratio` 已正式納入 `feedback_score` 公式
+- `feedback_score` 已加入保守版 recency weighting
+  - `short` 取最近 `12` 筆已完成樣本
+  - `midlong` 取最近 `8` 筆已完成樣本
+  - 最終分數採：
+    - `70% base_feedback_score`
+    - `30% recent_feedback_score`
+
+### 目前 feedback 排序的實際狀態
+
+候選池微調目前順序為：
+
+1. `feedback_score`
+2. `feedback_pl_ratio`
+3. `_base_order`
+
+其中：
+
+- `feedback_score` 已包含：
+  - 勝率
+  - 平均報酬
+  - `pl_ratio`
+  - recent weighting
+- `feedback_pl_ratio` 仍保留為 tie-breaker
+
+### 這代表什麼
+
+- 系統現在不只看「哪種 action 歷史上勝率高」
+- 也會看：
+  - 哪種 action 比較像 **大賺小賠**
+  - 哪種 action **最近這段行情仍然有效**
+
+### 目前仍維持的邊界
+
+- 這些改動**只影響候選池微調**
+- 還**沒有**直接重寫 `daily_rank.csv` 主排序
+- 仍然符合：
+  - 小步整合
+  - 先驗證
+  - 不把 adaptive 權重一次放太大
+
+### 觀察到的初步效果
+
+- `short / 等拉回` 仍是最穩主策略，recent score 沒失真
+- `midlong / 續抱` 與 `midlong / 可分批` 近期有改善訊號
+- 代表 recency weighting 目前看起來是在「校正近況」，不是把排序帶歪
+
+## 2026-04-22 補充：verification 已接上 scenario 切片
+
+今天已把 verification 的 scenario 資料鏈補到「未來可用」的狀態：
+
+- `verify_recommendations.py`
+  - 新快照會把當天 `scenario_label` 一起寫進 `reco_snapshots.csv`
+- `evaluate_recommendations.py`
+  - 會把 snapshot / alert tracking 裡可取得的 `scenario_label` 一起帶進 `reco_outcomes.csv`
+  - 如果沒有新 outcome row，也會做 metadata refresh，盡量把 `scenario_label` / `market_heat` 補齊
+- `summarize_outcomes.py`
+  - 已新增：
+    - `Overall By Scenario (all dates)`
+    - `Overall By Scenario + Action (all dates, top 80)`
+
+### 目前看到的限制
+
+- 現有歷史 outcomes 幾乎仍是 `scenario_label = unknown`
+- 這不是程式壞掉，而是因為：
+  - `scenario_label` 是後期才正式接進 verification 流程
+  - 舊資料大多沒有可追溯的 scenario metadata
+
+### 維護判斷
+
+這裡先停在「讓新資料自然長出 scenario 切片」是合理的。
+
+不建議現在做的事：
+
+- 用推估方式硬回填舊的 `scenario_label`
+- 為了讓報表立刻漂亮，去猜舊資料當時屬於哪個盤勢
+
+因為這會開始進入高風險資料污染區。
+
+更好的做法是：
+
+- 讓新 outcomes 持續累積
+- 等 `By Scenario + Action` 有足夠非 `unknown` 樣本後，再決定要不要往主排序加更深的 adaptive 權重
+
+## 2026-04-22 補充：handoff 後續研究方向
+
+目前最適合交給 Gemini / 其他 agent 的，不是直接改 production 排序，而是做下面這幾種分析型工作：
+
+1. **Scenario × Action 研究**
+   - 等 `Scenario Coverage` 的 `known_scenario_rate_pct` 長起來後，
+   - 分析不同盤勢下哪種 action 最穩
+
+2. **Heat Bias vs Scenario 的拆解**
+   - 釐清「熱盤墊高」和「盤勢情境」哪個才是主因
+   - 避免把 hot market 的效果誤判成 scenario-aware 邏輯有效
+
+3. **Feedback 權重敏感度**
+   - 先做離線比較，不直接改主流程
+   - 例如比較：
+     - `70/30`
+     - `80/20`
+     - `60/40`
+   - 看 recency weighting 是否過強或過弱
+
+4. **ATR 價位帶回顧**
+   - 比較 ATR band 與舊版 band 的 add/stop 合理性
+
+### 目前不建議交出去做的高風險任務
+
+- 用推估方式補舊 `scenario_label`
+- 直接讓 feedback 進 `daily_rank.csv` 主排序
+- 一次同時大改：
+  - scenario thresholds
+  - feedback ranking
+  - ATR exits
+
+### 維護原則
+
+如果之後還要繼續吸收 `testv` / Gemini 的設計，請維持下面原則：
+
+- **不要整包 merge `testv`**
+- **先做 report / verification，再做 ranking**
+- **先觀察 `5D` / `20D` 結果，再考慮放大 adaptive 權重**
+- **20D 樣本不足時，不要急著重調中線門檻**

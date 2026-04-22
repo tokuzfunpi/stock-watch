@@ -10,7 +10,7 @@ import os
 import re
 import sys
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
@@ -136,7 +136,9 @@ class StrategyConfig:
     surge_vol_ratio: float
     trend_ret20: float
     accel_ret5: float
-    accel_vol_ratio: float
+    accel_ret10: float
+    accel_vol_ratio_fast: float
+    accel_vol_ratio_slow: float
 
 
 @dataclass
@@ -184,7 +186,9 @@ def load_config(path: Path) -> AppConfig:
             surge_vol_ratio=float(strat_raw.get("surge_vol_ratio", 1.55)),
             trend_ret20=float(strat_raw.get("trend_ret20", 0.08)),
             accel_ret5=float(strat_raw.get("accel_ret5", 0.08)),
-            accel_vol_ratio=float(strat_raw.get("accel_vol_ratio", 1.3)),
+            accel_ret10=float(strat_raw.get("accel_ret10", 0.12)),
+            accel_vol_ratio_fast=float(strat_raw.get("accel_vol_ratio_fast", 1.3)),
+            accel_vol_ratio_slow=float(strat_raw.get("accel_vol_ratio_slow", 1.2)),
         ),
     )
 
@@ -565,12 +569,14 @@ def add_indicators(df: pd.DataFrame, ma_period: int = 20) -> pd.DataFrame:
     out["DistToLow250"] = out["Close"] / out["Low250D"] - 1.0
     out["VolumeRatio20"] = out["Volume"] / out["AvgVol20"]
 
-    # ATR calculation
-    tr = pd.concat([
-        out["High"] - out["Low"],
-        (out["High"] - out["Close"].shift(1)).abs(),
-        (out["Low"] - out["Close"].shift(1)).abs()
-    ], axis=1).max(axis=1)
+    tr = pd.concat(
+        [
+            out["High"] - out["Low"],
+            (out["High"] - out["Close"].shift(1)).abs(),
+            (out["Low"] - out["Close"].shift(1)).abs(),
+        ],
+        axis=1,
+    ).max(axis=1)
     out["ATR14"] = tr.rolling(14).mean()
     out["ATR_Pct"] = out["ATR14"] / out["Close"]
 
@@ -660,18 +666,79 @@ def volatility_label(atr_pct: float) -> str:
     if atr_pct <= 0:
         return "未知"
     if atr_pct < 2.0:
-        return "🧊 穩健"
+        return "穩健"
     if atr_pct < 4.0:
-        return "⚖️ 標準"
+        return "標準"
     if atr_pct < 6.5:
-        return "🔥 活潑"
-    return "⚡ 劇烈"
+        return "活潑"
+    return "劇烈"
 
 
-def detect_row(df: pd.DataFrame, ticker: str, name: str, group: str, layer: str, strat: Optional[StrategyConfig] = None) -> dict:
+def volatility_emoji(tag: str) -> str:
+    return {
+        "穩健": "🧊",
+        "標準": "⚖️",
+        "活潑": "🔥",
+        "劇烈": "⚡",
+    }.get(tag, "❔")
+
+
+def volatility_badge_text(row: pd.Series) -> str:
+    tag = str(row.get("volatility_tag", "") or "")
+    atr_pct = row.get("atr_pct")
+    if not tag:
+        try:
+            atr_value = float(atr_pct)
+            if atr_value > 0:
+                tag = volatility_label(atr_value)
+        except Exception:
+            tag = ""
+    if not tag:
+        return ""
+    emoji = volatility_emoji(tag)
+    try:
+        atr_value = float(atr_pct)
+        if atr_value > 0:
+            return f"{emoji}{tag}({atr_value:.2f}%)"
+    except Exception:
+        pass
+    return f"{emoji}{tag}"
+
+
+def heat_bias_message(df_rank: Optional[pd.DataFrame], scenario: dict) -> str:
+    if df_rank is None or df_rank.empty:
+        return ""
+    working = df_rank.head(10).copy()
+    if working.empty:
+        return ""
+    for col in ["risk_score", "ret5_pct"]:
+        if col in working.columns:
+            working[col] = pd.to_numeric(working[col], errors="coerce")
+    hot_mask = (
+        working.get("risk_score", pd.Series(dtype=float)).fillna(0).ge(5)
+        | working.get("ret5_pct", pd.Series(dtype=float)).fillna(0).ge(12)
+        | working.get("volatility_tag", pd.Series(dtype=str)).astype(str).isin(["活潑", "劇烈"])
+        | working.get("spec_risk_label", pd.Series(dtype=str)).astype(str).eq("疑似炒作風險高")
+    )
+    hot_ratio = float(hot_mask.mean()) if len(working) else 0.0
+    label = str(scenario.get("label", "") or "")
+    if hot_ratio >= 0.5:
+        return "⚠️ Heat Bias 偏強：前排標的偏熱，最近績效可能有行情抬轎，追價風險高。"
+    if hot_ratio >= 0.3 and label in {"高檔震盪盤", "強勢延伸盤"}:
+        return "⚠️ Heat Bias 提醒：前排標的已有明顯熱度，請把拉回買點與分批落袋看得比平常更重。"
+    return ""
+
+
+def detect_row(
+    df: pd.DataFrame,
+    ticker: str,
+    name: str,
+    group: str,
+    layer: str,
+    strat: Optional[StrategyConfig] = None,
+) -> dict:
     if strat is None:
         strat = CONFIG.strategy
-
     x = df.iloc[-1]
     prev = df.iloc[-2] if len(df) >= 2 else x
 
@@ -714,8 +781,8 @@ def detect_row(df: pd.DataFrame, ticker: str, name: str, group: str, layer: str,
         and close_ > ma20 and ma20 > ma60 and ret20 > strat.trend_ret20
     )
     accel_signal = bool(
-        (ret5 > strat.accel_ret5 and vol_ratio20 > strat.accel_vol_ratio and ret20 > 0)
-        or (ret10 > 0.12 and vol_ratio20 > 1.2 and ret20 > 0)
+        (ret5 > strat.accel_ret5 and vol_ratio20 > strat.accel_vol_ratio_fast and ret20 > 0)
+        or (ret10 > strat.accel_ret10 and vol_ratio20 > strat.accel_vol_ratio_slow and ret20 > 0)
     )
     pullback_signal = bool(drawdown120 <= -0.20)
 
@@ -729,7 +796,7 @@ def detect_row(df: pd.DataFrame, ticker: str, name: str, group: str, layer: str,
         setup_score += 1
     if range20 < strat.base_range20_max:
         setup_score += 1
-    if range20 < (strat.base_range20_max - 0.05):
+    if range20 < max(strat.base_range20_max - 0.05, 0.0):
         setup_score += 1
     if ma20 is not None and close_ > ma20:
         setup_score += 1
@@ -831,6 +898,7 @@ def detect_row(df: pd.DataFrame, ticker: str, name: str, group: str, layer: str,
         signals=",".join(signals) if signals else "NONE",
         group=group,
     )
+    atr_pct = round(float(x["ATR_Pct"]) * 100, 2) if pd.notna(x.get("ATR_Pct")) else 0.0
 
     return {
         "date": df.index[-1].strftime("%Y-%m-%d"),
@@ -858,8 +926,8 @@ def detect_row(df: pd.DataFrame, ticker: str, name: str, group: str, layer: str,
         "regime": regime,
         "spec_risk_score": int(spec_score),
         "spec_risk_label": speculative_risk_label(spec_score),
-        "atr_pct": round(float(x.get("ATR_Pct", 0.0)) * 100, 2) if pd.notna(x.get("ATR_Pct")) else 0.0,
-        "volatility_tag": volatility_label(round(float(x.get("ATR_Pct", 0.0)) * 100, 2) if pd.notna(x.get("ATR_Pct")) else 0.0),
+        "atr_pct": atr_pct,
+        "volatility_tag": volatility_label(atr_pct),
     }
 
 
@@ -1212,6 +1280,58 @@ def build_market_scenario(market_regime: dict, us_market: dict, df_rank: Optiona
     }
 
 
+def adjust_strategy_by_scenario(base_strat: StrategyConfig, scenario: dict) -> StrategyConfig:
+    strat = replace(base_strat)
+    label = str(scenario.get("label", "") or "")
+
+    if label == "明顯修正盤":
+        strat.rebreak_vol_ratio += 0.10
+        strat.trend_ret20 += 0.01
+        strat.accel_ret5 += 0.01
+        strat.accel_ret10 += 0.02
+        strat.accel_vol_ratio_fast += 0.15
+        strat.accel_vol_ratio_slow += 0.10
+    elif label == "權值撐盤、個股轉弱":
+        strat.rebreak_vol_ratio += 0.05
+        strat.accel_ret5 += 0.005
+        strat.accel_vol_ratio_fast += 0.10
+        strat.accel_vol_ratio_slow += 0.05
+    elif label == "高檔震盪盤":
+        strat.rebreak_vol_ratio += 0.05
+        strat.accel_ret5 += 0.01
+        strat.accel_vol_ratio_fast += 0.05
+        strat.accel_vol_ratio_slow += 0.05
+    elif label == "強勢延伸盤":
+        strat.rebreak_vol_ratio = max(strat.rebreak_vol_ratio - 0.05, 1.0)
+        strat.accel_ret5 = max(strat.accel_ret5 - 0.005, 0.0)
+        strat.accel_ret10 = max(strat.accel_ret10 - 0.01, strat.accel_ret5)
+        strat.accel_vol_ratio_fast = max(strat.accel_vol_ratio_fast - 0.05, 1.0)
+        strat.accel_vol_ratio_slow = max(strat.accel_vol_ratio_slow - 0.05, 1.0)
+    return strat
+
+
+def strategy_preview_lines(base_strat: StrategyConfig, scenario: dict) -> list[str]:
+    adjusted = adjust_strategy_by_scenario(base_strat, scenario)
+    field_labels = {
+        "rebreak_vol_ratio": "rebreak 量比",
+        "trend_ret20": "trend 20D",
+        "accel_ret5": "accel 5D",
+        "accel_ret10": "accel 10D",
+        "accel_vol_ratio_fast": "accel 快速量比",
+        "accel_vol_ratio_slow": "accel 緩速量比",
+    }
+    changed: list[str] = []
+    for field, label in field_labels.items():
+        before = getattr(base_strat, field)
+        after = getattr(adjusted, field)
+        if round(before, 4) == round(after, 4):
+            continue
+        changed.append(f"{label}: {before:.2f} → {after:.2f}")
+    if not changed:
+        return ["- 今日情境下，adaptive preview 不調整門檻。"]
+    return [f"- {line}" for line in changed]
+
+
 def reorder_priority_groups(df_rank: pd.DataFrame) -> pd.DataFrame:
     rule = CONFIG.notify
     df = df_rank.copy()
@@ -1552,23 +1672,29 @@ def watch_price_plan(row: pd.Series, watch_type: str) -> dict[str, float | str]:
     ma60 = float(row.get("ma60", ma20) or ma20)
     ret5 = float(row.get("ret5_pct", 0.0) or 0.0)
     ret20 = float(row.get("ret20_pct", 0.0) or 0.0)
+    atr_pct = float(row.get("atr_pct", 0.0) or 0.0)
     risk = int(row.get("risk_score", 0) or 0)
     signals = str(row.get("signals", "") or "")
     holding_style = str(row.get("holding_style", "") or holding_style_label(row))
-    atr_pct = float(row.get("atr_pct", 0.0) or 0.0) / 100.0
 
     if close_ <= 0:
         return {"add_price": 0.0, "trim_price": 0.0, "stop_price": 0.0, "note": ""}
 
-    # Use ATR as a base for volatility adjustment if available, else fallback to defaults
-    vol_mult = max(atr_pct / 0.03, 0.8) if atr_pct > 0 else 1.0
+    if atr_pct >= 6.0:
+        atr_scale = 1.35
+    elif atr_pct >= 4.0:
+        atr_scale = 1.2
+    elif 0 < atr_pct <= 2.0:
+        atr_scale = 0.9
+    else:
+        atr_scale = 1.0
 
     if watch_type == "short":
         if holding_style == "進攻持股":
             pullback_pct = 0.05 if ("ACCEL" in signals or ret5 >= 8) else 0.04
             trim_pct = 0.07 if ret20 < 12 else 0.08
             stop_pct = 0.045 if risk <= 2 else 0.055
-            note = "進攻股用快進快出思維，等更明確的回檔。"
+            note = "進攻股用快進快出思維，先等更明確的回檔。"
         elif holding_style == "防守持股":
             pullback_pct = 0.025
             trim_pct = 0.06 if ret20 < 8 else 0.07
@@ -1586,13 +1712,12 @@ def watch_price_plan(row: pd.Series, watch_type: str) -> dict[str, float | str]:
             stop_pct = 0.05 if risk <= 2 else 0.06
             note = "短線先等回檔，不追現價。"
 
-        # Apply volatility adjustment
-        pullback_pct *= vol_mult
-        stop_pct *= vol_mult
-
+        pullback_pct *= atr_scale
+        stop_pct *= atr_scale
         add_price = max(ma20, close_ * (1 - pullback_pct))
         trim_price = close_ * (1 + trim_pct)
-        stop_price = min(ma20 * 0.98, close_ * (1 - stop_pct))
+        support_buffer = 0.02 * atr_scale
+        stop_price = min(ma20 * (1 - support_buffer), close_ * (1 - stop_pct))
     else:
         if holding_style == "進攻持股":
             pullback_pct = 0.06 if ret20 >= 10 else 0.05
@@ -1614,14 +1739,12 @@ def watch_price_plan(row: pd.Series, watch_type: str) -> dict[str, float | str]:
             stop_pct = 0.08 if risk <= 2 else 0.1
             note = "中線用分批看，不用急著一次買滿。"
 
-        # Apply volatility adjustment (less aggressive for midlong)
-        vol_mult_mid = 1.0 + (vol_mult - 1.0) * 0.5
-        pullback_pct *= vol_mult_mid
-        stop_pct *= vol_mult_mid
-
+        pullback_pct *= atr_scale
+        stop_pct *= atr_scale
         add_price = max(ma20, ma60, close_ * (1 - pullback_pct))
         trim_price = close_ * (1 + trim_pct)
-        stop_price = min(ma20 * 0.97, ma60 * 0.97, close_ * (1 - stop_pct))
+        support_buffer = 0.03 * atr_scale
+        stop_price = min(ma20 * (1 - support_buffer), ma60 * (1 - support_buffer), close_ * (1 - stop_pct))
 
     return {
         "add_price": round(add_price, 2),
@@ -1683,9 +1806,11 @@ def build_early_gem_message(df_rank: pd.DataFrame, market_regime: dict, us_marke
     lines.append("解讀：這一區不是追最熱，而是找剛轉強、還沒太擁擠的候選。")
     lines.append("")
     for _, r in gem_candidates.iterrows():
+        vol_text = volatility_badge_text(r)
         lines.append(
             f"{int(r['rank'])}. {r['name']} ({r['ticker']}) | "
             f"{layer_label(r['layer'])} | 5日 {r['ret5_pct']}% / 20日 {r['ret20_pct']}% | "
+            f"{vol_text} | "
             f"{early_gem_reason(r)} | {watch_price_plan_text(r, 'short')}"
         )
     return "\n".join(lines).strip()
@@ -1751,22 +1876,22 @@ def build_short_term_message(df_rank: pd.DataFrame, market_regime: dict, us_mark
     lines.append("")
     for _, r in short_candidates.iterrows():
         action = short_term_action_label(r)
-        vol_tag = r.get("volatility_tag", "")
+        vol_text = volatility_badge_text(r)
         lines.append(
             f"{int(r['rank'])}. {r['name']} ({r['ticker']}) {action} | {vol_tag} | "
             f"5日 {r['ret5_pct']}% / 量比 {r['volume_ratio20']} | "
-            f"{r['regime']} | {watch_price_plan_text(r, 'short')}"
+            f"{vol_text} | {r['regime']} | {watch_price_plan_text(r, 'short')}"
         )
     if not short_backups.empty:
         lines.append("")
         lines.append("短線觀察 (最多5檔)")
         for _, r in short_backups.iterrows():
             action = short_term_action_label(r)
-            vol_tag = r.get("volatility_tag", "")
+            vol_text = volatility_badge_text(r)
             lines.append(
                 f"{int(r['rank'])}. {r['name']} ({r['ticker']}) {action} | {vol_tag} | "
                 f"5日 {r['ret5_pct']}% / 量比 {r['volume_ratio20']} | "
-                f"{r['regime']} | {watch_price_plan_text(r, 'short')}"
+                f"{vol_text} | {r['regime']} | {watch_price_plan_text(r, 'short')}"
             )
     return "\n".join(lines).strip()
 
@@ -1788,22 +1913,22 @@ def build_midlong_message(df_rank: pd.DataFrame, market_regime: dict, us_market:
     lines.append("")
     for _, r in midlong_candidates.iterrows():
         action = midlong_action_label(r)
-        vol_tag = r.get("volatility_tag", "")
+        vol_text = volatility_badge_text(r)
         lines.append(
             f"{int(r['rank'])}. {r['name']} ({r['ticker']}) {action} | {vol_tag} | "
             f"20日 {r['ret20_pct']}% / 量比 {r['volume_ratio20']} | "
-            f"{r['regime']} | {watch_price_plan_text(r, 'midlong')}"
+            f"{vol_text} | {r['regime']} | {watch_price_plan_text(r, 'midlong')}"
         )
     if not midlong_backups.empty:
         lines.append("")
         lines.append("中長線觀察 (最多5檔)")
         for _, r in midlong_backups.iterrows():
             action = midlong_action_label(r)
-            vol_tag = r.get("volatility_tag", "")
+            vol_text = volatility_badge_text(r)
             lines.append(
                 f"{int(r['rank'])}. {r['name']} ({r['ticker']}) {action} | {vol_tag} | "
                 f"20日 {r['ret20_pct']}% / 量比 {r['volume_ratio20']} | "
-                f"{r['regime']} | {watch_price_plan_text(r, 'midlong')}"
+                f"{vol_text} | {r['regime']} | {watch_price_plan_text(r, 'midlong')}"
             )
     return "\n".join(lines).strip()
 
@@ -1818,15 +1943,9 @@ def build_macro_message(market_regime: dict, us_market: dict, df_rank: Optional[
         f"操作重點：{scenario['focus']}",
         f"出場提醒：{scenario['exit_note']}",
     ]
-    
-    # Heat Bias Check
-    if df_rank is not None and not df_rank.empty:
-        hot_count = int((df_rank.head(10)["risk_score"].fillna(0) >= 5).sum())
-        if hot_count >= 4 and scenario['label'] in ["強勢延伸盤", "高檔震盪盤"]:
-            lines.append("⚠️ 注意：目前前排標的熱度高（Heat Bias 偏強），勝率可能受大盤強勢墊高，不宜過度追價。")
-        elif hot_count >= 7:
-            lines.append("⚠️ 警訊：極度過熱，多數標的已入風險區，優先守住獲利。")
-
+    heat_bias = heat_bias_message(df_rank, scenario)
+    if heat_bias:
+        lines.append(heat_bias)
     lines.extend(runtime_context_lines())
     if us_market.get("tech_bias"):
         lines.append(us_market["tech_bias"])
@@ -1957,9 +2076,10 @@ def build_portfolio_review_df(
         market_scenario = build_market_scenario(market_regime, us_market, df_rank)
 
     market_cols = [
-        "ticker", "name", "close", "signals", "regime", "risk_score", "ret5_pct", "ret20_pct", "volume_ratio20"
+        "ticker", "name", "close", "signals", "regime", "risk_score",
+        "ret5_pct", "ret20_pct", "volume_ratio20", "atr_pct", "volatility_tag"
     ]
-    market_df = df_rank[market_cols].copy() if not df_rank.empty else pd.DataFrame(columns=market_cols)
+    market_df = df_rank.reindex(columns=market_cols).copy() if not df_rank.empty else pd.DataFrame(columns=market_cols)
     review = PORTFOLIO.merge(market_df, on="ticker", how="left")
     review["name"] = review["name"].fillna(review["ticker"].str.split(".").str[0])
 
@@ -1997,6 +2117,9 @@ def build_portfolio_message(
         scenario = build_market_scenario(market_regime, us_market, df_rank)
         lines.append(f"持股節奏：{scenario['label']} | {scenario['stance']}")
         lines.append(f"今天重點：{scenario['exit_note']}")
+        heat_bias = heat_bias_message(df_rank, scenario)
+        if heat_bias:
+            lines.append(heat_bias)
     if review.empty:
         lines.append("portfolio.csv 目前沒有可分析的持股。")
         return "\n".join(lines)
@@ -2006,9 +2129,10 @@ def build_portfolio_message(
         if pd.isna(current_close):
             lines.append(f"{r['ticker'].split('.')[0]} {r['advice']} | 尚未抓到行情，已同步加入觀察清單")
             continue
+        vol_text = volatility_badge_text(r)
         lines.append(
             f"{r['name']} ({r['ticker'].split('.')[0]}) [{r['holding_style']}] {r['advice']} | "
-            f"現價 {round(float(current_close), 2)} / 成本 {round(float(r['avg_cost']), 2)} | "
+            f"{vol_text} | 現價 {round(float(current_close), 2)} / 成本 {round(float(r['avg_cost']), 2)} | "
             f"報酬 {r['unrealized_pnl_pct']}% / 目標 {r['target_profit_pct']}%"
         )
     return "\n".join(lines).strip()
@@ -2045,6 +2169,69 @@ def feedback_label_from_score(score: float, samples: int) -> str:
     return "中性"
 
 
+def feedback_window_size(watch_type: str) -> int:
+    return 12 if watch_type == "short" else 8
+
+
+def compute_feedback_score_components(
+    returns: pd.Series,
+    sample_scale: int,
+    use_weights: bool = False,
+) -> dict[str, float]:
+    if returns.empty:
+        return {
+            "win_rate_pct": 0.0,
+            "avg_return_pct": 0.0,
+            "avg_win_return_pct": 0.0,
+            "avg_loss_return_pct": 0.0,
+            "pl_ratio": 0.0,
+            "feedback_score": 0.0,
+        }
+
+    working = returns.astype(float).reset_index(drop=True)
+    weights = pd.Series([1.0] * len(working))
+    if use_weights and len(working) > 1:
+        floor = 0.65
+        step = (1.0 - floor) / max(len(working) - 1, 1)
+        weights = pd.Series([1.0 - (step * i) for i in range(len(working))])
+
+    positive_mask = working > 0
+    negative_mask = ~positive_mask
+    positive = working[positive_mask]
+    negative = working[negative_mask]
+    positive_weights = weights[positive_mask]
+    negative_weights = weights[negative_mask]
+
+    total_weight = float(weights.sum()) or 1.0
+    win_rate_pct = round(float(weights[positive_mask].sum() / total_weight) * 100, 2)
+    avg_return_pct = round(float((working * weights).sum() / total_weight), 2)
+    avg_win_return_pct = round(float((positive * positive_weights).sum() / positive_weights.sum()), 2) if not positive.empty else 0.0
+    avg_loss_return_pct = round(float((negative * negative_weights).sum() / negative_weights.sum()), 2) if not negative.empty else 0.0
+    gross_win = float((positive * positive_weights).sum()) if not positive.empty else 0.0
+    gross_loss = abs(float((negative * negative_weights).sum())) if not negative.empty else 0.0
+    pl_ratio = round(gross_win / gross_loss, 2) if gross_loss > 0 else (round(gross_win, 2) if gross_win > 0 else 0.0)
+    shrink = min(sample_scale / 8.0, 1.0)
+    pl_ratio_capped = min(max(pl_ratio, 0.0), 4.0)
+    pl_ratio_component = (pl_ratio_capped - 1.0) / 4.0
+    feedback_score = round(
+        (
+            ((win_rate_pct - 50.0) / 10.0)
+            + (avg_return_pct / 5.0)
+            + pl_ratio_component
+        )
+        * shrink,
+        2,
+    )
+    return {
+        "win_rate_pct": win_rate_pct,
+        "avg_return_pct": avg_return_pct,
+        "avg_win_return_pct": avg_win_return_pct,
+        "avg_loss_return_pct": avg_loss_return_pct,
+        "pl_ratio": pl_ratio,
+        "feedback_score": feedback_score,
+    }
+
+
 def build_feedback_summary() -> pd.DataFrame:
     if not ALERT_TRACK_CSV.exists():
         return pd.DataFrame()
@@ -2063,36 +2250,51 @@ def build_feedback_summary() -> pd.DataFrame:
             continue
         if "action_label" not in subset.columns:
             subset["action_label"] = ""
+        subset["alert_date"] = pd.to_datetime(subset.get("alert_date"), errors="coerce")
         subset["target_return"] = subset.apply(lambda r: history_target_return(r)[0], axis=1)
         subset = subset[subset["target_return"].notna()].copy()
         if subset.empty:
             continue
+        subset = subset.sort_values("alert_date", ascending=False, kind="mergesort").reset_index(drop=True)
 
         for action_label in ["__all__"] + sorted(set(subset["action_label"].astype(str))):
             action_df = subset if action_label == "__all__" else subset[subset["action_label"].astype(str) == action_label].copy()
             if action_df.empty:
                 continue
             samples = int(action_df.shape[0])
-            win_mask = action_df["target_return"].gt(0)
-            win_rate_pct = round(float(win_mask.mean()) * 100, 2)
-            avg_return_pct = round(float(action_df["target_return"].mean()), 2)
-            
-            # P/L Ratio calculation
-            avg_win = float(action_df[win_mask]["target_return"].mean()) if win_mask.any() else 0.0
-            avg_loss = abs(float(action_df[~win_mask]["target_return"].mean())) if (~win_mask).any() else 0.0
-            pl_ratio = round(avg_win / avg_loss, 2) if avg_loss > 0 else round(avg_win, 2)
-
-            shrink = min(samples / 8.0, 1.0)
-            # Refined feedback score: win rate + avg return + pl_ratio bias
-            feedback_score = round((((win_rate_pct - 50.0) / 10.0) + (avg_return_pct / 5.0) + (min(pl_ratio, 3.0) / 2.0)) * shrink, 2)
+            base_metrics = compute_feedback_score_components(
+                action_df["target_return"],
+                sample_scale=samples,
+                use_weights=False,
+            )
+            recent_window = feedback_window_size(watch_type)
+            recent_df = action_df.head(recent_window).copy()
+            recent_samples = int(recent_df.shape[0])
+            recent_metrics = compute_feedback_score_components(
+                recent_df["target_return"],
+                sample_scale=recent_samples,
+                use_weights=True,
+            )
+            feedback_score = round(
+                (base_metrics["feedback_score"] * 0.7) + (recent_metrics["feedback_score"] * 0.3),
+                2,
+            )
             rows.append(
                 {
                     "watch_type": watch_type,
                     "action_label": action_label,
                     "samples": samples,
-                    "win_rate_pct": win_rate_pct,
-                    "avg_return_pct": avg_return_pct,
-                    "pl_ratio": pl_ratio,
+                    "recent_samples": recent_samples,
+                    "win_rate_pct": base_metrics["win_rate_pct"],
+                    "avg_return_pct": base_metrics["avg_return_pct"],
+                    "avg_win_return_pct": base_metrics["avg_win_return_pct"],
+                    "avg_loss_return_pct": base_metrics["avg_loss_return_pct"],
+                    "pl_ratio": base_metrics["pl_ratio"],
+                    "recent_win_rate_pct": recent_metrics["win_rate_pct"],
+                    "recent_avg_return_pct": recent_metrics["avg_return_pct"],
+                    "recent_pl_ratio": recent_metrics["pl_ratio"],
+                    "base_feedback_score": base_metrics["feedback_score"],
+                    "recent_feedback_score": recent_metrics["feedback_score"],
                     "feedback_score": feedback_score,
                     "feedback_label": feedback_label_from_score(feedback_score, samples),
                 }
@@ -2103,24 +2305,24 @@ def build_feedback_summary() -> pd.DataFrame:
     return summary
 
 
-def feedback_score_lookup(summary: pd.DataFrame, watch_type: str, action_label: str) -> tuple[float, str]:
+def feedback_score_lookup(summary: pd.DataFrame, watch_type: str, action_label: str) -> tuple[float, str, float]:
     if summary is None or summary.empty:
-        return 0.0, "樣本不足"
+        return 0.0, "樣本不足", 0.0
     exact = summary[
         (summary["watch_type"].astype(str) == watch_type)
         & (summary["action_label"].astype(str) == action_label)
     ]
     if not exact.empty:
         row = exact.iloc[0]
-        return float(row["feedback_score"]), str(row["feedback_label"])
+        return float(row["feedback_score"]), str(row["feedback_label"]), float(row.get("pl_ratio", 0.0) or 0.0)
     fallback = summary[
         (summary["watch_type"].astype(str) == watch_type)
         & (summary["action_label"].astype(str) == "__all__")
     ]
     if not fallback.empty:
         row = fallback.iloc[0]
-        return float(row["feedback_score"]), str(row["feedback_label"])
-    return 0.0, "樣本不足"
+        return float(row["feedback_score"]), str(row["feedback_label"]), float(row.get("pl_ratio", 0.0) or 0.0)
+    return 0.0, "樣本不足", 0.0
 
 
 def apply_feedback_adjustment(df: pd.DataFrame, watch_type: str) -> pd.DataFrame:
@@ -2131,11 +2333,12 @@ def apply_feedback_adjustment(df: pd.DataFrame, watch_type: str) -> pd.DataFrame
     out["_base_order"] = range(len(out))
     out["action_label"] = out.apply(lambda row: feedback_action_label(row, watch_type), axis=1)
     lookups = out["action_label"].apply(lambda action: feedback_score_lookup(summary, watch_type, action))
-    out["feedback_score"] = [score for score, _ in lookups]
-    out["feedback_label"] = [label for _, label in lookups]
+    out["feedback_score"] = [score for score, _, _ in lookups]
+    out["feedback_label"] = [label for _, label, _ in lookups]
+    out["feedback_pl_ratio"] = [pl_ratio for _, _, pl_ratio in lookups]
     out = out.sort_values(
-        by=["feedback_score", "_base_order"],
-        ascending=[False, True],
+        by=["feedback_score", "feedback_pl_ratio", "_base_order"],
+        ascending=[False, False, True],
         kind="mergesort",
     ).reset_index(drop=True)
     return out.drop(columns=["_base_order"])
@@ -2163,8 +2366,11 @@ def summarize_events(events_df: pd.DataFrame, horizons: List[int]) -> pd.DataFra
 
 
 
-def upsert_alert_tracking(short_candidates: pd.DataFrame, midlong_candidates: pd.DataFrame, scenario: Optional[dict] = None) -> None:
-    scenario_label = scenario.get("label", "unknown") if scenario else "unknown"
+def upsert_alert_tracking(
+    short_candidates: pd.DataFrame,
+    midlong_candidates: pd.DataFrame,
+    market_scenario: Optional[dict] = None,
+) -> None:
     cols = [
         "alert_date", "watch_type", "ticker", "name", "group", "grade", "rank", "setup_score", "risk_score",
         "layer", "signals", "regime", "action_label", "feedback_score", "feedback_label",
@@ -2185,6 +2391,7 @@ def upsert_alert_tracking(short_candidates: pd.DataFrame, midlong_candidates: pd
         ("short", short_candidates),
         ("midlong", midlong_candidates),
     ]
+    scenario_label = str((market_scenario or {}).get("label", "") or "")
 
     for watch_type, candidates in candidate_groups:
         if candidates is None or candidates.empty:
@@ -2254,27 +2461,6 @@ def upsert_alert_tracking(short_candidates: pd.DataFrame, midlong_candidates: pd
                 hist.at[i, "status"] = "CLOSED"
 
     hist.to_csv(ALERT_TRACK_CSV, index=False, encoding="utf-8-sig")
-
-
-def adjust_strategy_by_scenario(base_strat: StrategyConfig, scenario: dict) -> StrategyConfig:
-    import copy
-    strat = copy.deepcopy(base_strat)
-    label = scenario.get("label", "")
-    
-    if label == "明顯修正盤":
-        # Make thresholds stricter
-        strat.accel_vol_ratio += 0.3
-        strat.rebreak_vol_ratio += 0.2
-        strat.accel_ret5 += 0.02
-    elif label == "權值撐盤、個股轉弱":
-        # Slightly stricter on volume
-        strat.accel_vol_ratio += 0.15
-        strat.rebreak_vol_ratio += 0.1
-    elif label == "強勢延伸盤":
-        # Allow slightly more aggression
-        strat.accel_vol_ratio = max(strat.accel_vol_ratio - 0.1, 1.0)
-        
-    return strat
 
 
 def run_watchlist(strat: Optional[StrategyConfig] = None) -> pd.DataFrame:
@@ -2370,8 +2556,15 @@ def run_backtest_dual() -> tuple[Optional[pd.DataFrame], Optional[pd.DataFrame]]
     return steady_summary, attack_summary
 
 
-def build_daily_report_markdown(df_rank: pd.DataFrame, market_regime: dict, bt_steady: Optional[pd.DataFrame], bt_attack: Optional[pd.DataFrame]) -> str:
+def build_daily_report_markdown(
+    df_rank: pd.DataFrame,
+    market_regime: dict,
+    bt_steady: Optional[pd.DataFrame],
+    bt_attack: Optional[pd.DataFrame],
+    us_market: Optional[dict] = None,
+) -> str:
     today = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    scenario = build_market_scenario(market_regime, us_market or {}, df_rank)
     lines = [
         "# Daily 20D v2.2 Attack Report",
         f"- Generated: {today}",
@@ -2379,14 +2572,14 @@ def build_daily_report_markdown(df_rank: pd.DataFrame, market_regime: dict, bt_s
         "",
         "## Top Ranking",
         "",
-        "| 排名 | 等級 | 股票 | 分類 | 近況 | 5日 | 20日 | 投機風險 | 重點 |",
-        "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+        "| 排名 | 等級 | 股票 | 分類 | 近況 | 5日 | 20日 | 波動 | 投機風險 | 重點 |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
     for _, r in df_rank.iterrows():
         lines.append(
             f"| {int(r['rank'])} | {r['grade']} | {r['name']} ({r['ticker']}) | "
             f"{layer_label(r['layer'])} | {r['regime']} | "
-            f"{r['ret5_pct']}% | {r['ret20_pct']}% | {r['spec_risk_label']} | "
+            f"{r['ret5_pct']}% | {r['ret20_pct']}% | {r.get('volatility_tag', '')} ({r.get('atr_pct', '')}%) | {r['spec_risk_label']} | "
             f"{r['signals']} / 量比 {r['volume_ratio20']} |"
         )
 
@@ -2476,15 +2669,19 @@ def build_daily_report_markdown(df_rank: pd.DataFrame, market_regime: dict, bt_s
     if feedback_summary.empty:
         lines.append("- None")
     else:
-        lines.append("| 類型 | 操作 | 樣本 | 勝率 | 平均報酬 | 回饋分數 | 判讀 |")
-        lines.append("| --- | --- | --- | --- | --- | --- | --- |")
+        lines.append("| 類型 | 操作 | 樣本 | 勝率 | 平均報酬 | 盈虧比 | 回饋分數 | 判讀 |")
+        lines.append("| --- | --- | --- | --- | --- | --- | --- | --- |")
         for _, r in feedback_summary.iterrows():
             action_label = "整體" if str(r["action_label"]) == "__all__" else str(r["action_label"])
             watch_type = "短線" if str(r["watch_type"]) == "short" else "中長線"
             lines.append(
                 f"| {watch_type} | {action_label} | {int(r['samples'])} | {r['win_rate_pct']}% | "
-                f"{r['avg_return_pct']}% | {r['feedback_score']} | {r['feedback_label']} |"
+                f"{r['avg_return_pct']}% | {r['pl_ratio']} | {r['feedback_score']} | {r['feedback_label']} |"
             )
+
+    lines.extend(["", "## Adaptive Strategy Adjustments", ""])
+    lines.append(f"- 情境：{scenario['label']} | 目前節奏：{scenario['stance']}")
+    lines.extend(strategy_preview_lines(CONFIG.strategy, scenario))
 
     lines.extend([
         "",
@@ -2548,7 +2745,13 @@ def build_daily_report_markdown(df_rank: pd.DataFrame, market_regime: dict, bt_s
     return "\n".join(lines)
 
 
-def build_daily_report_html(df_rank: pd.DataFrame, market_regime: dict, bt_steady: Optional[pd.DataFrame], bt_attack: Optional[pd.DataFrame]) -> str:
+def build_daily_report_html(
+    df_rank: pd.DataFrame,
+    market_regime: dict,
+    bt_steady: Optional[pd.DataFrame],
+    bt_attack: Optional[pd.DataFrame],
+    us_market: Optional[dict] = None,
+) -> str:
     steady_html = "<p>None</p>" if bt_steady is None or bt_steady.empty else dataframe_to_html(bt_steady)
     attack_html = "<p>None</p>" if bt_attack is None or bt_attack.empty else dataframe_to_html(bt_attack)
     short_candidates, short_backups, midlong_candidates, midlong_backups = build_candidate_sets(df_rank)
@@ -2562,6 +2765,10 @@ def build_daily_report_html(df_rank: pd.DataFrame, market_regime: dict, bt_stead
     gem_html = "<p>None</p>" if gem_candidates.empty else dataframe_to_html(gem_candidates)
     feedback_summary = build_feedback_summary()
     feedback_html = "<p>None</p>" if feedback_summary.empty else dataframe_to_html(feedback_summary)
+    scenario = build_market_scenario(market_regime, us_market or {}, df_rank)
+    adaptive_preview_html = "<br>".join(
+        [f"情境：{scenario['label']} | 目前節奏：{scenario['stance']}"] + strategy_preview_lines(CONFIG.strategy, scenario)
+    )
     return f"""<!doctype html>
 <html><head><meta charset="utf-8"><title>Daily 20D v2.2 Attack Report</title>
 <style>
@@ -2580,14 +2787,21 @@ th {{ background: #f4f4f4; }}
 <h2>ETF / 債券觀察</h2>{special_etf_html}
 <h2>Early Gem Watch</h2>{gem_html}
 <h2>Prediction Feedback</h2>{feedback_html}
+<h2>Adaptive Strategy Adjustments</h2><p>{adaptive_preview_html}</p>
 <h2>Steady Backtest</h2>{steady_html}
 <h2>Attack Backtest</h2>{attack_html}
 </body></html>"""
 
 
-def save_reports(df_rank: pd.DataFrame, market_regime: dict, bt_steady: Optional[pd.DataFrame], bt_attack: Optional[pd.DataFrame]) -> None:
-    REPORT_MD.write_text(build_daily_report_markdown(df_rank, market_regime, bt_steady, bt_attack), encoding="utf-8")
-    REPORT_HTML.write_text(build_daily_report_html(df_rank, market_regime, bt_steady, bt_attack), encoding="utf-8")
+def save_reports(
+    df_rank: pd.DataFrame,
+    market_regime: dict,
+    bt_steady: Optional[pd.DataFrame],
+    bt_attack: Optional[pd.DataFrame],
+    us_market: Optional[dict] = None,
+) -> None:
+    REPORT_MD.write_text(build_daily_report_markdown(df_rank, market_regime, bt_steady, bt_attack, us_market), encoding="utf-8")
+    REPORT_HTML.write_text(build_daily_report_html(df_rank, market_regime, bt_steady, bt_attack, us_market), encoding="utf-8")
 
 
 def build_portfolio_report_markdown(df_rank: pd.DataFrame, market_regime: dict, us_market: dict) -> str:
@@ -2624,7 +2838,7 @@ def build_portfolio_report_markdown(df_rank: pd.DataFrame, market_regime: dict, 
         lines.append(
             f"- {r['name']} ({r['ticker'].split('.')[0]}) | {r['holding_style']} | 現價 {round(float(current_close), 2)} | "
             f"成本 {round(float(r['avg_cost']), 2)} | 報酬 {r['unrealized_pnl_pct']}% | "
-            f"目標 {r['target_profit_pct']}% | 建議 {r['advice']}"
+            f"目標 {r['target_profit_pct']}% | 波動 {volatility_badge_text(r)} | 建議 {r['advice']}"
         )
     return "\n".join(lines)
 
@@ -2715,11 +2929,8 @@ def main() -> int:
             logger.exception("US market reference failed (best effort): %s", exc)
             us_market = {"summary": "美股參考暫時抓不到（best effort）。", "rows": []}
 
-        # Point 3: Scenario-aware thresholds
         initial_scenario = build_market_scenario(market_regime, us_market)
         adjusted_strat = adjust_strategy_by_scenario(CONFIG.strategy, initial_scenario)
-        logger.info("Market Scenario: %s, Stance: %s", initial_scenario["label"], initial_scenario["stance"])
-
         df_rank = run_watchlist(strat=adjusted_strat)
         bt_steady, bt_attack = run_backtest_dual()
 
@@ -2727,8 +2938,14 @@ def main() -> int:
         logger.info("Market regime: %s", market_regime["comment"])
 
         short_candidates, short_backups, midlong_candidates, _ = build_candidate_sets(df_rank)
-        upsert_alert_tracking(short_candidates, midlong_candidates, scenario=initial_scenario)
-        save_reports(df_rank, market_regime, bt_steady, bt_attack)
+        market_scenario = build_market_scenario(market_regime, us_market, df_rank)
+        upsert_alert_tracking(short_candidates, midlong_candidates, market_scenario)
+        save_reports(df_rank, market_regime, bt_steady, bt_attack, us_market)
+        logger.info(
+            "Adaptive strategy applied (%s): %s",
+            initial_scenario["label"],
+            " | ".join(line.removeprefix("- ") for line in strategy_preview_lines(CONFIG.strategy, initial_scenario)),
+        )
 
         current_state = build_state(df_rank, market_regime)
         last_state = load_last_state()
