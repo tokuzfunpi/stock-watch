@@ -112,7 +112,13 @@ def enrich_scenario_label_columns(
     if "scenario_label" not in out.columns:
         out["scenario_label"] = ""
     out["scenario_label"] = out["scenario_label"].astype(str).str.strip()
-    out.loc[(out["scenario_label"] == "") | (out["scenario_label"] == "b''") | (out["scenario_label"] == "nan"), "scenario_label"] = ""
+    out.loc[
+        (out["scenario_label"] == "")
+        | (out["scenario_label"] == "b''")
+        | (out["scenario_label"] == "nan")
+        | (out["scenario_label"] == "unknown"),
+        "scenario_label",
+    ] = ""
 
     merge_keys = ["signal_date", "watch_type", "ticker"]
     missing_mask = out["scenario_label"] == ""

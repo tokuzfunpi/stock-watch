@@ -9,12 +9,13 @@ from io import StringIO
 from pathlib import Path
 
 import pandas as pd
+import yfinance as yf
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from daily_theme_watchlist import LOCAL_TZ
+from daily_theme_watchlist import CONFIG, LOCAL_TZ, add_indicators, build_market_scenario
 from verification.verify_recommendations import (
     append_csv_with_existing_header,
     build_verification_report_markdown,
@@ -82,6 +83,134 @@ def read_file_at_commit(path: str, commit_sha: str) -> str:
     return proc.stdout
 
 
+def _download_history_until(signal_date: str, ticker: str, *, lookback_days: int = 400) -> pd.DataFrame:
+    target = pd.Timestamp(signal_date).tz_localize(None)
+    start = (target - pd.Timedelta(days=lookback_days)).date().isoformat()
+    end = (target + pd.Timedelta(days=2)).date().isoformat()
+    df = yf.download(
+        ticker,
+        start=start,
+        end=end,
+        interval="1d",
+        auto_adjust=True,
+        progress=False,
+        threads=False,
+    )
+    if df.empty:
+        raise ValueError(f"No history returned for {ticker} up to {signal_date}")
+    if isinstance(df.columns, pd.MultiIndex):
+        df.columns = df.columns.get_level_values(0)
+    df = df.rename(columns=str.title)
+    df = df[["Open", "High", "Low", "Close", "Volume"]].dropna().copy()
+    df.index = pd.to_datetime(df.index).tz_localize(None)
+    df = df.loc[df.index <= target].copy()
+    if df.empty:
+        raise ValueError(f"No rows available for {ticker} on or before {signal_date}")
+    return df
+
+
+def build_market_regime_from_history(df_hist: pd.DataFrame) -> dict:
+    if not CONFIG.market_filter.enabled:
+        return {"enabled": False, "is_bullish": True, "comment": "大盤濾網關掉"}
+
+    df = add_indicators(df_hist, CONFIG.market_filter.ma_period)
+    x = df.iloc[-1]
+    close_ = float(x["Close"])
+    ma = float(x[f"MA{CONFIG.market_filter.ma_period}"])
+    ret20 = float(x["Ret20D"]) if pd.notna(x["Ret20D"]) else 0.0
+    vol_ratio = float(x["VolumeRatio20"]) if pd.notna(x["VolumeRatio20"]) else 1.0
+
+    is_bullish = (
+        close_ >= ma
+        and ret20 >= CONFIG.market_filter.min_ret20
+        and vol_ratio >= CONFIG.market_filter.volume_ratio_min
+    )
+    return {
+        "enabled": True,
+        "ticker": CONFIG.market_filter.ticker,
+        "name": CONFIG.market_filter.name,
+        "close": round(close_, 2),
+        "ma": round(ma, 2),
+        "ret20_pct": round(ret20 * 100, 2),
+        "volume_ratio20": round(vol_ratio, 2),
+        "is_bullish": bool(is_bullish),
+        "comment": (
+            f"{CONFIG.market_filter.name}目前"
+            f"{'偏多' if is_bullish else '偏保守'}，"
+            f"收在 {round(close_,2)}，"
+            f"20日漲幅 {round(ret20*100,2)}%，"
+            f"量比 {round(vol_ratio,2)}。"
+        ),
+    }
+
+
+def build_us_market_reference_from_histories(histories: dict[str, pd.DataFrame]) -> dict:
+    refs = [
+        ("^GSPC", "S&P500"),
+        ("^IXIC", "NASDAQ"),
+        ("SOXX", "SOXX"),
+        ("NVDA", "NVDA"),
+    ]
+    rows = []
+    for ticker, name in refs:
+        df_hist = histories.get(ticker)
+        if df_hist is None or df_hist.empty:
+            continue
+        df = add_indicators(df_hist)
+        x = df.iloc[-1]
+        rows.append(
+            {
+                "ticker": ticker,
+                "name": name,
+                "ret1_pct": round(float(x["Ret1D"]) * 100, 2) if pd.notna(x["Ret1D"]) else 0.0,
+                "ret5_pct": round(float(x["Ret5D"]) * 100, 2) if pd.notna(x["Ret5D"]) else 0.0,
+                "close": round(float(x["Close"]), 2),
+            }
+        )
+
+    if not rows:
+        return {"summary": "美股參考暫時抓不到。", "rows": []}
+
+    df_ref = pd.DataFrame(rows)
+    avg_1d = round(float(df_ref["ret1_pct"].mean()), 2)
+    avg_5d = round(float(df_ref["ret5_pct"].mean()), 2)
+    if avg_1d >= 1:
+        tone = "美股昨晚偏強，台股開盤情緒通常較正面。"
+    elif avg_1d <= -1:
+        tone = "美股昨晚偏弱，台股早盤要提防開高走低或續殺。"
+    else:
+        tone = "美股昨晚中性，台股仍以個股表現為主。"
+
+    tech_bias = ""
+    soxx_1d = float(df_ref.loc[df_ref["name"] == "SOXX", "ret1_pct"].iloc[0])
+    nasdaq_1d = float(df_ref.loc[df_ref["name"] == "NASDAQ", "ret1_pct"].iloc[0])
+    if soxx_1d <= -1.5 or nasdaq_1d <= -1.2:
+        tech_bias = "美股科技偏弱，今天台股電子股先保守，不追開高。"
+    elif soxx_1d >= 1.5 and nasdaq_1d >= 1.0:
+        tech_bias = "美股科技偏強，台股電子股若量價配合可積極一點。"
+
+    summary = (
+        f"{tone} "
+        f"S&P500 {df_ref.loc[df_ref['name']=='S&P500', 'ret1_pct'].iloc[0]:+.2f}% / "
+        f"NASDAQ {df_ref.loc[df_ref['name']=='NASDAQ', 'ret1_pct'].iloc[0]:+.2f}% / "
+        f"SOXX {df_ref.loc[df_ref['name']=='SOXX', 'ret1_pct'].iloc[0]:+.2f}% / "
+        f"NVDA {df_ref.loc[df_ref['name']=='NVDA', 'ret1_pct'].iloc[0]:+.2f}% "
+        f"(5日均值 {avg_5d:+.2f}%)"
+    )
+    return {"summary": summary, "tech_bias": tech_bias, "rows": rows}
+
+
+def reconstruct_scenario_label(signal_date: str, df_rank: pd.DataFrame) -> str:
+    tw_hist = _download_history_until(signal_date, CONFIG.market_filter.ticker)
+    us_histories = {
+        ticker: _download_history_until(signal_date, ticker)
+        for ticker in ["^GSPC", "^IXIC", "SOXX", "NVDA"]
+    }
+    market_regime = build_market_regime_from_history(tw_hist)
+    us_market = build_us_market_reference_from_histories(us_histories)
+    return str(build_market_scenario(market_regime, us_market, df_rank).get("label", "") or "")
+
+
 def append_snapshot_rows(
     df_rank: pd.DataFrame,
     *,
@@ -90,6 +219,7 @@ def append_snapshot_rows(
     source: str,
     source_sha: str,
     snapshot_csv: Path,
+    scenario_label: str = "",
 ) -> int:
     short_forced = select_forced_recommendations(df_rank, watch_type="short", top_n=5).copy()
     midlong_forced = select_forced_recommendations(df_rank, watch_type="midlong", top_n=5).copy()
@@ -107,6 +237,8 @@ def append_snapshot_rows(
     combined["signal_date"] = signal_date
     combined["source"] = source
     combined["source_sha"] = source_sha
+    if scenario_label:
+        combined["scenario_label"] = scenario_label
 
     keep = [
         "generated_at",
@@ -150,6 +282,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Overwrite reco_snapshots.csv from scratch (makes a .bak copy if file exists).",
     )
+    parser.add_argument(
+        "--reconstruct-scenario-label",
+        action="store_true",
+        help="Rebuild historical scenario_label from market data and current scenario rules.",
+    )
     return parser.parse_args(argv)
 
 
@@ -189,6 +326,12 @@ def main(argv: list[str] | None = None) -> int:
             df_rank = pd.read_csv(StringIO(content))
             signal_date = _maybe_date_from_rank(df_rank) or item.signal_date
             source = f"git:{item.commit_sha}:{args.path}"
+            scenario_label = ""
+            if args.reconstruct_scenario_label:
+                try:
+                    scenario_label = reconstruct_scenario_label(signal_date, df_rank)
+                except Exception as exc:
+                    print(f"WARN {signal_date} scenario reconstruct failed: {exc}")
             report = build_verification_report_markdown(df_rank, source=source, now_local=now_local)
             report_path = out_dir / f"verification_report_{signal_date}.md"
             report_path.write_text(report, encoding="utf-8")
@@ -202,6 +345,7 @@ def main(argv: list[str] | None = None) -> int:
                     source=source,
                     source_sha=item.commit_sha,
                     snapshot_csv=snapshot_csv,
+                    scenario_label=scenario_label,
                 )
         except Exception as exc:
             print(f"SKIP {item.signal_date} {item.commit_sha[:8]}: {exc}")

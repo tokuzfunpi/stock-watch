@@ -72,3 +72,19 @@ class EvaluateRecommendationsTests(unittest.TestCase):
         self.assertEqual(out.loc[0, "scenario_label"], "高檔震盪盤")
         self.assertEqual(out.loc[1, "scenario_label"], "權值撐盤、個股轉弱")
         self.assertEqual(out.loc[2, "scenario_label"], "unknown")
+
+    def test_enrich_scenario_label_columns_treats_unknown_as_missing(self) -> None:
+        outcomes = pd.DataFrame(
+            [
+                {"signal_date": "2026-04-20", "watch_type": "short", "ticker": "3013.TW", "scenario_label": "unknown"},
+            ]
+        )
+        snapshots = pd.DataFrame(
+            [
+                {"signal_date": "2026-04-20", "watch_type": "short", "ticker": "3013.TW", "scenario_label": "強勢延伸盤"},
+            ]
+        )
+
+        out = enrich_scenario_label_columns(outcomes, snapshots=snapshots)
+
+        self.assertEqual(out.loc[0, "scenario_label"], "強勢延伸盤")
