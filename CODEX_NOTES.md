@@ -891,9 +891,58 @@ requirements.txt
 
 目前 `main` **還沒有**完全照 `testv` handoff 的更深版本做：
 
-- `pl_ratio` 直接進 `feedback_score` 公式
-- rolling window / recency weighting
 - feedback 直接主導 `daily_rank.csv` 主排序
+
+## 2026-04-22 補充：feedback score 已升級
+
+今天已完成 `testv/CODEX_HANDOFF.md` 提到的 Phase 2 前半段，且已推上 `main`：
+
+- `pl_ratio` 已正式納入 `feedback_score` 公式
+- `feedback_score` 已加入保守版 recency weighting
+  - `short` 取最近 `12` 筆已完成樣本
+  - `midlong` 取最近 `8` 筆已完成樣本
+  - 最終分數採：
+    - `70% base_feedback_score`
+    - `30% recent_feedback_score`
+
+### 目前 feedback 排序的實際狀態
+
+候選池微調目前順序為：
+
+1. `feedback_score`
+2. `feedback_pl_ratio`
+3. `_base_order`
+
+其中：
+
+- `feedback_score` 已包含：
+  - 勝率
+  - 平均報酬
+  - `pl_ratio`
+  - recent weighting
+- `feedback_pl_ratio` 仍保留為 tie-breaker
+
+### 這代表什麼
+
+- 系統現在不只看「哪種 action 歷史上勝率高」
+- 也會看：
+  - 哪種 action 比較像 **大賺小賠**
+  - 哪種 action **最近這段行情仍然有效**
+
+### 目前仍維持的邊界
+
+- 這些改動**只影響候選池微調**
+- 還**沒有**直接重寫 `daily_rank.csv` 主排序
+- 仍然符合：
+  - 小步整合
+  - 先驗證
+  - 不把 adaptive 權重一次放太大
+
+### 觀察到的初步效果
+
+- `short / 等拉回` 仍是最穩主策略，recent score 沒失真
+- `midlong / 續抱` 與 `midlong / 可分批` 近期有改善訊號
+- 代表 recency weighting 目前看起來是在「校正近況」，不是把排序帶歪
 
 ### 維護原則
 

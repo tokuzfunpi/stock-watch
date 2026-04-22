@@ -20,7 +20,9 @@
 - `pl_ratio` 進 `feedback_summary.csv`
 - `Heat Bias` 提示進 Telegram / CLI / verification
 - `adjust_strategy_by_scenario()` 已正式進 `run_watchlist()`
-- `feedback_score` + `pl_ratio` tie-breaker 已進候選池微調
+- `feedback_score` 已納入 `pl_ratio`
+- `feedback_score` 已加入保守版 recency weighting
+- `feedback_score` + `feedback_pl_ratio` 已進候選池微調
 
 ## 2) 目前正式上線、真的會改每日結果的部分
 
@@ -55,6 +57,10 @@
 
 - 這一層**只影響候選池微調**
 - **還不影響 `daily_rank.csv` 主排序**
+- `feedback_score` 現在已不是單純歷史平均，而是：
+  - base score（較長期）
+  - recent score（近況）
+  - 以保守比例混合
 
 ## 3) 目前仍屬觀察層 / 報表層的部分
 
@@ -62,11 +68,13 @@
 
 - 已寫進 `feedback_summary.csv`
 - 已顯示在 `Prediction Feedback`
-- 目前只作：
-  - 報表觀察
-  - 候選池 tie-breaker
+- 已直接進 `feedback_score` 公式
+- 仍保留在候選池內作 `feedback_pl_ratio` tie-breaker
 
-還**沒有**直接進 `feedback_score` 公式。
+目前還沒有進得更深的是：
+
+- `daily_rank.csv` 主排序
+- 更積極的 `feedback_score` 權重放大
 
 ### B. Heat Bias
 
@@ -143,8 +151,7 @@
 
 ### 若要再往前推，建議順序
 
-1. 把 `pl_ratio` 輕量納入 `feedback_score` 公式
-   - 目前只是 tie-breaker
+1. 觀察新的 `feedback_score`（含 `pl_ratio` + recency weighting）是否讓候選更合理
 2. 再評估要不要讓 feedback 進一步影響 `daily_rank` 主排序
 3. 最後才考慮讓 ATR 更深地進 `portfolio` 出場邏輯
 
