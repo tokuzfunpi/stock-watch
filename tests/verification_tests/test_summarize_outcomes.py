@@ -70,6 +70,37 @@ class SummarizeOutcomesTests(unittest.TestCase):
         self.assertIn("overall_by_market_heat", parts)
         self.assertFalse(parts["overall_by_market_heat"].empty)
 
+    def test_heat_bias_check_is_computed(self) -> None:
+        df = pd.DataFrame(
+            [
+                {
+                    "signal_date": "2026-04-17",
+                    "horizon_days": 1,
+                    "watch_type": "short",
+                    "reco_status": "ok",
+                    "market_heat": "hot",
+                    "action": "等拉回",
+                    "realized_ret_pct": 3.0,
+                    "status": "ok",
+                },
+                {
+                    "signal_date": "2026-04-16",
+                    "horizon_days": 1,
+                    "watch_type": "short",
+                    "reco_status": "ok",
+                    "market_heat": "normal",
+                    "action": "等拉回",
+                    "realized_ret_pct": 1.0,
+                    "status": "ok",
+                },
+            ]
+        )
+        parts = summarize_outcomes(df)
+        heat = parts["heat_bias_check"]
+        self.assertFalse(heat.empty)
+        self.assertIn("delta_avg_ret_hot_minus_normal", heat.columns)
+        self.assertEqual(float(heat.iloc[0]["delta_avg_ret_hot_minus_normal"]), 2.0)
+
     def test_build_summary_markdown_renders_sections(self) -> None:
         df = pd.DataFrame(
             [
@@ -82,7 +113,27 @@ class SummarizeOutcomesTests(unittest.TestCase):
                     "action": "續抱",
                     "realized_ret_pct": -2.0,
                     "status": "ok",
-                }
+                },
+                {
+                    "signal_date": "2026-04-16",
+                    "horizon_days": 1,
+                    "watch_type": "short",
+                    "reco_status": "ok",
+                    "market_heat": "hot",
+                    "action": "等拉回",
+                    "realized_ret_pct": 3.0,
+                    "status": "ok",
+                },
+                {
+                    "signal_date": "2026-04-15",
+                    "horizon_days": 1,
+                    "watch_type": "short",
+                    "reco_status": "ok",
+                    "market_heat": "normal",
+                    "action": "等拉回",
+                    "realized_ret_pct": 1.0,
+                    "status": "ok",
+                },
             ]
         )
         md = build_summary_markdown(df, source="verification/watchlist_daily/reco_outcomes.csv", now_local=datetime(2026, 4, 21, 8, 50, tzinfo=LOCAL_TZ))
@@ -91,6 +142,7 @@ class SummarizeOutcomesTests(unittest.TestCase):
         self.assertIn("## Notes", md)
         self.assertIn("market_heat", md)
         self.assertIn("## Overall By Market Heat", md)
+        self.assertIn("## Heat Bias Check (hot - normal)", md)
         self.assertIn("## Weekly Checkpoint", md)
         self.assertIn("## Overall By Action", md)
         self.assertIn("reco_status", md)

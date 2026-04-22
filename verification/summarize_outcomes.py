@@ -63,6 +63,7 @@ def summarize_outcomes(outcomes: pd.DataFrame) -> dict[str, pd.DataFrame]:
             "overall_by_market_heat": empty,
             "delta_ok_minus_below": empty,
             "delta_ok_minus_below_by_date": empty,
+            "heat_bias_check": empty,
         }
 
     df = outcomes.copy()
@@ -80,6 +81,7 @@ def summarize_outcomes(outcomes: pd.DataFrame) -> dict[str, pd.DataFrame]:
             "overall_by_market_heat": empty,
             "delta_ok_minus_below": empty,
             "delta_ok_minus_below_by_date": empty,
+            "heat_bias_check": empty,
         }
 
     if "watch_type" in df.columns:
@@ -97,6 +99,7 @@ def summarize_outcomes(outcomes: pd.DataFrame) -> dict[str, pd.DataFrame]:
                 "overall_by_market_heat": empty,
                 "delta_ok_minus_below": empty,
                 "delta_ok_minus_below_by_date": empty,
+                "heat_bias_check": empty,
             }
 
     # Split analysis: ok vs below_threshold (forced-fill).
@@ -230,6 +233,7 @@ def summarize_outcomes(outcomes: pd.DataFrame) -> dict[str, pd.DataFrame]:
 
     delta_ok_minus_below = pd.DataFrame()
     delta_ok_minus_below_by_date = pd.DataFrame()
+    heat_bias_check = pd.DataFrame()
     try:
         delta_base = overall_by_signal_status.copy()
         delta_base = delta_base[delta_base["reco_status"].isin(["ok", "below_threshold"])].copy()
@@ -298,6 +302,51 @@ def summarize_outcomes(outcomes: pd.DataFrame) -> dict[str, pd.DataFrame]:
         delta_ok_minus_below = pd.DataFrame()
         delta_ok_minus_below_by_date = pd.DataFrame()
 
+    try:
+        heat_base = overall_by_market_heat.copy()
+        heat_base = heat_base[heat_base["market_heat"].isin(["normal", "hot"])].copy()
+        if not heat_base.empty:
+            normal = heat_base[heat_base["market_heat"] == "normal"].copy()
+            hot = heat_base[heat_base["market_heat"] == "hot"].copy()
+            merged_heat = hot.merge(
+                normal,
+                on=["horizon_days", "watch_type"],
+                how="inner",
+                suffixes=("_hot", "_normal"),
+            )
+            if not merged_heat.empty:
+                min_n_heat = pd.concat(
+                    [
+                        pd.to_numeric(merged_heat["n_hot"], errors="coerce"),
+                        pd.to_numeric(merged_heat["n_normal"], errors="coerce"),
+                    ],
+                    axis=1,
+                ).min(axis=1)
+                heat_bias_check = pd.DataFrame(
+                    {
+                        "horizon_days": merged_heat["horizon_days"],
+                        "watch_type": merged_heat["watch_type"],
+                        "hot_n": merged_heat["n_hot"],
+                        "normal_n": merged_heat["n_normal"],
+                        "min_n": min_n_heat.astype("Int64"),
+                        "confidence": [_confidence_label(int(x)) if pd.notna(x) else "low" for x in min_n_heat.tolist()],
+                        "delta_win_rate_hot_minus_normal": (
+                            pd.to_numeric(merged_heat["win_rate_hot"], errors="coerce")
+                            - pd.to_numeric(merged_heat["win_rate_normal"], errors="coerce")
+                        ).round(1),
+                        "delta_avg_ret_hot_minus_normal": (
+                            pd.to_numeric(merged_heat["avg_ret_hot"], errors="coerce")
+                            - pd.to_numeric(merged_heat["avg_ret_normal"], errors="coerce")
+                        ).round(2),
+                        "delta_med_ret_hot_minus_normal": (
+                            pd.to_numeric(merged_heat["med_ret_hot"], errors="coerce")
+                            - pd.to_numeric(merged_heat["med_ret_normal"], errors="coerce")
+                        ).round(2),
+                    }
+                ).sort_values(by=["horizon_days", "watch_type"])
+    except Exception:
+        heat_bias_check = pd.DataFrame()
+
     return {
         "by_action": by_action,
         "by_signal": by_signal,
@@ -308,6 +357,7 @@ def summarize_outcomes(outcomes: pd.DataFrame) -> dict[str, pd.DataFrame]:
         "overall_by_market_heat": overall_by_market_heat,
         "delta_ok_minus_below": delta_ok_minus_below,
         "delta_ok_minus_below_by_date": delta_ok_minus_below_by_date,
+        "heat_bias_check": heat_bias_check,
     }
 
 
@@ -371,6 +421,8 @@ def build_summary_markdown(outcomes: pd.DataFrame, source: str, now_local: datet
     lines.extend(["## Overall By Signal (all dates)", _table_markdown(parts["overall_by_signal"]).rstrip(), ""])
     if not parts["overall_by_market_heat"].empty:
         lines.extend(["## Overall By Market Heat (all dates)", _table_markdown(parts["overall_by_market_heat"]).rstrip(), ""])
+    if not parts["heat_bias_check"].empty:
+        lines.extend(["## Heat Bias Check (hot - normal)", _table_markdown(parts["heat_bias_check"]).rstrip(), ""])
     if not parts["overall_by_signal_status"].empty:
         lines.extend(["## Overall By Signal + reco_status (all dates)", _table_markdown(parts["overall_by_signal_status"]).rstrip(), ""])
     if not parts["delta_ok_minus_below"].empty:
