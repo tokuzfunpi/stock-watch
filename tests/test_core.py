@@ -910,6 +910,9 @@ class PushMessageTests(unittest.TestCase):
         message = build_macro_message(market_regime, us_market, df_rank)
 
         self.assertIn("大盤 / 美股摘要", message)
+        self.assertIn("今日盤勢", message)
+        self.assertIn("今日策略", message)
+        self.assertIn("白話說", message)
         self.assertIn("加權指數目前偏多", message)
         self.assertIn("美股昨晚偏強", message)
         self.assertIn("盤勢情境", message)
@@ -918,6 +921,16 @@ class PushMessageTests(unittest.TestCase):
         self.assertIn("Heat Bias", message)
         self.assertIn("觸發來源", message)
         self.assertIn("台灣時間", message)
+
+    def test_macro_message_uses_correction_copy_for_subscribers(self) -> None:
+        market_regime = {"comment": "加權指數轉弱", "ret20_pct": 2.0, "volume_ratio20": 0.9, "is_bullish": False}
+        us_market = {"summary": "美股昨晚偏弱，台股早盤要提防開高走低或續殺。"}
+
+        message = build_macro_message(market_regime, us_market, pd.DataFrame())
+
+        self.assertIn("今日盤勢：明顯修正盤", message)
+        self.assertIn("今日策略：先防守，短線名單縮小。", message)
+        self.assertIn("白話說：今天先保留資金、少做少追高", message)
 
     def test_short_and_midlong_messages_render_independently(self) -> None:
         df = pd.DataFrame(

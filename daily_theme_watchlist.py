@@ -1299,6 +1299,37 @@ def build_market_scenario(market_regime: dict, us_market: dict, df_rank: Optiona
     }
 
 
+def subscriber_scenario_lines(scenario: dict) -> list[str]:
+    label = str(scenario.get("label", "") or "")
+
+    if label == "明顯修正盤":
+        return [
+            "今日盤勢：明顯修正盤",
+            "今日策略：先防守，短線名單縮小。",
+            "白話說：今天先保留資金、少做少追高，等盤勢穩定再提高出手頻率。",
+        ]
+
+    if label == "高檔震盪盤":
+        return [
+            "今日盤勢：高檔震盪盤",
+            "今日策略：可以挑股，但節奏放慢。",
+            "白話說：盤面還不差，但追價容錯率下降，優先等拉回、強中選強。",
+        ]
+
+    if label == "權值撐盤、個股轉弱":
+        return [
+            "今日盤勢：權值撐盤、個股轉弱",
+            "今日策略：指數可看，選股更要保守。",
+            "白話說：不是整個市場都好做，先看真正有量有延續性的個股，不要被指數撐住騙進去。",
+        ]
+
+    return [
+        "今日盤勢：強勢延伸盤",
+        "今日策略：正常推送，可做但不追高。",
+        "白話說：市場資金偏正向，名單可正常參考，但仍以拉回分批進場為主。",
+    ]
+
+
 def adjust_strategy_by_scenario(base_strat: StrategyConfig, scenario: dict) -> StrategyConfig:
     strat = replace(base_strat)
     label = str(scenario.get("label", "") or "")
@@ -1978,6 +2009,7 @@ def build_macro_message(market_regime: dict, us_market: dict, df_rank: Optional[
     scenario = build_market_scenario(market_regime, us_market, df_rank)
     lines = [
         "📣 大盤 / 美股摘要",
+        *subscriber_scenario_lines(scenario),
         market_regime["comment"],
         us_market["summary"],
         f"盤勢情境：{scenario['label']} | 目前節奏：{scenario['stance']}",
