@@ -2601,7 +2601,7 @@ def build_daily_report_markdown(
                 f"{r['avg_return_pct']}% | {r['pl_ratio']} | {r['feedback_score']} | {r['feedback_label']} |"
             )
 
-    lines.extend(["", "## Adaptive Strategy Preview (report only)", ""])
+    lines.extend(["", "## Adaptive Strategy Adjustments", ""])
     lines.append(f"- 情境：{scenario['label']} | 目前節奏：{scenario['stance']}")
     lines.extend(strategy_preview_lines(CONFIG.strategy, scenario))
 
@@ -2709,7 +2709,7 @@ th {{ background: #f4f4f4; }}
 <h2>ETF / 債券觀察</h2>{special_etf_html}
 <h2>Early Gem Watch</h2>{gem_html}
 <h2>Prediction Feedback</h2>{feedback_html}
-<h2>Adaptive Strategy Preview (report only)</h2><p>{adaptive_preview_html}</p>
+<h2>Adaptive Strategy Adjustments</h2><p>{adaptive_preview_html}</p>
 <h2>Steady Backtest</h2>{steady_html}
 <h2>Attack Backtest</h2>{attack_html}
 </body></html>"""
@@ -2851,7 +2851,9 @@ def main() -> int:
             logger.exception("US market reference failed (best effort): %s", exc)
             us_market = {"summary": "美股參考暫時抓不到（best effort）。", "rows": []}
 
-        df_rank = run_watchlist()
+        initial_scenario = build_market_scenario(market_regime, us_market)
+        adjusted_strat = adjust_strategy_by_scenario(CONFIG.strategy, initial_scenario)
+        df_rank = run_watchlist(strat=adjusted_strat)
         bt_steady, bt_attack = run_backtest_dual()
 
         logger.info("=== 今日排行榜 ===\n%s", df_rank.to_string(index=False))
@@ -2862,9 +2864,9 @@ def main() -> int:
         upsert_alert_tracking(short_candidates, midlong_candidates, market_scenario)
         save_reports(df_rank, market_regime, bt_steady, bt_attack, us_market)
         logger.info(
-            "Adaptive preview (%s): %s",
-            market_scenario["label"],
-            " | ".join(line.removeprefix("- ") for line in strategy_preview_lines(CONFIG.strategy, market_scenario)),
+            "Adaptive strategy applied (%s): %s",
+            initial_scenario["label"],
+            " | ".join(line.removeprefix("- ") for line in strategy_preview_lines(CONFIG.strategy, initial_scenario)),
         )
 
         current_state = build_state(df_rank, market_regime)
