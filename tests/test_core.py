@@ -217,6 +217,26 @@ class FeedbackTests(unittest.TestCase):
             saved = pd.read_csv(alert_csv)
             self.assertEqual(saved.iloc[0]["scenario_label"], "高檔震盪盤")
 
+    def test_feedback_adjustment_uses_pl_ratio_as_tiebreaker(self) -> None:
+        candidates = pd.DataFrame(
+            [
+                {"ticker": "PULL.TW", "risk_score": 2, "ret5_pct": 10.0, "volume_ratio20": 1.1, "signals": "", "setup_change": 0, "rank_change": 0},
+                {"ticker": "CHASE.TW", "risk_score": 2, "ret5_pct": 6.0, "volume_ratio20": 1.4, "signals": "ACCEL", "setup_change": 0, "rank_change": 0},
+            ]
+        )
+        summary = pd.DataFrame(
+            [
+                {"watch_type": "short", "action_label": "等拉回", "feedback_score": 1.0, "feedback_label": "近期有效", "pl_ratio": 1.2},
+                {"watch_type": "short", "action_label": "續追蹤", "feedback_score": 1.0, "feedback_label": "近期有效", "pl_ratio": 2.8},
+            ]
+        )
+
+        with patch("daily_theme_watchlist.build_feedback_summary", return_value=summary):
+            adjusted = apply_feedback_adjustment(candidates, "short")
+
+        self.assertEqual(adjusted.iloc[0]["ticker"], "CHASE.TW")
+        self.assertIn("feedback_pl_ratio", adjusted.columns)
+
 
 class PortfolioTests(unittest.TestCase):
     def test_normalize_ticker_symbol_supports_plain_codes(self) -> None:

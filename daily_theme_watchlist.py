@@ -2228,24 +2228,24 @@ def build_feedback_summary() -> pd.DataFrame:
     return summary
 
 
-def feedback_score_lookup(summary: pd.DataFrame, watch_type: str, action_label: str) -> tuple[float, str]:
+def feedback_score_lookup(summary: pd.DataFrame, watch_type: str, action_label: str) -> tuple[float, str, float]:
     if summary is None or summary.empty:
-        return 0.0, "樣本不足"
+        return 0.0, "樣本不足", 0.0
     exact = summary[
         (summary["watch_type"].astype(str) == watch_type)
         & (summary["action_label"].astype(str) == action_label)
     ]
     if not exact.empty:
         row = exact.iloc[0]
-        return float(row["feedback_score"]), str(row["feedback_label"])
+        return float(row["feedback_score"]), str(row["feedback_label"]), float(row.get("pl_ratio", 0.0) or 0.0)
     fallback = summary[
         (summary["watch_type"].astype(str) == watch_type)
         & (summary["action_label"].astype(str) == "__all__")
     ]
     if not fallback.empty:
         row = fallback.iloc[0]
-        return float(row["feedback_score"]), str(row["feedback_label"])
-    return 0.0, "樣本不足"
+        return float(row["feedback_score"]), str(row["feedback_label"]), float(row.get("pl_ratio", 0.0) or 0.0)
+    return 0.0, "樣本不足", 0.0
 
 
 def apply_feedback_adjustment(df: pd.DataFrame, watch_type: str) -> pd.DataFrame:
@@ -2256,11 +2256,12 @@ def apply_feedback_adjustment(df: pd.DataFrame, watch_type: str) -> pd.DataFrame
     out["_base_order"] = range(len(out))
     out["action_label"] = out.apply(lambda row: feedback_action_label(row, watch_type), axis=1)
     lookups = out["action_label"].apply(lambda action: feedback_score_lookup(summary, watch_type, action))
-    out["feedback_score"] = [score for score, _ in lookups]
-    out["feedback_label"] = [label for _, label in lookups]
+    out["feedback_score"] = [score for score, _, _ in lookups]
+    out["feedback_label"] = [label for _, label, _ in lookups]
+    out["feedback_pl_ratio"] = [pl_ratio for _, _, pl_ratio in lookups]
     out = out.sort_values(
-        by=["feedback_score", "_base_order"],
-        ascending=[False, True],
+        by=["feedback_score", "feedback_pl_ratio", "_base_order"],
+        ascending=[False, False, True],
         kind="mergesort",
     ).reset_index(drop=True)
     return out.drop(columns=["_base_order"])
