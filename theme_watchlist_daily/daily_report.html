@@ -7,7 +7,7 @@ th, td { border: 1px solid #ddd; padding: 8px; font-size: 14px; }
 th { background: #f4f4f4; }
 </style></head><body>
 <h1>Daily 20D v2.2 Attack Report</h1>
-<p><strong>Market:</strong> 加權指數目前偏多，收在 36958.8，20日漲幅 9.7%，量比 1.1。</p>
+<p><strong>Market:</strong> 加權指數目前偏保守，收在 38085.26，20日漲幅 16.39%，量比 0.0。</p>
 <h2>Top Ranking</h2><table class="dataframe">
   <thead>
     <tr style="text-align: center;">
@@ -37,6 +37,8 @@ th { background: #f4f4f4; }
       <th>regime</th>
       <th>spec_risk_score</th>
       <th>spec_risk_label</th>
+      <th>atr_pct</th>
+      <th>volatility_tag</th>
       <th>grade</th>
       <th>rank_change</th>
       <th>setup_change</th>
@@ -47,519 +49,654 @@ th { background: #f4f4f4; }
   <tbody>
     <tr>
       <td>1</td>
-      <td>2026-04-21</td>
-      <td>4919.TW</td>
-      <td>新唐</td>
-      <td>theme</td>
-      <td>short_attack</td>
-      <td>144.50</td>
-      <td>2.12</td>
-      <td>30.77</td>
-      <td>64.58</td>
-      <td>32.57</td>
-      <td>78959876</td>
-      <td>22633668</td>
-      <td>3.49</td>
-      <td>104.02</td>
-      <td>81.45</td>
-      <td>68.00</td>
-      <td>0.00</td>
-      <td>38.92</td>
-      <td>15</td>
-      <td>9</td>
-      <td>SURGE,TREND,ACCEL</td>
-      <td>高風險追價區</td>
-      <td>有點過熱，別硬追</td>
-      <td>9</td>
-      <td>疑似炒作風險高</td>
-      <td>C</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>FLAT</td>
-    </tr>
-    <tr>
-      <td>2</td>
-      <td>2026-04-21</td>
-      <td>8111.TWO</td>
-      <td>立碁</td>
-      <td>theme</td>
-      <td>short_attack</td>
-      <td>80.90</td>
-      <td>4.25</td>
-      <td>17.76</td>
-      <td>33.50</td>
-      <td>24.27</td>
-      <td>10351998</td>
-      <td>5381846</td>
-      <td>1.92</td>
-      <td>65.66</td>
-      <td>66.29</td>
-      <td>66.30</td>
-      <td>0.00</td>
-      <td>23.21</td>
-      <td>14</td>
-      <td>4</td>
-      <td>SURGE,ACCEL</td>
-      <td>進攻優勢區</td>
-      <td>題材正在發酵</td>
-      <td>6</td>
-      <td>疑似炒作風險高</td>
-      <td>A</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>FLAT</td>
-    </tr>
-    <tr>
-      <td>3</td>
-      <td>2026-04-21</td>
-      <td>2388.TW</td>
-      <td>威盛</td>
-      <td>theme</td>
-      <td>short_attack</td>
-      <td>72.80</td>
-      <td>9.97</td>
-      <td>28.17</td>
-      <td>46.48</td>
-      <td>31.65</td>
-      <td>15148031</td>
-      <td>10530255</td>
-      <td>1.44</td>
-      <td>56.40</td>
-      <td>52.73</td>
-      <td>52.98</td>
-      <td>0.00</td>
-      <td>29.08</td>
-      <td>12</td>
-      <td>7</td>
-      <td>TREND,ACCEL</td>
-      <td>高風險追價區</td>
-      <td>有點過熱，別硬追</td>
-      <td>7</td>
-      <td>疑似炒作風險高</td>
-      <td>C</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>FLAT</td>
-    </tr>
-    <tr>
-      <td>4</td>
-      <td>2026-04-21</td>
-      <td>2399.TW</td>
-      <td>映泰</td>
-      <td>theme</td>
-      <td>short_attack</td>
-      <td>41.95</td>
-      <td>9.96</td>
-      <td>24.48</td>
-      <td>21.59</td>
-      <td>12.77</td>
-      <td>16827261</td>
-      <td>13413443</td>
-      <td>1.25</td>
-      <td>33.97</td>
-      <td>28.14</td>
-      <td>25.98</td>
-      <td>0.00</td>
-      <td>23.48</td>
-      <td>12</td>
-      <td>5</td>
-      <td>TREND,ACCEL</td>
-      <td>進攻優勢區</td>
-      <td>轉強速度有出來</td>
-      <td>4</td>
-      <td>投機偏高</td>
-      <td>X</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>FLAT</td>
-    </tr>
-    <tr>
-      <td>5</td>
-      <td>2026-04-21</td>
-      <td>3450.TW</td>
-      <td>聯鈞</td>
-      <td>theme</td>
-      <td>short_attack</td>
-      <td>380.00</td>
-      <td>-0.78</td>
-      <td>20.83</td>
-      <td>47.29</td>
-      <td>33.10</td>
-      <td>25040382</td>
-      <td>18743957</td>
-      <td>1.34</td>
-      <td>295.00</td>
-      <td>276.37</td>
-      <td>266.41</td>
-      <td>-0.78</td>
-      <td>28.81</td>
-      <td>12</td>
-      <td>7</td>
-      <td>TREND,ACCEL</td>
-      <td>高風險追價區</td>
-      <td>有點過熱，別硬追</td>
-      <td>6</td>
-      <td>疑似炒作風險高</td>
-      <td>C</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>FLAT</td>
-    </tr>
-    <tr>
-      <td>6</td>
-      <td>2026-04-21</td>
-      <td>6669.TW</td>
-      <td>緯穎</td>
-      <td>theme</td>
-      <td>short_attack</td>
-      <td>4220.00</td>
-      <td>6.03</td>
-      <td>12.38</td>
-      <td>24.30</td>
-      <td>10.91</td>
-      <td>3407767</td>
-      <td>1652089</td>
-      <td>2.06</td>
-      <td>3624.50</td>
-      <td>3774.83</td>
-      <td>4044.67</td>
-      <td>-10.59</td>
-      <td>16.43</td>
-      <td>12</td>
-      <td>3</td>
-      <td>ACCEL</td>
-      <td>進攻優勢區</td>
-      <td>轉強速度有出來</td>
-      <td>3</td>
-      <td>投機偏高</td>
-      <td>A</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>FLAT</td>
-    </tr>
-    <tr>
-      <td>7</td>
-      <td>2026-04-21</td>
+      <td>2026-04-22</td>
       <td>2465.TW</td>
       <td>麗臺</td>
       <td>theme</td>
       <td>short_attack</td>
-      <td>67.60</td>
-      <td>1.81</td>
-      <td>11.55</td>
-      <td>24.49</td>
-      <td>7.64</td>
-      <td>8459464</td>
-      <td>1285576</td>
-      <td>6.58</td>
-      <td>57.64</td>
-      <td>55.90</td>
-      <td>58.17</td>
-      <td>-7.16</td>
-      <td>17.29</td>
-      <td>12</td>
-      <td>4</td>
-      <td>ACCEL</td>
+      <td>71.30</td>
+      <td>5.47</td>
+      <td>20.03</td>
+      <td>19.43</td>
+      <td>25.97</td>
+      <td>2192504</td>
+      <td>1368876</td>
+      <td>1.60</td>
+      <td>58.37</td>
+      <td>56.12</td>
+      <td>58.16</td>
+      <td>-0.56</td>
+      <td>22.15</td>
+      <td>15</td>
+      <td>5</td>
+      <td>SURGE,TREND,ACCEL</td>
       <td>進攻優勢區</td>
-      <td>轉強速度有出來</td>
+      <td>題材正在發酵</td>
       <td>4</td>
       <td>投機偏高</td>
-      <td>A</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>FLAT</td>
-    </tr>
-    <tr>
-      <td>8</td>
-      <td>2026-04-21</td>
-      <td>3017.TW</td>
-      <td>奇鋐</td>
-      <td>theme</td>
-      <td>short_attack</td>
-      <td>2565.00</td>
-      <td>3.01</td>
-      <td>11.04</td>
-      <td>26.35</td>
-      <td>25.12</td>
-      <td>3940435</td>
-      <td>4275055</td>
-      <td>0.92</td>
-      <td>2215.25</td>
-      <td>1820.08</td>
-      <td>1602.58</td>
-      <td>0.00</td>
-      <td>15.79</td>
-      <td>12</td>
-      <td>3</td>
-      <td>TREND</td>
-      <td>進攻優勢區</td>
-      <td>中段延續中</td>
-      <td>1</td>
-      <td>正常</td>
-      <td>B</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>FLAT</td>
-    </tr>
-    <tr>
-      <td>9</td>
-      <td>2026-04-21</td>
-      <td>2495.TW</td>
-      <td>普安</td>
-      <td>theme</td>
-      <td>short_attack</td>
-      <td>44.45</td>
-      <td>4.71</td>
-      <td>8.15</td>
-      <td>38.47</td>
-      <td>13.10</td>
-      <td>16348268</td>
-      <td>11796964</td>
-      <td>1.39</td>
-      <td>37.52</td>
-      <td>34.28</td>
-      <td>30.92</td>
-      <td>-1.66</td>
-      <td>18.46</td>
-      <td>12</td>
-      <td>3</td>
-      <td>TREND,ACCEL</td>
-      <td>進攻優勢區</td>
-      <td>轉強速度有出來</td>
-      <td>1</td>
-      <td>正常</td>
-      <td>A</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>FLAT</td>
-    </tr>
-    <tr>
-      <td>10</td>
-      <td>2026-04-21</td>
-      <td>2356.TW</td>
-      <td>英業達</td>
-      <td>theme</td>
-      <td>short_attack</td>
-      <td>47.35</td>
-      <td>1.61</td>
-      <td>6.17</td>
-      <td>15.91</td>
-      <td>10.63</td>
-      <td>29328827</td>
-      <td>18654963</td>
-      <td>1.57</td>
-      <td>43.32</td>
-      <td>43.99</td>
-      <td>43.86</td>
-      <td>-7.52</td>
-      <td>9.30</td>
-      <td>12</td>
-      <td>1</td>
-      <td>ACCEL</td>
-      <td>進攻優勢區</td>
-      <td>轉強速度有出來</td>
-      <td>0</td>
-      <td>正常</td>
-      <td>A</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>FLAT</td>
-    </tr>
-    <tr>
-      <td>11</td>
-      <td>2026-04-21</td>
-      <td>3035.TW</td>
-      <td>智原</td>
-      <td>satellite</td>
-      <td>midlong_core</td>
-      <td>180.00</td>
-      <td>3.15</td>
-      <td>17.65</td>
-      <td>28.57</td>
-      <td>14.29</td>
-      <td>22148041</td>
-      <td>3892723</td>
-      <td>5.69</td>
-      <td>151.82</td>
-      <td>159.76</td>
-      <td>164.93</td>
-      <td>-2.44</td>
-      <td>18.56</td>
-      <td>11</td>
-      <td>5</td>
-      <td>ACCEL</td>
-      <td>進攻優勢區</td>
-      <td>轉強速度有出來</td>
-      <td>8</td>
-      <td>疑似炒作風險高</td>
+      <td>5.42</td>
+      <td>活潑</td>
       <td>X</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>FLAT</td>
-    </tr>
-    <tr>
-      <td>12</td>
-      <td>2026-04-21</td>
-      <td>2303.TW</td>
-      <td>聯電</td>
-      <td>core</td>
-      <td>midlong_core</td>
-      <td>76.20</td>
-      <td>-0.91</td>
-      <td>27.64</td>
-      <td>30.70</td>
-      <td>31.83</td>
-      <td>315361026</td>
-      <td>144175111</td>
-      <td>2.19</td>
-      <td>61.48</td>
-      <td>62.49</td>
-      <td>55.13</td>
-      <td>-0.91</td>
-      <td>23.93</td>
-      <td>10</td>
-      <td>8</td>
-      <td>SURGE,ACCEL</td>
-      <td>高風險追價區</td>
-      <td>有點過熱，別硬追</td>
-      <td>9</td>
-      <td>疑似炒作風險高</td>
-      <td>C</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>FLAT</td>
-    </tr>
-    <tr>
-      <td>13</td>
-      <td>2026-04-21</td>
-      <td>3661.TW</td>
-      <td>世芯-KY</td>
-      <td>satellite</td>
-      <td>midlong_core</td>
-      <td>3985.00</td>
-      <td>9.93</td>
-      <td>24.53</td>
-      <td>47.32</td>
-      <td>18.07</td>
-      <td>4105595</td>
-      <td>2236462</td>
-      <td>1.84</td>
-      <td>3090.50</td>
-      <td>3232.50</td>
-      <td>3284.38</td>
-      <td>0.00</td>
-      <td>28.94</td>
-      <td>10</td>
       <td>6</td>
-      <td>ACCEL</td>
-      <td>高風險追價區</td>
-      <td>有點過熱，別硬追</td>
-      <td>7</td>
-      <td>疑似炒作風險高</td>
-      <td>C</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>FLAT</td>
+      <td>3</td>
+      <td>1</td>
+      <td>UP</td>
     </tr>
     <tr>
-      <td>14</td>
-      <td>2026-04-21</td>
-      <td>2454.TW</td>
-      <td>聯發科</td>
-      <td>core</td>
-      <td>midlong_core</td>
-      <td>2090.00</td>
+      <td>2</td>
+      <td>2026-04-22</td>
+      <td>3013.TW</td>
+      <td>晟銘電</td>
+      <td>theme</td>
+      <td>short_attack</td>
+      <td>121.00</td>
       <td>10.00</td>
-      <td>21.51</td>
-      <td>42.18</td>
-      <td>22.94</td>
-      <td>17347421</td>
-      <td>10176303</td>
-      <td>1.70</td>
-      <td>1655.50</td>
-      <td>1698.83</td>
-      <td>1513.50</td>
-      <td>0.00</td>
-      <td>26.25</td>
-      <td>10</td>
-      <td>5</td>
+      <td>16.35</td>
+      <td>19.80</td>
+      <td>22.84</td>
+      <td>11989293</td>
+      <td>3982224</td>
+      <td>3.01</td>
+      <td>103.53</td>
+      <td>106.65</td>
+      <td>117.59</td>
+      <td>-13.57</td>
+      <td>16.88</td>
+      <td>14</td>
+      <td>4</td>
       <td>SURGE,ACCEL</td>
       <td>進攻優勢區</td>
       <td>題材正在發酵</td>
+      <td>7</td>
+      <td>疑似炒作風險高</td>
+      <td>3.96</td>
+      <td>標準</td>
+      <td>A</td>
+      <td>16</td>
       <td>5</td>
-      <td>投機偏高</td>
-      <td>X</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>FLAT</td>
+      <td>4</td>
+      <td>UP</td>
     </tr>
     <tr>
-      <td>15</td>
-      <td>2026-04-21</td>
+      <td>3</td>
+      <td>2026-04-22</td>
+      <td>2399.TW</td>
+      <td>映泰</td>
+      <td>theme</td>
+      <td>short_attack</td>
+      <td>41.20</td>
+      <td>-1.79</td>
+      <td>11.20</td>
+      <td>8.56</td>
+      <td>20.12</td>
+      <td>27932421</td>
+      <td>14355655</td>
+      <td>1.95</td>
+      <td>34.32</td>
+      <td>28.39</td>
+      <td>26.15</td>
+      <td>-1.79</td>
+      <td>20.06</td>
+      <td>14</td>
+      <td>4</td>
+      <td>TREND,ACCEL</td>
+      <td>進攻優勢區</td>
+      <td>轉強速度有出來</td>
+      <td>2</td>
+      <td>正常</td>
+      <td>7.26</td>
+      <td>劇烈</td>
+      <td>A</td>
+      <td>1</td>
+      <td>2</td>
+      <td>-1</td>
+      <td>UP</td>
+    </tr>
+    <tr>
+      <td>4</td>
+      <td>2026-04-22</td>
       <td>3324.TWO</td>
       <td>雙鴻</td>
       <td>theme</td>
       <td>short_attack</td>
-      <td>1050.00</td>
-      <td>0.96</td>
-      <td>8.81</td>
-      <td>14.38</td>
-      <td>-1.41</td>
-      <td>4318891</td>
-      <td>4659859</td>
-      <td>0.93</td>
-      <td>981.85</td>
-      <td>996.52</td>
-      <td>981.86</td>
-      <td>-9.09</td>
-      <td>6.94</td>
-      <td>10</td>
+      <td>1155.00</td>
+      <td>10.00</td>
+      <td>18.83</td>
+      <td>14.93</td>
+      <td>14.93</td>
+      <td>8216395</td>
+      <td>4890759</td>
+      <td>1.68</td>
+      <td>989.35</td>
+      <td>999.23</td>
+      <td>983.42</td>
+      <td>0.00</td>
+      <td>16.74</td>
+      <td>13</td>
+      <td>5</td>
+      <td>ACCEL</td>
+      <td>進攻優勢區</td>
+      <td>轉強速度有出來</td>
+      <td>6</td>
+      <td>疑似炒作風險高</td>
+      <td>4.62</td>
+      <td>活潑</td>
+      <td>X</td>
+      <td>11</td>
+      <td>3</td>
+      <td>5</td>
+      <td>UP</td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td>2026-04-22</td>
+      <td>4919.TW</td>
+      <td>新唐</td>
+      <td>theme</td>
+      <td>short_attack</td>
+      <td>158.00</td>
+      <td>9.34</td>
+      <td>47.66</td>
+      <td>72.87</td>
+      <td>54.90</td>
+      <td>9669939</td>
+      <td>21514569</td>
+      <td>0.45</td>
+      <td>106.82</td>
+      <td>83.13</td>
+      <td>68.80</td>
+      <td>0.00</td>
+      <td>47.91</td>
+      <td>12</td>
+      <td>9</td>
+      <td>TREND</td>
+      <td>高風險追價區</td>
+      <td>有點過熱，別硬追</td>
+      <td>7</td>
+      <td>疑似炒作風險高</td>
+      <td>6.12</td>
+      <td>活潑</td>
+      <td>C</td>
+      <td>-4</td>
+      <td>-3</td>
       <td>0</td>
+      <td>DOWN</td>
+    </tr>
+    <tr>
+      <td>6</td>
+      <td>2026-04-22</td>
+      <td>2388.TW</td>
+      <td>威盛</td>
+      <td>theme</td>
+      <td>short_attack</td>
+      <td>80.00</td>
+      <td>9.89</td>
+      <td>28.21</td>
+      <td>46.52</td>
+      <td>42.60</td>
+      <td>8963552</td>
+      <td>9501421</td>
+      <td>0.94</td>
+      <td>57.60</td>
+      <td>53.19</td>
+      <td>53.19</td>
+      <td>0.00</td>
+      <td>38.90</td>
+      <td>12</td>
+      <td>7</td>
+      <td>TREND</td>
+      <td>高風險追價區</td>
+      <td>有點過熱，別硬追</td>
+      <td>7</td>
+      <td>疑似炒作風險高</td>
+      <td>4.88</td>
+      <td>活潑</td>
+      <td>C</td>
+      <td>-3</td>
+      <td>0</td>
+      <td>0</td>
+      <td>DOWN</td>
+    </tr>
+    <tr>
+      <td>7</td>
+      <td>2026-04-22</td>
+      <td>3035.TW</td>
+      <td>智原</td>
+      <td>satellite</td>
+      <td>midlong_core</td>
+      <td>185.50</td>
+      <td>3.06</td>
+      <td>24.08</td>
+      <td>23.26</td>
+      <td>22.85</td>
+      <td>10334569</td>
+      <td>4334574</td>
+      <td>2.38</td>
+      <td>153.55</td>
+      <td>160.02</td>
+      <td>165.12</td>
+      <td>0.00</td>
+      <td>20.81</td>
+      <td>12</td>
+      <td>6</td>
+      <td>SURGE,ACCEL</td>
+      <td>高風險追價區</td>
+      <td>有點過熱，別硬追</td>
+      <td>7</td>
+      <td>疑似炒作風險高</td>
+      <td>3.66</td>
+      <td>標準</td>
+      <td>C</td>
+      <td>4</td>
+      <td>1</td>
+      <td>1</td>
+      <td>UP</td>
+    </tr>
+    <tr>
+      <td>8</td>
+      <td>2026-04-22</td>
+      <td>3017.TW</td>
+      <td>奇鋐</td>
+      <td>theme</td>
+      <td>short_attack</td>
+      <td>2765.00</td>
+      <td>7.80</td>
+      <td>18.92</td>
+      <td>23.99</td>
+      <td>38.60</td>
+      <td>2976076</td>
+      <td>4183627</td>
+      <td>0.71</td>
+      <td>2253.75</td>
+      <td>1842.50</td>
+      <td>1616.04</td>
+      <td>0.00</td>
+      <td>22.68</td>
+      <td>12</td>
+      <td>7</td>
+      <td>TREND</td>
+      <td>高風險追價區</td>
+      <td>有點過熱，別硬追</td>
+      <td>6</td>
+      <td>疑似炒作風險高</td>
+      <td>4.82</td>
+      <td>活潑</td>
+      <td>C</td>
+      <td>0</td>
+      <td>0</td>
+      <td>4</td>
+      <td>FLAT</td>
+    </tr>
+    <tr>
+      <td>9</td>
+      <td>2026-04-22</td>
+      <td>2382.TW</td>
+      <td>廣達</td>
+      <td>theme</td>
+      <td>short_attack</td>
+      <td>339.50</td>
+      <td>-0.15</td>
+      <td>10.05</td>
+      <td>10.41</td>
+      <td>21.25</td>
+      <td>8308038</td>
+      <td>20494922</td>
+      <td>0.41</td>
+      <td>305.43</td>
+      <td>291.69</td>
+      <td>287.35</td>
+      <td>-0.15</td>
+      <td>11.16</td>
+      <td>12</td>
+      <td>2</td>
+      <td>TREND</td>
+      <td>進攻優勢區</td>
+      <td>中段延續中</td>
+      <td>0</td>
+      <td>正常</td>
+      <td>3.47</td>
+      <td>標準</td>
+      <td>B</td>
+      <td>14</td>
+      <td>4</td>
+      <td>0</td>
+      <td>UP</td>
+    </tr>
+    <tr>
+      <td>10</td>
+      <td>2026-04-22</td>
+      <td>8111.TWO</td>
+      <td>立碁</td>
+      <td>theme</td>
+      <td>short_attack</td>
+      <td>78.40</td>
+      <td>-3.09</td>
+      <td>10.89</td>
+      <td>28.31</td>
+      <td>25.44</td>
+      <td>4237368</td>
+      <td>5507041</td>
+      <td>0.77</td>
+      <td>66.45</td>
+      <td>66.46</td>
+      <td>66.50</td>
+      <td>-3.09</td>
+      <td>17.97</td>
+      <td>11</td>
+      <td>3</td>
+      <td>NONE</td>
+      <td>進攻優勢區</td>
+      <td>還在觀察</td>
+      <td>2</td>
+      <td>正常</td>
+      <td>5.58</td>
+      <td>活潑</td>
+      <td>B</td>
+      <td>-8</td>
+      <td>-3</td>
+      <td>-1</td>
+      <td>DOWN</td>
+    </tr>
+    <tr>
+      <td>11</td>
+      <td>2026-04-22</td>
+      <td>3231.TW</td>
+      <td>緯創</td>
+      <td>theme</td>
+      <td>short_attack</td>
+      <td>145.50</td>
+      <td>0.69</td>
+      <td>9.40</td>
+      <td>11.07</td>
+      <td>15.94</td>
+      <td>28729382</td>
+      <td>35302810</td>
+      <td>0.81</td>
+      <td>131.90</td>
+      <td>132.21</td>
+      <td>138.45</td>
+      <td>-8.20</td>
+      <td>10.31</td>
+      <td>11</td>
+      <td>1</td>
       <td>NONE</td>
       <td>進攻優勢區</td>
       <td>還在觀察</td>
       <td>0</td>
       <td>正常</td>
+      <td>2.99</td>
+      <td>標準</td>
       <td>B</td>
+      <td>8</td>
+      <td>2</td>
+      <td>-1</td>
+      <td>UP</td>
+    </tr>
+    <tr>
+      <td>12</td>
+      <td>2026-04-22</td>
+      <td>2356.TW</td>
+      <td>英業達</td>
+      <td>theme</td>
+      <td>short_attack</td>
+      <td>48.00</td>
+      <td>1.37</td>
+      <td>7.99</td>
+      <td>12.54</td>
+      <td>14.42</td>
+      <td>16773847</td>
+      <td>18914134</td>
+      <td>0.89</td>
+      <td>43.62</td>
+      <td>44.06</td>
+      <td>43.89</td>
+      <td>-6.25</td>
+      <td>10.03</td>
+      <td>11</td>
+      <td>1</td>
+      <td>NONE</td>
+      <td>進攻優勢區</td>
+      <td>還在觀察</td>
       <td>0</td>
+      <td>正常</td>
+      <td>2.69</td>
+      <td>標準</td>
+      <td>B</td>
+      <td>-2</td>
+      <td>-1</td>
       <td>0</td>
-      <td>0</td>
-      <td>FLAT</td>
+      <td>DOWN</td>
+    </tr>
+    <tr>
+      <td>13</td>
+      <td>2026-04-22</td>
+      <td>3450.TW</td>
+      <td>聯鈞</td>
+      <td>theme</td>
+      <td>short_attack</td>
+      <td>373.00</td>
+      <td>-1.84</td>
+      <td>7.96</td>
+      <td>37.38</td>
+      <td>42.64</td>
+      <td>6326308</td>
+      <td>18241134</td>
+      <td>0.35</td>
+      <td>300.57</td>
+      <td>278.32</td>
+      <td>267.42</td>
+      <td>-2.61</td>
+      <td>24.10</td>
+      <td>11</td>
+      <td>5</td>
+      <td>TREND</td>
+      <td>進攻優勢區</td>
+      <td>中段延續中</td>
+      <td>4</td>
+      <td>投機偏高</td>
+      <td>6.16</td>
+      <td>活潑</td>
+      <td>X</td>
+      <td>-8</td>
+      <td>-1</td>
+      <td>-2</td>
+      <td>DOWN</td>
+    </tr>
+    <tr>
+      <td>14</td>
+      <td>2026-04-22</td>
+      <td>2374.TW</td>
+      <td>佳能</td>
+      <td>theme</td>
+      <td>short_attack</td>
+      <td>77.30</td>
+      <td>3.20</td>
+      <td>7.66</td>
+      <td>12.19</td>
+      <td>10.74</td>
+      <td>11461077</td>
+      <td>3852980</td>
+      <td>2.97</td>
+      <td>70.78</td>
+      <td>75.71</td>
+      <td>78.15</td>
+      <td>-17.91</td>
+      <td>9.21</td>
+      <td>11</td>
+      <td>3</td>
+      <td>NONE</td>
+      <td>進攻優勢區</td>
+      <td>還在觀察</td>
+      <td>2</td>
+      <td>正常</td>
+      <td>3.02</td>
+      <td>標準</td>
+      <td>B</td>
+      <td>10</td>
+      <td>3</td>
+      <td>3</td>
+      <td>UP</td>
+    </tr>
+    <tr>
+      <td>15</td>
+      <td>2026-04-22</td>
+      <td>3014.TW</td>
+      <td>聯陽</td>
+      <td>satellite</td>
+      <td>midlong_core</td>
+      <td>127.50</td>
+      <td>2.82</td>
+      <td>5.37</td>
+      <td>8.05</td>
+      <td>10.39</td>
+      <td>1394202</td>
+      <td>758259</td>
+      <td>1.84</td>
+      <td>119.10</td>
+      <td>119.14</td>
+      <td>119.96</td>
+      <td>-5.20</td>
+      <td>7.05</td>
+      <td>11</td>
+      <td>1</td>
+      <td>NONE</td>
+      <td>進攻優勢區</td>
+      <td>還在觀察</td>
+      <td>1</td>
+      <td>正常</td>
+      <td>1.60</td>
+      <td>穩健</td>
+      <td>B</td>
+      <td>12</td>
+      <td>4</td>
+      <td>1</td>
+      <td>UP</td>
     </tr>
     <tr>
       <td>16</td>
-      <td>2026-04-21</td>
+      <td>2026-04-22</td>
+      <td>2454.TW</td>
+      <td>聯發科</td>
+      <td>core</td>
+      <td>midlong_core</td>
+      <td>2285.00</td>
+      <td>9.33</td>
+      <td>27.65</td>
+      <td>44.62</td>
+      <td>40.62</td>
+      <td>17789748</td>
+      <td>10747159</td>
+      <td>1.66</td>
+      <td>1688.50</td>
+      <td>1711.92</td>
+      <td>1521.67</td>
+      <td>0.00</td>
+      <td>35.33</td>
+      <td>10</td>
+      <td>7</td>
+      <td>SURGE,ACCEL</td>
+      <td>高風險追價區</td>
+      <td>有點過熱，別硬追</td>
+      <td>8</td>
+      <td>疑似炒作風險高</td>
+      <td>4.42</td>
+      <td>活潑</td>
+      <td>C</td>
+      <td>-2</td>
+      <td>0</td>
+      <td>2</td>
+      <td>DOWN</td>
+    </tr>
+    <tr>
+      <td>17</td>
+      <td>2026-04-22</td>
+      <td>6669.TW</td>
+      <td>緯穎</td>
+      <td>theme</td>
+      <td>short_attack</td>
+      <td>4330.00</td>
+      <td>2.61</td>
+      <td>16.40</td>
+      <td>21.29</td>
+      <td>18.79</td>
+      <td>1744769</td>
+      <td>1689993</td>
+      <td>1.03</td>
+      <td>3658.75</td>
+      <td>3781.00</td>
+      <td>4049.21</td>
+      <td>-8.26</td>
+      <td>18.35</td>
+      <td>10</td>
+      <td>2</td>
+      <td>NONE</td>
+      <td>進攻優勢區</td>
+      <td>還在觀察</td>
+      <td>5</td>
+      <td>投機偏高</td>
+      <td>3.74</td>
+      <td>標準</td>
+      <td>B</td>
+      <td>-11</td>
+      <td>-2</td>
+      <td>-1</td>
+      <td>DOWN</td>
+    </tr>
+    <tr>
+      <td>18</td>
+      <td>2026-04-22</td>
+      <td>6147.TWO</td>
+      <td>頎邦</td>
+      <td>satellite</td>
+      <td>midlong_core</td>
+      <td>148.00</td>
+      <td>9.23</td>
+      <td>39.62</td>
+      <td>49.95</td>
+      <td>130.53</td>
+      <td>9057838</td>
+      <td>39068804</td>
+      <td>0.23</td>
+      <td>98.10</td>
+      <td>70.80</td>
+      <td>62.71</td>
+      <td>0.00</td>
+      <td>50.87</td>
+      <td>9</td>
+      <td>9</td>
+      <td>TREND</td>
+      <td>高風險追價區</td>
+      <td>有點過熱，別硬追</td>
+      <td>7</td>
+      <td>疑似炒作風險高</td>
+      <td>6.84</td>
+      <td>劇烈</td>
+      <td>C</td>
+      <td>-1</td>
+      <td>0</td>
+      <td>0</td>
+      <td>DOWN</td>
+    </tr>
+    <tr>
+      <td>19</td>
+      <td>2026-04-22</td>
       <td>3443.TW</td>
       <td>創意</td>
       <td>satellite</td>
       <td>midlong_core</td>
       <td>3735.00</td>
-      <td>4.33</td>
-      <td>22.46</td>
-      <td>57.93</td>
-      <td>41.21</td>
-      <td>1017133</td>
-      <td>2303225</td>
-      <td>0.44</td>
-      <td>2736.25</td>
-      <td>2578.58</td>
-      <td>2281.29</td>
       <td>0.00</td>
-      <td>36.50</td>
+      <td>21.66</td>
+      <td>48.80</td>
+      <td>44.21</td>
+      <td>497172</td>
+      <td>2247447</td>
+      <td>0.22</td>
+      <td>2793.50</td>
+      <td>2600.50</td>
+      <td>2299.96</td>
+      <td>0.00</td>
+      <td>33.70</td>
       <td>9</td>
       <td>7</td>
       <td>TREND</td>
@@ -567,197 +704,104 @@ th { background: #f4f4f4; }
       <td>有點過熱，別硬追</td>
       <td>6</td>
       <td>疑似炒作風險高</td>
+      <td>5.13</td>
+      <td>活潑</td>
       <td>C</td>
+      <td>-3</td>
       <td>0</td>
       <td>0</td>
-      <td>0</td>
-      <td>FLAT</td>
-    </tr>
-    <tr>
-      <td>17</td>
-      <td>2026-04-21</td>
-      <td>6147.TWO</td>
-      <td>頎邦</td>
-      <td>satellite</td>
-      <td>midlong_core</td>
-      <td>135.50</td>
-      <td>7.11</td>
-      <td>19.91</td>
-      <td>50.89</td>
-      <td>102.24</td>
-      <td>18852818</td>
-      <td>39475085</td>
-      <td>0.48</td>
-      <td>93.91</td>
-      <td>69.28</td>
-      <td>61.96</td>
-      <td>0.00</td>
-      <td>44.29</td>
-      <td>9</td>
-      <td>9</td>
-      <td>TREND</td>
-      <td>高風險追價區</td>
-      <td>有點過熱，別硬追</td>
-      <td>6</td>
-      <td>疑似炒作風險高</td>
-      <td>C</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>FLAT</td>
-    </tr>
-    <tr>
-      <td>18</td>
-      <td>2026-04-21</td>
-      <td>3013.TW</td>
-      <td>晟銘電</td>
-      <td>theme</td>
-      <td>short_attack</td>
-      <td>110.00</td>
-      <td>-1.79</td>
-      <td>6.28</td>
-      <td>12.82</td>
-      <td>10.11</td>
-      <td>4400255</td>
-      <td>3489466</td>
-      <td>1.26</td>
-      <td>102.40</td>
-      <td>106.73</td>
-      <td>117.61</td>
-      <td>-21.43</td>
-      <td>7.42</td>
-      <td>9</td>
-      <td>0</td>
-      <td>ACCEL,PULLBACK</td>
-      <td>進攻優勢區</td>
-      <td>轉強速度有出來</td>
-      <td>0</td>
-      <td>正常</td>
-      <td>A</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>FLAT</td>
-    </tr>
-    <tr>
-      <td>19</td>
-      <td>2026-04-21</td>
-      <td>3231.TW</td>
-      <td>緯創</td>
-      <td>theme</td>
-      <td>short_attack</td>
-      <td>144.50</td>
-      <td>2.85</td>
-      <td>5.86</td>
-      <td>17.00</td>
-      <td>11.15</td>
-      <td>85081208</td>
-      <td>35439040</td>
-      <td>2.40</td>
-      <td>130.90</td>
-      <td>132.22</td>
-      <td>138.38</td>
-      <td>-8.83</td>
-      <td>10.39</td>
-      <td>9</td>
-      <td>2</td>
-      <td>ACCEL</td>
-      <td>進攻優勢區</td>
-      <td>轉強速度有出來</td>
-      <td>1</td>
-      <td>正常</td>
-      <td>A</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>FLAT</td>
+      <td>DOWN</td>
     </tr>
     <tr>
       <td>20</td>
-      <td>2026-04-21</td>
+      <td>2026-04-22</td>
       <td>5274.TWO</td>
       <td>信驊</td>
       <td>satellite</td>
       <td>midlong_core</td>
-      <td>15245.00</td>
-      <td>5.68</td>
-      <td>17.22</td>
-      <td>32.91</td>
-      <td>29.74</td>
-      <td>339371</td>
-      <td>287670</td>
-      <td>1.18</td>
-      <td>12407.50</td>
-      <td>10496.67</td>
-      <td>8448.88</td>
+      <td>15915.00</td>
+      <td>4.39</td>
+      <td>14.70</td>
+      <td>26.16</td>
+      <td>38.81</td>
+      <td>198880</td>
+      <td>289546</td>
+      <td>0.69</td>
+      <td>12630.00</td>
+      <td>10627.17</td>
+      <td>8534.62</td>
       <td>0.00</td>
-      <td>22.87</td>
-      <td>8</td>
-      <td>3</td>
+      <td>26.01</td>
+      <td>9</td>
+      <td>5</td>
       <td>TREND</td>
       <td>進攻優勢區</td>
       <td>中段延續中</td>
-      <td>3</td>
+      <td>4</td>
       <td>投機偏高</td>
-      <td>B</td>
+      <td>5.98</td>
+      <td>活潑</td>
+      <td>X</td>
       <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>FLAT</td>
+      <td>1</td>
+      <td>2</td>
+      <td>UP</td>
     </tr>
     <tr>
       <td>21</td>
-      <td>2026-04-21</td>
+      <td>2026-04-22</td>
+      <td>3661.TW</td>
+      <td>世芯-KY</td>
+      <td>satellite</td>
+      <td>midlong_core</td>
+      <td>4095.00</td>
+      <td>2.76</td>
+      <td>27.57</td>
+      <td>43.18</td>
+      <td>28.37</td>
+      <td>2238221</td>
+      <td>2277755</td>
+      <td>0.98</td>
+      <td>3135.75</td>
+      <td>3243.08</td>
+      <td>3292.79</td>
+      <td>0.00</td>
+      <td>30.59</td>
+      <td>8</td>
+      <td>5</td>
+      <td>NONE</td>
+      <td>進攻優勢區</td>
+      <td>還在觀察</td>
+      <td>7</td>
+      <td>疑似炒作風險高</td>
+      <td>4.39</td>
+      <td>活潑</td>
+      <td>X</td>
+      <td>-8</td>
+      <td>-2</td>
+      <td>-1</td>
+      <td>DOWN</td>
+    </tr>
+    <tr>
+      <td>22</td>
+      <td>2026-04-22</td>
       <td>2308.TW</td>
       <td>台達電</td>
       <td>core</td>
       <td>midlong_core</td>
-      <td>2015.00</td>
-      <td>6.05</td>
-      <td>15.14</td>
-      <td>33.00</td>
-      <td>36.61</td>
-      <td>8888821</td>
-      <td>11103964</td>
-      <td>0.80</td>
-      <td>1630.25</td>
-      <td>1393.08</td>
-      <td>1182.07</td>
+      <td>2030.00</td>
+      <td>0.74</td>
+      <td>13.73</td>
+      <td>21.92</td>
+      <td>43.97</td>
+      <td>6387782</td>
+      <td>10778928</td>
+      <td>0.59</td>
+      <td>1661.25</td>
+      <td>1409.25</td>
+      <td>1190.66</td>
       <td>0.00</td>
-      <td>23.60</td>
-      <td>8</td>
-      <td>5</td>
-      <td>TREND</td>
-      <td>進攻優勢區</td>
-      <td>中段延續中</td>
-      <td>5</td>
-      <td>投機偏高</td>
-      <td>X</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>FLAT</td>
-    </tr>
-    <tr>
-      <td>22</td>
-      <td>2026-04-21</td>
-      <td>3711.TW</td>
-      <td>日月光投控</td>
-      <td>core</td>
-      <td>midlong_core</td>
-      <td>472.00</td>
-      <td>2.28</td>
-      <td>11.32</td>
-      <td>34.09</td>
-      <td>37.21</td>
-      <td>17256547</td>
-      <td>19565641</td>
-      <td>0.88</td>
-      <td>388.23</td>
-      <td>347.80</td>
-      <td>290.12</td>
-      <td>0.00</td>
-      <td>21.58</td>
+      <td>22.20</td>
       <td>8</td>
       <td>5</td>
       <td>TREND</td>
@@ -765,263 +809,349 @@ th { background: #f4f4f4; }
       <td>中段延續中</td>
       <td>3</td>
       <td>投機偏高</td>
+      <td>4.42</td>
+      <td>活潑</td>
       <td>X</td>
+      <td>-1</td>
       <td>0</td>
       <td>0</td>
-      <td>0</td>
-      <td>FLAT</td>
+      <td>DOWN</td>
     </tr>
     <tr>
       <td>23</td>
-      <td>2026-04-21</td>
-      <td>2382.TW</td>
-      <td>廣達</td>
-      <td>theme</td>
-      <td>short_attack</td>
-      <td>340.00</td>
-      <td>3.34</td>
-      <td>5.26</td>
-      <td>17.65</td>
-      <td>19.93</td>
-      <td>23951645</td>
-      <td>20841489</td>
-      <td>1.15</td>
-      <td>302.45</td>
-      <td>290.80</td>
-      <td>286.93</td>
-      <td>0.00</td>
-      <td>12.42</td>
+      <td>2026-04-22</td>
+      <td>2317.TW</td>
+      <td>鴻海</td>
+      <td>core</td>
+      <td>midlong_core</td>
+      <td>222.50</td>
+      <td>5.45</td>
+      <td>7.23</td>
+      <td>10.42</td>
+      <td>13.52</td>
+      <td>97685301</td>
+      <td>50905001</td>
+      <td>1.92</td>
+      <td>201.47</td>
+      <td>214.56</td>
+      <td>224.31</td>
+      <td>-15.08</td>
+      <td>10.44</td>
       <td>8</td>
       <td>2</td>
-      <td>TREND</td>
+      <td>NONE</td>
       <td>進攻優勢區</td>
-      <td>中段延續中</td>
-      <td>1</td>
+      <td>還在觀察</td>
+      <td>0</td>
       <td>正常</td>
+      <td>2.92</td>
+      <td>標準</td>
       <td>B</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>FLAT</td>
+      <td>21</td>
+      <td>6</td>
+      <td>2</td>
+      <td>UP</td>
     </tr>
     <tr>
       <td>24</td>
-      <td>2026-04-21</td>
-      <td>2374.TW</td>
-      <td>佳能</td>
+      <td>2026-04-22</td>
+      <td>3019.TW</td>
+      <td>亞光</td>
       <td>theme</td>
       <td>short_attack</td>
-      <td>74.90</td>
-      <td>3.60</td>
-      <td>4.03</td>
-      <td>11.79</td>
-      <td>6.54</td>
-      <td>5772705</td>
-      <td>3543755</td>
-      <td>1.63</td>
-      <td>70.41</td>
-      <td>75.75</td>
-      <td>78.18</td>
-      <td>-20.46</td>
-      <td>6.38</td>
+      <td>133.00</td>
+      <td>1.92</td>
+      <td>4.72</td>
+      <td>5.56</td>
+      <td>5.98</td>
+      <td>2102313</td>
+      <td>2137610</td>
+      <td>0.98</td>
+      <td>126.40</td>
+      <td>137.71</td>
+      <td>139.44</td>
+      <td>-18.65</td>
+      <td>5.22</td>
       <td>8</td>
       <td>0</td>
-      <td>PULLBACK</td>
+      <td>BASE</td>
       <td>進攻優勢區</td>
-      <td>高檔拉回整理</td>
+      <td>低檔慢慢墊高</td>
       <td>0</td>
       <td>正常</td>
-      <td>B</td>
+      <td>3.01</td>
+      <td>標準</td>
+      <td>X</td>
+      <td>5</td>
+      <td>1</td>
       <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>FLAT</td>
+      <td>UP</td>
     </tr>
     <tr>
       <td>25</td>
-      <td>2026-04-21</td>
-      <td>5386.TWO</td>
-      <td>青雲</td>
-      <td>theme</td>
-      <td>short_attack</td>
-      <td>365.50</td>
-      <td>9.92</td>
-      <td>0.69</td>
-      <td>20.43</td>
-      <td>-7.93</td>
-      <td>3127665</td>
-      <td>1114789</td>
-      <td>2.81</td>
-      <td>322.50</td>
-      <td>233.05</td>
-      <td>154.11</td>
-      <td>-17.12</td>
-      <td>13.33</td>
-      <td>8</td>
-      <td>3</td>
-      <td>NONE</td>
-      <td>進攻優勢區</td>
-      <td>還在觀察</td>
-      <td>4</td>
-      <td>投機偏高</td>
-      <td>B</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>FLAT</td>
-    </tr>
-    <tr>
-      <td>26</td>
-      <td>2026-04-20</td>
-      <td>00878.TW</td>
-      <td>國泰永續高股息</td>
-      <td>etf</td>
-      <td>midlong_core</td>
-      <td>24.51</td>
-      <td>1.87</td>
-      <td>6.52</td>
-      <td>11.26</td>
-      <td>9.08</td>
-      <td>131212324</td>
-      <td>66085359</td>
-      <td>1.99</td>
-      <td>22.76</td>
-      <td>22.64</td>
-      <td>21.74</td>
-      <td>0.00</td>
-      <td>7.67</td>
-      <td>7</td>
-      <td>2</td>
-      <td>TREND</td>
-      <td>偏強可追蹤</td>
-      <td>中段延續中</td>
-      <td>0</td>
-      <td>正常</td>
-      <td>B</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>FLAT</td>
-    </tr>
-    <tr>
-      <td>27</td>
-      <td>2026-04-21</td>
-      <td>3014.TW</td>
-      <td>聯陽</td>
-      <td>satellite</td>
-      <td>midlong_core</td>
-      <td>124.00</td>
-      <td>0.40</td>
-      <td>2.90</td>
-      <td>6.90</td>
-      <td>5.53</td>
-      <td>815205</td>
-      <td>721919</td>
-      <td>1.13</td>
-      <td>118.50</td>
-      <td>118.95</td>
-      <td>119.98</td>
-      <td>-7.81</td>
-      <td>4.64</td>
-      <td>7</td>
-      <td>0</td>
-      <td>NONE</td>
-      <td>偏強可追蹤</td>
-      <td>還在觀察</td>
-      <td>0</td>
-      <td>正常</td>
-      <td>X</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>FLAT</td>
-    </tr>
-    <tr>
-      <td>28</td>
-      <td>2026-04-21</td>
+      <td>2026-04-22</td>
       <td>2412.TW</td>
       <td>中華電</td>
       <td>core</td>
       <td>midlong_core</td>
       <td>137.00</td>
       <td>0.00</td>
-      <td>1.48</td>
+      <td>1.11</td>
       <td>2.24</td>
       <td>2.24</td>
-      <td>9157970</td>
-      <td>8900188</td>
-      <td>1.03</td>
-      <td>134.90</td>
-      <td>134.65</td>
-      <td>133.05</td>
+      <td>1684696</td>
+      <td>8161436</td>
+      <td>0.21</td>
+      <td>135.05</td>
+      <td>134.72</td>
+      <td>133.09</td>
       <td>-0.72</td>
-      <td>1.56</td>
-      <td>7</td>
+      <td>1.44</td>
+      <td>8</td>
       <td>1</td>
-      <td>NONE</td>
-      <td>偏強可追蹤</td>
-      <td>還在觀察</td>
+      <td>BASE</td>
+      <td>進攻優勢區</td>
+      <td>低檔慢慢墊高</td>
       <td>0</td>
       <td>正常</td>
+      <td>0.94</td>
+      <td>穩健</td>
       <td>X</td>
+      <td>3</td>
+      <td>1</td>
       <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>FLAT</td>
+      <td>UP</td>
     </tr>
     <tr>
-      <td>29</td>
-      <td>2026-04-21</td>
-      <td>3019.TW</td>
-      <td>亞光</td>
-      <td>theme</td>
-      <td>short_attack</td>
-      <td>130.50</td>
-      <td>0.38</td>
-      <td>-0.38</td>
-      <td>7.85</td>
-      <td>0.00</td>
-      <td>2822173</td>
-      <td>2143666</td>
-      <td>1.32</td>
-      <td>126.03</td>
-      <td>137.82</td>
-      <td>139.55</td>
-      <td>-20.18</td>
-      <td>3.55</td>
-      <td>7</td>
-      <td>0</td>
-      <td>PULLBACK</td>
-      <td>偏強可追蹤</td>
-      <td>高檔拉回整理</td>
-      <td>0</td>
-      <td>正常</td>
-      <td>B</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>FLAT</td>
-    </tr>
-    <tr>
-      <td>30</td>
-      <td>2026-04-21</td>
+      <td>26</td>
+      <td>2026-04-22</td>
       <td>2886.TW</td>
       <td>兆豐金</td>
       <td>core</td>
       <td>midlong_core</td>
-      <td>39.45</td>
-      <td>-0.75</td>
+      <td>39.60</td>
+      <td>0.38</td>
       <td>0.25</td>
-      <td>0.13</td>
-      <td>1.81</td>
-      <td>33846561</td>
-      <td>24432069</td>
-      <td>1.39</td>
-      <td>39.25</td>
-      <td>39.51</td>
-      <td>40.01</td>
-      <td>-5.62</td>
-      <td>0.51</td>
+      <td>0.64</td>
+      <td>3.26</td>
+      <td>10210707</td>
+      <td>23870580</td>
+      <td>0.43</td>
+      <td>39.31</td>
+      <td>39.50</td>
+      <td>39.99</td>
+      <td>-5.26</td>
+      <td>0.73</td>
+      <td>8</td>
+      <td>0</td>
+      <td>BASE</td>
+      <td>進攻優勢區</td>
+      <td>低檔慢慢墊高</td>
+      <td>0</td>
+      <td>正常</td>
+      <td>1.54</td>
+      <td>穩健</td>
+      <td>X</td>
+      <td>4</td>
+      <td>2</td>
+      <td>0</td>
+      <td>UP</td>
+    </tr>
+    <tr>
+      <td>27</td>
+      <td>2026-04-22</td>
+      <td>2495.TW</td>
+      <td>普安</td>
+      <td>theme</td>
+      <td>short_attack</td>
+      <td>44.95</td>
+      <td>1.12</td>
+      <td>-0.55</td>
+      <td>33.38</td>
+      <td>22.81</td>
+      <td>8671039</td>
+      <td>11610787</td>
+      <td>0.75</td>
+      <td>37.94</td>
+      <td>34.50</td>
+      <td>31.10</td>
+      <td>-0.55</td>
+      <td>18.48</td>
+      <td>8</td>
+      <td>3</td>
+      <td>TREND</td>
+      <td>進攻優勢區</td>
+      <td>中段延續中</td>
+      <td>1</td>
+      <td>正常</td>
+      <td>5.97</td>
+      <td>活潑</td>
+      <td>X</td>
+      <td>-18</td>
+      <td>-4</td>
+      <td>0</td>
+      <td>DOWN</td>
+    </tr>
+    <tr>
+      <td>28</td>
+      <td>2026-04-22</td>
+      <td>5386.TWO</td>
+      <td>青雲</td>
+      <td>theme</td>
+      <td>short_attack</td>
+      <td>379.00</td>
+      <td>3.69</td>
+      <td>-2.82</td>
+      <td>13.64</td>
+      <td>5.28</td>
+      <td>3228787</td>
+      <td>1240959</td>
+      <td>2.60</td>
+      <td>323.45</td>
+      <td>237.99</td>
+      <td>156.72</td>
+      <td>-14.06</td>
+      <td>17.17</td>
+      <td>8</td>
+      <td>4</td>
+      <td>NONE</td>
+      <td>進攻優勢區</td>
+      <td>還在觀察</td>
+      <td>4</td>
+      <td>投機偏高</td>
+      <td>7.61</td>
+      <td>劇烈</td>
+      <td>B</td>
+      <td>-3</td>
+      <td>0</td>
+      <td>1</td>
+      <td>DOWN</td>
+    </tr>
+    <tr>
+      <td>29</td>
+      <td>2026-04-22</td>
+      <td>2303.TW</td>
+      <td>聯電</td>
+      <td>core</td>
+      <td>midlong_core</td>
+      <td>78.80</td>
+      <td>3.41</td>
+      <td>26.89</td>
+      <td>30.68</td>
+      <td>38.98</td>
+      <td>146444889</td>
+      <td>148351278</td>
+      <td>0.99</td>
+      <td>62.59</td>
+      <td>62.90</td>
+      <td>55.40</td>
+      <td>0.00</td>
+      <td>25.90</td>
+      <td>7</td>
+      <td>7</td>
+      <td>NONE</td>
+      <td>高風險追價區</td>
+      <td>有點過熱，別硬追</td>
+      <td>8</td>
+      <td>疑似炒作風險高</td>
+      <td>5.37</td>
+      <td>活潑</td>
+      <td>C</td>
+      <td>-17</td>
+      <td>-3</td>
+      <td>-1</td>
+      <td>DOWN</td>
+    </tr>
+    <tr>
+      <td>30</td>
+      <td>2026-04-22</td>
+      <td>3711.TW</td>
+      <td>日月光投控</td>
+      <td>core</td>
+      <td>midlong_core</td>
+      <td>468.00</td>
+      <td>-0.85</td>
+      <td>4.82</td>
+      <td>22.19</td>
+      <td>42.03</td>
+      <td>7723677</td>
+      <td>19199133</td>
+      <td>0.40</td>
+      <td>395.15</td>
+      <td>350.69</td>
+      <td>292.39</td>
+      <td>-0.85</td>
+      <td>18.44</td>
+      <td>7</td>
+      <td>5</td>
+      <td>TREND</td>
+      <td>偏強可追蹤</td>
+      <td>中段延續中</td>
+      <td>3</td>
+      <td>投機偏高</td>
+      <td>4.87</td>
+      <td>活潑</td>
+      <td>X</td>
+      <td>-8</td>
+      <td>-1</td>
+      <td>0</td>
+      <td>DOWN</td>
+    </tr>
+    <tr>
+      <td>31</td>
+      <td>2026-04-22</td>
+      <td>00878.TW</td>
+      <td>國泰永續高股息</td>
+      <td>etf</td>
+      <td>midlong_core</td>
+      <td>25.09</td>
+      <td>2.37</td>
+      <td>8.15</td>
+      <td>12.51</td>
+      <td>11.66</td>
+      <td>66545365</td>
+      <td>67412818</td>
+      <td>0.99</td>
+      <td>22.89</td>
+      <td>22.69</td>
+      <td>21.78</td>
+      <td>0.00</td>
+      <td>9.59</td>
+      <td>6</td>
+      <td>2</td>
+      <td>TREND</td>
+      <td>偏強可追蹤</td>
+      <td>中段延續中</td>
+      <td>0</td>
+      <td>正常</td>
+      <td>1.51</td>
+      <td>穩健</td>
+      <td>B</td>
+      <td>-5</td>
+      <td>-1</td>
+      <td>0</td>
+      <td>DOWN</td>
+    </tr>
+    <tr>
+      <td>32</td>
+      <td>2026-04-22</td>
+      <td>2882.TW</td>
+      <td>國泰金</td>
+      <td>core</td>
+      <td>midlong_core</td>
+      <td>75.20</td>
+      <td>-0.40</td>
+      <td>3.16</td>
+      <td>1.90</td>
+      <td>4.88</td>
+      <td>12569703</td>
+      <td>23379042</td>
+      <td>0.54</td>
+      <td>72.62</td>
+      <td>74.30</td>
+      <td>71.68</td>
+      <td>-5.65</td>
+      <td>3.56</td>
       <td>6</td>
       <td>0</td>
       <td>NONE</td>
@@ -1029,32 +1159,69 @@ th { background: #f4f4f4; }
       <td>還在觀察</td>
       <td>0</td>
       <td>正常</td>
-      <td>B</td>
+      <td>1.92</td>
+      <td>穩健</td>
+      <td>X</td>
       <td>0</td>
+      <td>1</td>
       <td>0</td>
-      <td>0</td>
-      <td>FLAT</td>
+      <td>UP</td>
     </tr>
     <tr>
-      <td>31</td>
-      <td>2026-04-21</td>
+      <td>33</td>
+      <td>2026-04-22</td>
+      <td>3057.TW</td>
+      <td>喬鼎</td>
+      <td>theme</td>
+      <td>short_attack</td>
+      <td>19.10</td>
+      <td>2.41</td>
+      <td>0.53</td>
+      <td>19.00</td>
+      <td>11.70</td>
+      <td>305982</td>
+      <td>302909</td>
+      <td>1.01</td>
+      <td>17.06</td>
+      <td>16.92</td>
+      <td>16.56</td>
+      <td>-20.08</td>
+      <td>11.92</td>
+      <td>6</td>
+      <td>1</td>
+      <td>TREND,PULLBACK</td>
+      <td>偏強可追蹤</td>
+      <td>中段延續中</td>
+      <td>0</td>
+      <td>正常</td>
+      <td>4.96</td>
+      <td>活潑</td>
+      <td>X</td>
+      <td>3</td>
+      <td>1</td>
+      <td>0</td>
+      <td>UP</td>
+    </tr>
+    <tr>
+      <td>34</td>
+      <td>2026-04-22</td>
       <td>00772B.TWO</td>
       <td>中信高評級公司債</td>
       <td>etf</td>
       <td>defensive_watch</td>
-      <td>34.01</td>
-      <td>0.32</td>
-      <td>-0.14</td>
-      <td>-0.03</td>
-      <td>0.38</td>
-      <td>2314000</td>
-      <td>3250100</td>
-      <td>0.71</td>
-      <td>33.86</td>
+      <td>33.94</td>
+      <td>-0.21</td>
+      <td>-0.67</td>
+      <td>-0.93</td>
+      <td>1.79</td>
+      <td>888061</td>
+      <td>3090903</td>
+      <td>0.29</td>
+      <td>33.89</td>
       <td>33.90</td>
       <td>33.68</td>
-      <td>-1.00</td>
-      <td>0.44</td>
+      <td>-1.21</td>
+      <td>0.15</td>
       <td>6</td>
       <td>1</td>
       <td>BASE</td>
@@ -1062,32 +1229,174 @@ th { background: #f4f4f4; }
       <td>低檔慢慢墊高</td>
       <td>0</td>
       <td>正常</td>
+      <td>0.54</td>
+      <td>穩健</td>
       <td>X</td>
+      <td>-3</td>
       <td>0</td>
       <td>0</td>
-      <td>0</td>
-      <td>FLAT</td>
+      <td>DOWN</td>
     </tr>
     <tr>
-      <td>32</td>
-      <td>2026-04-21</td>
-      <td>2882.TW</td>
-      <td>國泰金</td>
+      <td>35</td>
+      <td>2026-04-22</td>
+      <td>2330.TW</td>
+      <td>台積電</td>
       <td>core</td>
       <td>midlong_core</td>
-      <td>75.50</td>
-      <td>1.21</td>
-      <td>3.85</td>
-      <td>5.01</td>
-      <td>4.86</td>
-      <td>28876337</td>
-      <td>24221699</td>
-      <td>1.19</td>
-      <td>72.44</td>
-      <td>74.29</td>
-      <td>71.59</td>
-      <td>-5.27</td>
-      <td>4.22</td>
+      <td>2060.00</td>
+      <td>0.49</td>
+      <td>-0.96</td>
+      <td>5.64</td>
+      <td>13.81</td>
+      <td>10616176</td>
+      <td>31707610</td>
+      <td>0.33</td>
+      <td>1933.00</td>
+      <td>1867.26</td>
+      <td>1677.21</td>
+      <td>-1.20</td>
+      <td>6.57</td>
+      <td>6</td>
+      <td>1</td>
+      <td>TREND</td>
+      <td>偏強可追蹤</td>
+      <td>中段延續中</td>
+      <td>0</td>
+      <td>正常</td>
+      <td>2.43</td>
+      <td>標準</td>
+      <td>X</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>UP</td>
+    </tr>
+    <tr>
+      <td>36</td>
+      <td>2026-04-22</td>
+      <td>0052.TW</td>
+      <td>富邦科技</td>
+      <td>etf</td>
+      <td>midlong_core</td>
+      <td>50.25</td>
+      <td>2.13</td>
+      <td>4.37</td>
+      <td>15.59</td>
+      <td>13.75</td>
+      <td>21835770</td>
+      <td>45022825</td>
+      <td>0.48</td>
+      <td>45.59</td>
+      <td>44.13</td>
+      <td>75.47</td>
+      <td>-80.29</td>
+      <td>10.23</td>
+      <td>5</td>
+      <td>1</td>
+      <td>TREND,PULLBACK</td>
+      <td>開始轉強</td>
+      <td>中段延續中</td>
+      <td>0</td>
+      <td>正常</td>
+      <td>2.13</td>
+      <td>標準</td>
+      <td>X</td>
+      <td>4</td>
+      <td>2</td>
+      <td>0</td>
+      <td>UP</td>
+    </tr>
+    <tr>
+      <td>37</td>
+      <td>2026-04-22</td>
+      <td>0050.TW</td>
+      <td>元大台灣50</td>
+      <td>etf</td>
+      <td>midlong_core</td>
+      <td>86.60</td>
+      <td>2.42</td>
+      <td>4.21</td>
+      <td>15.01</td>
+      <td>14.10</td>
+      <td>37736196</td>
+      <td>117008823</td>
+      <td>0.32</td>
+      <td>78.69</td>
+      <td>76.09</td>
+      <td>69.47</td>
+      <td>0.00</td>
+      <td>10.05</td>
+      <td>5</td>
+      <td>2</td>
+      <td>TREND</td>
+      <td>開始轉強</td>
+      <td>中段延續中</td>
+      <td>0</td>
+      <td>正常</td>
+      <td>2.07</td>
+      <td>標準</td>
+      <td>X</td>
+      <td>0</td>
+      <td>1</td>
+      <td>0</td>
+      <td>UP</td>
+    </tr>
+    <tr>
+      <td>38</td>
+      <td>2026-04-22</td>
+      <td>2891.TW</td>
+      <td>中信金</td>
+      <td>core</td>
+      <td>midlong_core</td>
+      <td>53.70</td>
+      <td>1.32</td>
+      <td>1.70</td>
+      <td>-4.96</td>
+      <td>4.27</td>
+      <td>10637471</td>
+      <td>43767776</td>
+      <td>0.24</td>
+      <td>53.44</td>
+      <td>52.32</td>
+      <td>48.86</td>
+      <td>-4.96</td>
+      <td>0.49</td>
+      <td>5</td>
+      <td>1</td>
+      <td>NONE</td>
+      <td>開始轉強</td>
+      <td>還在觀察</td>
+      <td>0</td>
+      <td>正常</td>
+      <td>2.70</td>
+      <td>標準</td>
+      <td>X</td>
+      <td>3</td>
+      <td>2</td>
+      <td>1</td>
+      <td>UP</td>
+    </tr>
+    <tr>
+      <td>39</td>
+      <td>2026-04-22</td>
+      <td>2881.TW</td>
+      <td>富邦金</td>
+      <td>core</td>
+      <td>midlong_core</td>
+      <td>88.10</td>
+      <td>0.46</td>
+      <td>0.69</td>
+      <td>-1.23</td>
+      <td>1.50</td>
+      <td>7357514</td>
+      <td>16651457</td>
+      <td>0.44</td>
+      <td>87.69</td>
+      <td>90.39</td>
+      <td>92.06</td>
+      <td>-10.29</td>
+      <td>0.46</td>
       <td>5</td>
       <td>0</td>
       <td>NONE</td>
@@ -1095,32 +1404,34 @@ th { background: #f4f4f4; }
       <td>還在觀察</td>
       <td>0</td>
       <td>正常</td>
+      <td>1.45</td>
+      <td>穩健</td>
       <td>X</td>
+      <td>-1</td>
+      <td>1</td>
       <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>FLAT</td>
+      <td>UP</td>
     </tr>
     <tr>
-      <td>33</td>
-      <td>2026-04-21</td>
+      <td>40</td>
+      <td>2026-04-22</td>
       <td>2884.TW</td>
       <td>玉山金</td>
       <td>core</td>
       <td>midlong_core</td>
       <td>32.95</td>
-      <td>0.30</td>
-      <td>0.76</td>
-      <td>1.70</td>
-      <td>3.62</td>
-      <td>38161539</td>
-      <td>26860929</td>
-      <td>1.42</td>
-      <td>32.32</td>
-      <td>33.09</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>1.54</td>
+      <td>5.78</td>
+      <td>17739111</td>
+      <td>25937658</td>
+      <td>0.68</td>
+      <td>32.41</td>
+      <td>33.10</td>
       <td>32.36</td>
       <td>-6.13</td>
-      <td>1.93</td>
+      <td>1.65</td>
       <td>5</td>
       <td>0</td>
       <td>NONE</td>
@@ -1128,32 +1439,34 @@ th { background: #f4f4f4; }
       <td>還在觀察</td>
       <td>0</td>
       <td>正常</td>
-      <td>B</td>
+      <td>1.37</td>
+      <td>穩健</td>
+      <td>X</td>
+      <td>-7</td>
       <td>0</td>
       <td>0</td>
-      <td>0</td>
-      <td>FLAT</td>
+      <td>DOWN</td>
     </tr>
     <tr>
-      <td>34</td>
-      <td>2026-04-21</td>
+      <td>41</td>
+      <td>2026-04-22</td>
       <td>2892.TW</td>
       <td>第一金</td>
       <td>core</td>
       <td>midlong_core</td>
-      <td>28.80</td>
+      <td>28.75</td>
+      <td>-0.17</td>
       <td>-0.35</td>
-      <td>0.70</td>
-      <td>0.70</td>
-      <td>0.17</td>
-      <td>15112917</td>
-      <td>17526666</td>
-      <td>0.86</td>
-      <td>28.60</td>
-      <td>29.01</td>
-      <td>28.87</td>
-      <td>-4.32</td>
-      <td>0.71</td>
+      <td>-0.17</td>
+      <td>2.31</td>
+      <td>6675974</td>
+      <td>16647556</td>
+      <td>0.40</td>
+      <td>28.63</td>
+      <td>29.00</td>
+      <td>28.86</td>
+      <td>-4.49</td>
+      <td>0.42</td>
       <td>5</td>
       <td>1</td>
       <td>NONE</td>
@@ -1161,164 +1474,34 @@ th { background: #f4f4f4; }
       <td>還在觀察</td>
       <td>0</td>
       <td>正常</td>
+      <td>1.14</td>
+      <td>穩健</td>
       <td>X</td>
+      <td>-7</td>
       <td>0</td>
       <td>0</td>
-      <td>0</td>
-      <td>FLAT</td>
+      <td>DOWN</td>
     </tr>
     <tr>
-      <td>35</td>
-      <td>2026-04-21</td>
-      <td>2330.TW</td>
-      <td>台積電</td>
-      <td>core</td>
-      <td>midlong_core</td>
-      <td>2050.00</td>
-      <td>1.23</td>
-      <td>-0.24</td>
-      <td>10.22</td>
-      <td>11.41</td>
-      <td>25783476</td>
-      <td>32921949</td>
-      <td>0.78</td>
-      <td>1920.50</td>
-      <td>1861.34</td>
-      <td>1672.05</td>
-      <td>-1.68</td>
-      <td>6.74</td>
-      <td>5</td>
-      <td>1</td>
-      <td>TREND</td>
-      <td>開始轉強</td>
-      <td>中段延續中</td>
-      <td>0</td>
-      <td>正常</td>
-      <td>X</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>FLAT</td>
-    </tr>
-    <tr>
-      <td>36</td>
-      <td>2026-04-21</td>
-      <td>3057.TW</td>
-      <td>喬鼎</td>
-      <td>theme</td>
-      <td>short_attack</td>
-      <td>18.65</td>
-      <td>0.81</td>
-      <td>-0.53</td>
-      <td>19.55</td>
-      <td>-1.84</td>
-      <td>318412</td>
-      <td>313975</td>
-      <td>1.01</td>
-      <td>16.96</td>
-      <td>16.93</td>
-      <td>16.50</td>
-      <td>-21.97</td>
-      <td>9.93</td>
-      <td>5</td>
-      <td>1</td>
-      <td>PULLBACK</td>
-      <td>開始轉強</td>
-      <td>高檔拉回整理</td>
-      <td>0</td>
-      <td>正常</td>
-      <td>X</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>FLAT</td>
-    </tr>
-    <tr>
-      <td>37</td>
-      <td>2026-04-20</td>
-      <td>0050.TW</td>
-      <td>元大台灣50</td>
-      <td>etf</td>
-      <td>midlong_core</td>
-      <td>84.55</td>
-      <td>0.48</td>
-      <td>4.90</td>
-      <td>14.33</td>
-      <td>11.25</td>
-      <td>95994589</td>
-      <td>118485265</td>
-      <td>0.81</td>
-      <td>78.16</td>
-      <td>75.81</td>
-      <td>69.27</td>
-      <td>-0.53</td>
-      <td>8.18</td>
-      <td>4</td>
-      <td>2</td>
-      <td>TREND</td>
-      <td>開始轉強</td>
-      <td>中段延續中</td>
-      <td>0</td>
-      <td>正常</td>
-      <td>X</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>FLAT</td>
-    </tr>
-    <tr>
-      <td>38</td>
-      <td>2026-04-21</td>
-      <td>2881.TW</td>
-      <td>富邦金</td>
-      <td>core</td>
-      <td>midlong_core</td>
-      <td>87.70</td>
-      <td>0.57</td>
-      <td>0.11</td>
-      <td>0.00</td>
-      <td>-1.02</td>
-      <td>18209986</td>
-      <td>17515712</td>
-      <td>1.04</td>
-      <td>87.63</td>
-      <td>90.48</td>
-      <td>92.07</td>
-      <td>-10.69</td>
-      <td>0.08</td>
-      <td>4</td>
-      <td>0</td>
-      <td>NONE</td>
-      <td>開始轉強</td>
-      <td>還在觀察</td>
-      <td>0</td>
-      <td>正常</td>
-      <td>X</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>FLAT</td>
-    </tr>
-    <tr>
-      <td>39</td>
-      <td>2026-04-21</td>
+      <td>42</td>
+      <td>2026-04-22</td>
       <td>00773B.TWO</td>
       <td>中信優先金融債</td>
       <td>etf</td>
       <td>defensive_watch</td>
-      <td>36.02</td>
-      <td>0.36</td>
-      <td>-0.04</td>
-      <td>0.02</td>
-      <td>0.10</td>
-      <td>882000</td>
-      <td>1373600</td>
-      <td>0.64</td>
-      <td>35.86</td>
+      <td>35.91</td>
+      <td>-0.31</td>
+      <td>-0.62</td>
+      <td>-0.92</td>
+      <td>1.39</td>
+      <td>492304</td>
+      <td>1271415</td>
+      <td>0.39</td>
+      <td>35.89</td>
       <td>36.11</td>
-      <td>35.94</td>
-      <td>-1.81</td>
-      <td>0.44</td>
+      <td>35.95</td>
+      <td>-2.11</td>
+      <td>0.07</td>
       <td>4</td>
       <td>1</td>
       <td>BASE</td>
@@ -1326,98 +1509,34 @@ th { background: #f4f4f4; }
       <td>低檔慢慢墊高</td>
       <td>0</td>
       <td>正常</td>
+      <td>0.50</td>
+      <td>穩健</td>
       <td>X</td>
+      <td>-3</td>
       <td>0</td>
       <td>0</td>
-      <td>0</td>
-      <td>FLAT</td>
+      <td>DOWN</td>
     </tr>
     <tr>
-      <td>40</td>
-      <td>2026-04-20</td>
-      <td>0052.TW</td>
-      <td>富邦科技</td>
-      <td>etf</td>
-      <td>midlong_core</td>
-      <td>49.20</td>
-      <td>0.71</td>
-      <td>5.32</td>
-      <td>15.03</td>
-      <td>10.69</td>
-      <td>52854905</td>
-      <td>45372781</td>
-      <td>1.16</td>
-      <td>45.28</td>
-      <td>43.96</td>
-      <td>77.11</td>
-      <td>-80.70</td>
-      <td>8.65</td>
-      <td>3</td>
-      <td>1</td>
-      <td>TREND,PULLBACK</td>
-      <td>一般觀察</td>
-      <td>中段延續中</td>
-      <td>0</td>
-      <td>正常</td>
-      <td>X</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>FLAT</td>
-    </tr>
-    <tr>
-      <td>41</td>
-      <td>2026-04-21</td>
-      <td>2891.TW</td>
-      <td>中信金</td>
-      <td>core</td>
-      <td>midlong_core</td>
-      <td>53.00</td>
-      <td>-0.19</td>
-      <td>-0.19</td>
-      <td>-5.02</td>
-      <td>1.73</td>
-      <td>47048526</td>
-      <td>46270073</td>
-      <td>1.02</td>
-      <td>53.33</td>
-      <td>52.25</td>
-      <td>48.77</td>
-      <td>-6.19</td>
-      <td>-0.62</td>
-      <td>3</td>
-      <td>0</td>
-      <td>NONE</td>
-      <td>一般觀察</td>
-      <td>還在觀察</td>
-      <td>0</td>
-      <td>正常</td>
-      <td>X</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>FLAT</td>
-    </tr>
-    <tr>
-      <td>42</td>
-      <td>2026-04-21</td>
+      <td>43</td>
+      <td>2026-04-22</td>
       <td>00687B.TWO</td>
       <td>國泰20年美債</td>
       <td>etf</td>
       <td>defensive_watch</td>
-      <td>28.18</td>
-      <td>0.28</td>
-      <td>-0.21</td>
-      <td>-0.67</td>
-      <td>-1.37</td>
-      <td>21077000</td>
-      <td>26628400</td>
-      <td>0.79</td>
+      <td>28.08</td>
+      <td>-0.35</td>
+      <td>-0.85</td>
+      <td>-1.47</td>
+      <td>-0.07</td>
+      <td>8597589</td>
+      <td>25114729</td>
+      <td>0.34</td>
       <td>28.26</td>
       <td>28.33</td>
       <td>28.21</td>
-      <td>-3.11</td>
-      <td>-0.27</td>
+      <td>-3.45</td>
+      <td>-0.62</td>
       <td>3</td>
       <td>1</td>
       <td>BASE</td>
@@ -1425,32 +1544,34 @@ th { background: #f4f4f4; }
       <td>低檔慢慢墊高</td>
       <td>0</td>
       <td>正常</td>
+      <td>0.59</td>
+      <td>穩健</td>
       <td>X</td>
+      <td>-1</td>
       <td>0</td>
       <td>0</td>
-      <td>0</td>
-      <td>FLAT</td>
+      <td>DOWN</td>
     </tr>
     <tr>
-      <td>43</td>
-      <td>2026-04-21</td>
+      <td>44</td>
+      <td>2026-04-22</td>
       <td>00679B.TWO</td>
       <td>元大美債20年</td>
       <td>etf</td>
       <td>defensive_watch</td>
-      <td>27.11</td>
-      <td>0.26</td>
-      <td>-0.22</td>
-      <td>-0.73</td>
-      <td>-1.38</td>
-      <td>31812000</td>
-      <td>42789500</td>
-      <td>0.74</td>
+      <td>27.00</td>
+      <td>-0.41</td>
+      <td>-0.95</td>
+      <td>-1.46</td>
+      <td>-0.18</td>
+      <td>11238281</td>
+      <td>41392564</td>
+      <td>0.27</td>
       <td>27.19</td>
       <td>27.25</td>
-      <td>27.15</td>
-      <td>-3.18</td>
-      <td>-0.31</td>
+      <td>27.14</td>
+      <td>-3.57</td>
+      <td>-0.70</td>
       <td>3</td>
       <td>1</td>
       <td>BASE</td>
@@ -1458,44 +1579,13 @@ th { background: #f4f4f4; }
       <td>低檔慢慢墊高</td>
       <td>0</td>
       <td>正常</td>
+      <td>0.60</td>
+      <td>穩健</td>
       <td>X</td>
+      <td>-1</td>
       <td>0</td>
       <td>0</td>
-      <td>0</td>
-      <td>FLAT</td>
-    </tr>
-    <tr>
-      <td>44</td>
-      <td>2026-04-21</td>
-      <td>2317.TW</td>
-      <td>鴻海</td>
-      <td>core</td>
-      <td>midlong_core</td>
-      <td>211.00</td>
-      <td>1.69</td>
-      <td>1.69</td>
-      <td>9.90</td>
-      <td>3.94</td>
-      <td>55956369</td>
-      <td>49672803</td>
-      <td>1.13</td>
-      <td>200.15</td>
-      <td>214.76</td>
-      <td>224.34</td>
-      <td>-19.47</td>
-      <td>5.42</td>
-      <td>2</td>
-      <td>0</td>
-      <td>NONE</td>
-      <td>一般觀察</td>
-      <td>還在觀察</td>
-      <td>0</td>
-      <td>正常</td>
-      <td>X</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>FLAT</td>
+      <td>DOWN</td>
     </tr>
   </tbody>
 </table>
@@ -1528,6 +1618,8 @@ th { background: #f4f4f4; }
       <th>regime</th>
       <th>spec_risk_score</th>
       <th>spec_risk_label</th>
+      <th>atr_pct</th>
+      <th>volatility_tag</th>
       <th>grade</th>
       <th>rank_change</th>
       <th>setup_change</th>
@@ -1536,152 +1628,165 @@ th { background: #f4f4f4; }
       <th>action_label</th>
       <th>feedback_score</th>
       <th>feedback_label</th>
+      <th>feedback_pl_ratio</th>
     </tr>
   </thead>
   <tbody>
     <tr>
-      <td>6</td>
-      <td>2026-04-21</td>
-      <td>6669.TW</td>
-      <td>緯穎</td>
-      <td>theme</td>
-      <td>short_attack</td>
-      <td>4220.00</td>
-      <td>6.03</td>
-      <td>12.38</td>
-      <td>24.30</td>
-      <td>10.91</td>
-      <td>3407767</td>
-      <td>1652089</td>
-      <td>2.06</td>
-      <td>3624.50</td>
-      <td>3774.83</td>
-      <td>4044.67</td>
-      <td>-10.59</td>
-      <td>16.43</td>
-      <td>12</td>
-      <td>3</td>
-      <td>ACCEL</td>
-      <td>進攻優勢區</td>
-      <td>轉強速度有出來</td>
-      <td>3</td>
-      <td>投機偏高</td>
-      <td>A</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>FLAT</td>
-      <td>等拉回</td>
-      <td>4.88</td>
-      <td>近期有效</td>
-    </tr>
-    <tr>
       <td>9</td>
-      <td>2026-04-21</td>
-      <td>2495.TW</td>
-      <td>普安</td>
+      <td>2026-04-22</td>
+      <td>2382.TW</td>
+      <td>廣達</td>
       <td>theme</td>
       <td>short_attack</td>
-      <td>44.45</td>
-      <td>4.71</td>
-      <td>8.15</td>
-      <td>38.47</td>
-      <td>13.10</td>
-      <td>16348268</td>
-      <td>11796964</td>
-      <td>1.39</td>
-      <td>37.52</td>
-      <td>34.28</td>
-      <td>30.92</td>
-      <td>-1.66</td>
-      <td>18.46</td>
+      <td>339.50</td>
+      <td>-0.15</td>
+      <td>10.05</td>
+      <td>10.41</td>
+      <td>21.25</td>
+      <td>8308038</td>
+      <td>20494922</td>
+      <td>0.41</td>
+      <td>305.43</td>
+      <td>291.69</td>
+      <td>287.35</td>
+      <td>-0.15</td>
+      <td>11.16</td>
       <td>12</td>
-      <td>3</td>
-      <td>TREND,ACCEL</td>
-      <td>進攻優勢區</td>
-      <td>轉強速度有出來</td>
-      <td>1</td>
-      <td>正常</td>
-      <td>A</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>FLAT</td>
-      <td>等拉回</td>
-      <td>4.88</td>
-      <td>近期有效</td>
-    </tr>
-    <tr>
-      <td>8</td>
-      <td>2026-04-21</td>
-      <td>3017.TW</td>
-      <td>奇鋐</td>
-      <td>theme</td>
-      <td>short_attack</td>
-      <td>2565.00</td>
-      <td>3.01</td>
-      <td>11.04</td>
-      <td>26.35</td>
-      <td>25.12</td>
-      <td>3940435</td>
-      <td>4275055</td>
-      <td>0.92</td>
-      <td>2215.25</td>
-      <td>1820.08</td>
-      <td>1602.58</td>
-      <td>0.00</td>
-      <td>15.79</td>
-      <td>12</td>
-      <td>3</td>
+      <td>2</td>
       <td>TREND</td>
       <td>進攻優勢區</td>
       <td>中段延續中</td>
-      <td>1</td>
+      <td>0</td>
       <td>正常</td>
+      <td>3.47</td>
+      <td>標準</td>
       <td>B</td>
+      <td>14</td>
+      <td>4</td>
       <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>FLAT</td>
+      <td>UP</td>
       <td>等拉回</td>
-      <td>4.88</td>
+      <td>5.75</td>
       <td>近期有效</td>
+      <td>41.47</td>
     </tr>
     <tr>
-      <td>15</td>
-      <td>2026-04-21</td>
-      <td>3324.TWO</td>
-      <td>雙鴻</td>
+      <td>31</td>
+      <td>2026-04-22</td>
+      <td>00878.TW</td>
+      <td>國泰永續高股息</td>
+      <td>etf</td>
+      <td>midlong_core</td>
+      <td>25.09</td>
+      <td>2.37</td>
+      <td>8.15</td>
+      <td>12.51</td>
+      <td>11.66</td>
+      <td>66545365</td>
+      <td>67412818</td>
+      <td>0.99</td>
+      <td>22.89</td>
+      <td>22.69</td>
+      <td>21.78</td>
+      <td>0.00</td>
+      <td>9.59</td>
+      <td>6</td>
+      <td>2</td>
+      <td>TREND</td>
+      <td>偏強可追蹤</td>
+      <td>中段延續中</td>
+      <td>0</td>
+      <td>正常</td>
+      <td>1.51</td>
+      <td>穩健</td>
+      <td>B</td>
+      <td>-5</td>
+      <td>-1</td>
+      <td>0</td>
+      <td>DOWN</td>
+      <td>等拉回</td>
+      <td>5.75</td>
+      <td>近期有效</td>
+      <td>41.47</td>
+    </tr>
+    <tr>
+      <td>10</td>
+      <td>2026-04-22</td>
+      <td>8111.TWO</td>
+      <td>立碁</td>
       <td>theme</td>
       <td>short_attack</td>
-      <td>1050.00</td>
-      <td>0.96</td>
-      <td>8.81</td>
-      <td>14.38</td>
-      <td>-1.41</td>
-      <td>4318891</td>
-      <td>4659859</td>
-      <td>0.93</td>
-      <td>981.85</td>
-      <td>996.52</td>
-      <td>981.86</td>
-      <td>-9.09</td>
-      <td>6.94</td>
-      <td>10</td>
-      <td>0</td>
+      <td>78.40</td>
+      <td>-3.09</td>
+      <td>10.89</td>
+      <td>28.31</td>
+      <td>25.44</td>
+      <td>4237368</td>
+      <td>5507041</td>
+      <td>0.77</td>
+      <td>66.45</td>
+      <td>66.46</td>
+      <td>66.50</td>
+      <td>-3.09</td>
+      <td>17.97</td>
+      <td>11</td>
+      <td>3</td>
+      <td>NONE</td>
+      <td>進攻優勢區</td>
+      <td>還在觀察</td>
+      <td>2</td>
+      <td>正常</td>
+      <td>5.58</td>
+      <td>活潑</td>
+      <td>B</td>
+      <td>-8</td>
+      <td>-3</td>
+      <td>-1</td>
+      <td>DOWN</td>
+      <td>等拉回</td>
+      <td>5.75</td>
+      <td>近期有效</td>
+      <td>41.47</td>
+    </tr>
+    <tr>
+      <td>11</td>
+      <td>2026-04-22</td>
+      <td>3231.TW</td>
+      <td>緯創</td>
+      <td>theme</td>
+      <td>short_attack</td>
+      <td>145.50</td>
+      <td>0.69</td>
+      <td>9.40</td>
+      <td>11.07</td>
+      <td>15.94</td>
+      <td>28729382</td>
+      <td>35302810</td>
+      <td>0.81</td>
+      <td>131.90</td>
+      <td>132.21</td>
+      <td>138.45</td>
+      <td>-8.20</td>
+      <td>10.31</td>
+      <td>11</td>
+      <td>1</td>
       <td>NONE</td>
       <td>進攻優勢區</td>
       <td>還在觀察</td>
       <td>0</td>
       <td>正常</td>
+      <td>2.99</td>
+      <td>標準</td>
       <td>B</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>FLAT</td>
+      <td>8</td>
+      <td>2</td>
+      <td>-1</td>
+      <td>UP</td>
       <td>等拉回</td>
-      <td>4.88</td>
+      <td>5.75</td>
       <td>近期有效</td>
+      <td>41.47</td>
     </tr>
   </tbody>
 </table>
@@ -1714,6 +1819,8 @@ th { background: #f4f4f4; }
       <th>regime</th>
       <th>spec_risk_score</th>
       <th>spec_risk_label</th>
+      <th>atr_pct</th>
+      <th>volatility_tag</th>
       <th>grade</th>
       <th>rank_change</th>
       <th>setup_change</th>
@@ -1722,188 +1829,204 @@ th { background: #f4f4f4; }
       <th>action_label</th>
       <th>feedback_score</th>
       <th>feedback_label</th>
+      <th>feedback_pl_ratio</th>
     </tr>
   </thead>
   <tbody>
     <tr>
       <td>2</td>
-      <td>2026-04-21</td>
-      <td>8111.TWO</td>
-      <td>立碁</td>
+      <td>2026-04-22</td>
+      <td>3013.TW</td>
+      <td>晟銘電</td>
       <td>theme</td>
       <td>short_attack</td>
-      <td>80.90</td>
-      <td>4.25</td>
-      <td>17.76</td>
-      <td>33.50</td>
-      <td>24.27</td>
-      <td>10351998</td>
-      <td>5381846</td>
-      <td>1.92</td>
-      <td>65.66</td>
-      <td>66.29</td>
-      <td>66.30</td>
-      <td>0.00</td>
-      <td>23.21</td>
+      <td>121.0</td>
+      <td>10.00</td>
+      <td>16.35</td>
+      <td>19.80</td>
+      <td>22.84</td>
+      <td>11989293</td>
+      <td>3982224</td>
+      <td>3.01</td>
+      <td>103.53</td>
+      <td>106.65</td>
+      <td>117.59</td>
+      <td>-13.57</td>
+      <td>16.88</td>
       <td>14</td>
       <td>4</td>
       <td>SURGE,ACCEL</td>
       <td>進攻優勢區</td>
       <td>題材正在發酵</td>
-      <td>6</td>
+      <td>7</td>
       <td>疑似炒作風險高</td>
+      <td>3.96</td>
+      <td>標準</td>
       <td>A</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>FLAT</td>
+      <td>16</td>
+      <td>5</td>
+      <td>4</td>
+      <td>UP</td>
       <td>只觀察不追</td>
-      <td>3.84</td>
+      <td>5.22</td>
       <td>近期有效</td>
+      <td>118.05</td>
     </tr>
     <tr>
-      <td>7</td>
-      <td>2026-04-21</td>
-      <td>2465.TW</td>
-      <td>麗臺</td>
+      <td>3</td>
+      <td>2026-04-22</td>
+      <td>2399.TW</td>
+      <td>映泰</td>
       <td>theme</td>
       <td>short_attack</td>
-      <td>67.60</td>
-      <td>1.81</td>
-      <td>11.55</td>
-      <td>24.49</td>
-      <td>7.64</td>
-      <td>8459464</td>
-      <td>1285576</td>
-      <td>6.58</td>
-      <td>57.64</td>
-      <td>55.90</td>
-      <td>58.17</td>
-      <td>-7.16</td>
-      <td>17.29</td>
-      <td>12</td>
+      <td>41.2</td>
+      <td>-1.79</td>
+      <td>11.20</td>
+      <td>8.56</td>
+      <td>20.12</td>
+      <td>27932421</td>
+      <td>14355655</td>
+      <td>1.95</td>
+      <td>34.32</td>
+      <td>28.39</td>
+      <td>26.15</td>
+      <td>-1.79</td>
+      <td>20.06</td>
+      <td>14</td>
       <td>4</td>
-      <td>ACCEL</td>
+      <td>TREND,ACCEL</td>
       <td>進攻優勢區</td>
       <td>轉強速度有出來</td>
-      <td>4</td>
-      <td>投機偏高</td>
+      <td>2</td>
+      <td>正常</td>
+      <td>7.26</td>
+      <td>劇烈</td>
       <td>A</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>FLAT</td>
+      <td>1</td>
+      <td>2</td>
+      <td>-1</td>
+      <td>UP</td>
       <td>開高不追</td>
-      <td>3.84</td>
+      <td>5.22</td>
       <td>近期有效</td>
+      <td>118.05</td>
     </tr>
     <tr>
-      <td>10</td>
-      <td>2026-04-21</td>
+      <td>12</td>
+      <td>2026-04-22</td>
       <td>2356.TW</td>
       <td>英業達</td>
       <td>theme</td>
       <td>short_attack</td>
-      <td>47.35</td>
-      <td>1.61</td>
-      <td>6.17</td>
-      <td>15.91</td>
-      <td>10.63</td>
-      <td>29328827</td>
-      <td>18654963</td>
-      <td>1.57</td>
-      <td>43.32</td>
-      <td>43.99</td>
-      <td>43.86</td>
-      <td>-7.52</td>
-      <td>9.30</td>
-      <td>12</td>
+      <td>48.0</td>
+      <td>1.37</td>
+      <td>7.99</td>
+      <td>12.54</td>
+      <td>14.42</td>
+      <td>16773847</td>
+      <td>18914134</td>
+      <td>0.89</td>
+      <td>43.62</td>
+      <td>44.06</td>
+      <td>43.89</td>
+      <td>-6.25</td>
+      <td>10.03</td>
+      <td>11</td>
       <td>1</td>
-      <td>ACCEL</td>
+      <td>NONE</td>
       <td>進攻優勢區</td>
-      <td>轉強速度有出來</td>
+      <td>還在觀察</td>
       <td>0</td>
       <td>正常</td>
-      <td>A</td>
+      <td>2.69</td>
+      <td>標準</td>
+      <td>B</td>
+      <td>-2</td>
+      <td>-1</td>
       <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>FLAT</td>
+      <td>DOWN</td>
       <td>續追蹤</td>
-      <td>3.84</td>
+      <td>5.22</td>
       <td>近期有效</td>
+      <td>118.05</td>
     </tr>
     <tr>
-      <td>18</td>
-      <td>2026-04-21</td>
-      <td>3013.TW</td>
-      <td>晟銘電</td>
+      <td>14</td>
+      <td>2026-04-22</td>
+      <td>2374.TW</td>
+      <td>佳能</td>
       <td>theme</td>
       <td>short_attack</td>
-      <td>110.00</td>
-      <td>-1.79</td>
-      <td>6.28</td>
-      <td>12.82</td>
-      <td>10.11</td>
-      <td>4400255</td>
-      <td>3489466</td>
-      <td>1.26</td>
-      <td>102.40</td>
-      <td>106.73</td>
-      <td>117.61</td>
-      <td>-21.43</td>
-      <td>7.42</td>
-      <td>9</td>
-      <td>0</td>
-      <td>ACCEL,PULLBACK</td>
+      <td>77.3</td>
+      <td>3.20</td>
+      <td>7.66</td>
+      <td>12.19</td>
+      <td>10.74</td>
+      <td>11461077</td>
+      <td>3852980</td>
+      <td>2.97</td>
+      <td>70.78</td>
+      <td>75.71</td>
+      <td>78.15</td>
+      <td>-17.91</td>
+      <td>9.21</td>
+      <td>11</td>
+      <td>3</td>
+      <td>NONE</td>
       <td>進攻優勢區</td>
-      <td>轉強速度有出來</td>
-      <td>0</td>
-      <td>正常</td>
-      <td>A</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>FLAT</td>
-      <td>續追蹤</td>
-      <td>3.84</td>
-      <td>近期有效</td>
-    </tr>
-    <tr>
-      <td>19</td>
-      <td>2026-04-21</td>
-      <td>3231.TW</td>
-      <td>緯創</td>
-      <td>theme</td>
-      <td>short_attack</td>
-      <td>144.50</td>
-      <td>2.85</td>
-      <td>5.86</td>
-      <td>17.00</td>
-      <td>11.15</td>
-      <td>85081208</td>
-      <td>35439040</td>
-      <td>2.40</td>
-      <td>130.90</td>
-      <td>132.22</td>
-      <td>138.38</td>
-      <td>-8.83</td>
-      <td>10.39</td>
-      <td>9</td>
+      <td>還在觀察</td>
       <td>2</td>
-      <td>ACCEL</td>
+      <td>正常</td>
+      <td>3.02</td>
+      <td>標準</td>
+      <td>B</td>
+      <td>10</td>
+      <td>3</td>
+      <td>3</td>
+      <td>UP</td>
+      <td>續抱觀察</td>
+      <td>5.22</td>
+      <td>近期有效</td>
+      <td>118.05</td>
+    </tr>
+    <tr>
+      <td>15</td>
+      <td>2026-04-22</td>
+      <td>3014.TW</td>
+      <td>聯陽</td>
+      <td>satellite</td>
+      <td>midlong_core</td>
+      <td>127.5</td>
+      <td>2.82</td>
+      <td>5.37</td>
+      <td>8.05</td>
+      <td>10.39</td>
+      <td>1394202</td>
+      <td>758259</td>
+      <td>1.84</td>
+      <td>119.10</td>
+      <td>119.14</td>
+      <td>119.96</td>
+      <td>-5.20</td>
+      <td>7.05</td>
+      <td>11</td>
+      <td>1</td>
+      <td>NONE</td>
       <td>進攻優勢區</td>
-      <td>轉強速度有出來</td>
+      <td>還在觀察</td>
       <td>1</td>
       <td>正常</td>
-      <td>A</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>FLAT</td>
-      <td>續追蹤</td>
-      <td>3.84</td>
+      <td>1.60</td>
+      <td>穩健</td>
+      <td>B</td>
+      <td>12</td>
+      <td>4</td>
+      <td>1</td>
+      <td>UP</td>
+      <td>續抱觀察</td>
+      <td>5.22</td>
       <td>近期有效</td>
+      <td>118.05</td>
     </tr>
   </tbody>
 </table>
@@ -1936,6 +2059,8 @@ th { background: #f4f4f4; }
       <th>regime</th>
       <th>spec_risk_score</th>
       <th>spec_risk_label</th>
+      <th>atr_pct</th>
+      <th>volatility_tag</th>
       <th>grade</th>
       <th>rank_change</th>
       <th>setup_change</th>
@@ -1944,116 +2069,204 @@ th { background: #f4f4f4; }
       <th>action_label</th>
       <th>feedback_score</th>
       <th>feedback_label</th>
+      <th>feedback_pl_ratio</th>
     </tr>
   </thead>
   <tbody>
     <tr>
-      <td>26</td>
-      <td>2026-04-20</td>
+      <td>31</td>
+      <td>2026-04-22</td>
       <td>00878.TW</td>
       <td>國泰永續高股息</td>
       <td>etf</td>
       <td>midlong_core</td>
-      <td>24.51</td>
-      <td>1.87</td>
-      <td>6.52</td>
-      <td>11.26</td>
-      <td>9.08</td>
-      <td>131212324</td>
-      <td>66085359</td>
-      <td>1.99</td>
-      <td>22.76</td>
-      <td>22.64</td>
-      <td>21.74</td>
+      <td>25.09</td>
+      <td>2.37</td>
+      <td>8.15</td>
+      <td>12.51</td>
+      <td>11.66</td>
+      <td>66545365</td>
+      <td>67412818</td>
+      <td>0.99</td>
+      <td>22.89</td>
+      <td>22.69</td>
+      <td>21.78</td>
       <td>0.00</td>
-      <td>7.67</td>
-      <td>7</td>
+      <td>9.59</td>
+      <td>6</td>
       <td>2</td>
       <td>TREND</td>
       <td>偏強可追蹤</td>
       <td>中段延續中</td>
       <td>0</td>
       <td>正常</td>
+      <td>1.51</td>
+      <td>穩健</td>
       <td>B</td>
+      <td>-5</td>
+      <td>-1</td>
       <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>FLAT</td>
+      <td>DOWN</td>
       <td>續抱</td>
-      <td>2.73</td>
+      <td>4.21</td>
       <td>近期有效</td>
+      <td>7.69</td>
     </tr>
     <tr>
       <td>35</td>
-      <td>2026-04-21</td>
+      <td>2026-04-22</td>
       <td>2330.TW</td>
       <td>台積電</td>
       <td>core</td>
       <td>midlong_core</td>
-      <td>2050.00</td>
-      <td>1.23</td>
-      <td>-0.24</td>
-      <td>10.22</td>
-      <td>11.41</td>
-      <td>25783476</td>
-      <td>32921949</td>
-      <td>0.78</td>
-      <td>1920.50</td>
-      <td>1861.34</td>
-      <td>1672.05</td>
-      <td>-1.68</td>
-      <td>6.74</td>
-      <td>5</td>
+      <td>2060.00</td>
+      <td>0.49</td>
+      <td>-0.96</td>
+      <td>5.64</td>
+      <td>13.81</td>
+      <td>10616176</td>
+      <td>31707610</td>
+      <td>0.33</td>
+      <td>1933.00</td>
+      <td>1867.26</td>
+      <td>1677.21</td>
+      <td>-1.20</td>
+      <td>6.57</td>
+      <td>6</td>
       <td>1</td>
       <td>TREND</td>
-      <td>開始轉強</td>
+      <td>偏強可追蹤</td>
       <td>中段延續中</td>
       <td>0</td>
       <td>正常</td>
+      <td>2.43</td>
+      <td>標準</td>
       <td>X</td>
       <td>0</td>
+      <td>1</td>
       <td>0</td>
-      <td>0</td>
-      <td>FLAT</td>
+      <td>UP</td>
       <td>續抱</td>
-      <td>2.73</td>
+      <td>4.21</td>
       <td>近期有效</td>
+      <td>7.69</td>
     </tr>
     <tr>
       <td>37</td>
-      <td>2026-04-20</td>
+      <td>2026-04-22</td>
       <td>0050.TW</td>
       <td>元大台灣50</td>
       <td>etf</td>
       <td>midlong_core</td>
-      <td>84.55</td>
-      <td>0.48</td>
-      <td>4.90</td>
-      <td>14.33</td>
-      <td>11.25</td>
-      <td>95994589</td>
-      <td>118485265</td>
-      <td>0.81</td>
-      <td>78.16</td>
-      <td>75.81</td>
-      <td>69.27</td>
-      <td>-0.53</td>
-      <td>8.18</td>
-      <td>4</td>
+      <td>86.60</td>
+      <td>2.42</td>
+      <td>4.21</td>
+      <td>15.01</td>
+      <td>14.10</td>
+      <td>37736196</td>
+      <td>117008823</td>
+      <td>0.32</td>
+      <td>78.69</td>
+      <td>76.09</td>
+      <td>69.47</td>
+      <td>0.00</td>
+      <td>10.05</td>
+      <td>5</td>
       <td>2</td>
       <td>TREND</td>
       <td>開始轉強</td>
       <td>中段延續中</td>
       <td>0</td>
       <td>正常</td>
+      <td>2.07</td>
+      <td>標準</td>
       <td>X</td>
       <td>0</td>
+      <td>1</td>
       <td>0</td>
-      <td>0</td>
-      <td>FLAT</td>
+      <td>UP</td>
       <td>續抱</td>
-      <td>2.73</td>
+      <td>4.21</td>
       <td>近期有效</td>
+      <td>7.69</td>
+    </tr>
+    <tr>
+      <td>36</td>
+      <td>2026-04-22</td>
+      <td>0052.TW</td>
+      <td>富邦科技</td>
+      <td>etf</td>
+      <td>midlong_core</td>
+      <td>50.25</td>
+      <td>2.13</td>
+      <td>4.37</td>
+      <td>15.59</td>
+      <td>13.75</td>
+      <td>21835770</td>
+      <td>45022825</td>
+      <td>0.48</td>
+      <td>45.59</td>
+      <td>44.13</td>
+      <td>75.47</td>
+      <td>-80.29</td>
+      <td>10.23</td>
+      <td>5</td>
+      <td>1</td>
+      <td>TREND,PULLBACK</td>
+      <td>開始轉強</td>
+      <td>中段延續中</td>
+      <td>0</td>
+      <td>正常</td>
+      <td>2.13</td>
+      <td>標準</td>
+      <td>X</td>
+      <td>4</td>
+      <td>2</td>
+      <td>0</td>
+      <td>UP</td>
+      <td>續抱</td>
+      <td>4.21</td>
+      <td>近期有效</td>
+      <td>7.69</td>
+    </tr>
+    <tr>
+      <td>15</td>
+      <td>2026-04-22</td>
+      <td>3014.TW</td>
+      <td>聯陽</td>
+      <td>satellite</td>
+      <td>midlong_core</td>
+      <td>127.50</td>
+      <td>2.82</td>
+      <td>5.37</td>
+      <td>8.05</td>
+      <td>10.39</td>
+      <td>1394202</td>
+      <td>758259</td>
+      <td>1.84</td>
+      <td>119.10</td>
+      <td>119.14</td>
+      <td>119.96</td>
+      <td>-5.20</td>
+      <td>7.05</td>
+      <td>11</td>
+      <td>1</td>
+      <td>NONE</td>
+      <td>進攻優勢區</td>
+      <td>還在觀察</td>
+      <td>1</td>
+      <td>正常</td>
+      <td>1.60</td>
+      <td>穩健</td>
+      <td>B</td>
+      <td>12</td>
+      <td>4</td>
+      <td>1</td>
+      <td>UP</td>
+      <td>可分批</td>
+      <td>-0.03</td>
+      <td>中性</td>
+      <td>8.42</td>
     </tr>
   </tbody>
 </table>
@@ -2086,6 +2299,8 @@ th { background: #f4f4f4; }
       <th>regime</th>
       <th>spec_risk_score</th>
       <th>spec_risk_label</th>
+      <th>atr_pct</th>
+      <th>volatility_tag</th>
       <th>grade</th>
       <th>rank_change</th>
       <th>setup_change</th>
@@ -2094,188 +2309,204 @@ th { background: #f4f4f4; }
       <th>action_label</th>
       <th>feedback_score</th>
       <th>feedback_label</th>
+      <th>feedback_pl_ratio</th>
     </tr>
   </thead>
   <tbody>
     <tr>
       <td>20</td>
-      <td>2026-04-21</td>
+      <td>2026-04-22</td>
       <td>5274.TWO</td>
       <td>信驊</td>
       <td>satellite</td>
       <td>midlong_core</td>
-      <td>15245.00</td>
-      <td>5.68</td>
-      <td>17.22</td>
-      <td>32.91</td>
-      <td>29.74</td>
-      <td>339371</td>
-      <td>287670</td>
-      <td>1.18</td>
-      <td>12407.50</td>
-      <td>10496.67</td>
-      <td>8448.88</td>
+      <td>15915.00</td>
+      <td>4.39</td>
+      <td>14.70</td>
+      <td>26.16</td>
+      <td>38.81</td>
+      <td>198880</td>
+      <td>289546</td>
+      <td>0.69</td>
+      <td>12630.00</td>
+      <td>10627.17</td>
+      <td>8534.62</td>
       <td>0.00</td>
-      <td>22.87</td>
-      <td>8</td>
-      <td>3</td>
+      <td>26.01</td>
+      <td>9</td>
+      <td>5</td>
       <td>TREND</td>
       <td>進攻優勢區</td>
       <td>中段延續中</td>
-      <td>3</td>
+      <td>4</td>
       <td>投機偏高</td>
-      <td>B</td>
+      <td>5.98</td>
+      <td>活潑</td>
+      <td>X</td>
       <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>FLAT</td>
+      <td>1</td>
+      <td>2</td>
+      <td>UP</td>
       <td>分批落袋</td>
-      <td>2.73</td>
+      <td>3.0</td>
       <td>近期有效</td>
-    </tr>
-    <tr>
-      <td>30</td>
-      <td>2026-04-21</td>
-      <td>2886.TW</td>
-      <td>兆豐金</td>
-      <td>core</td>
-      <td>midlong_core</td>
-      <td>39.45</td>
-      <td>-0.75</td>
-      <td>0.25</td>
-      <td>0.13</td>
-      <td>1.81</td>
-      <td>33846561</td>
-      <td>24432069</td>
-      <td>1.39</td>
-      <td>39.25</td>
-      <td>39.51</td>
-      <td>40.01</td>
-      <td>-5.62</td>
-      <td>0.51</td>
-      <td>6</td>
-      <td>0</td>
-      <td>NONE</td>
-      <td>偏強可追蹤</td>
-      <td>還在觀察</td>
-      <td>0</td>
-      <td>正常</td>
-      <td>B</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>FLAT</td>
-      <td>觀察</td>
-      <td>2.73</td>
-      <td>近期有效</td>
-    </tr>
-    <tr>
-      <td>33</td>
-      <td>2026-04-21</td>
-      <td>2884.TW</td>
-      <td>玉山金</td>
-      <td>core</td>
-      <td>midlong_core</td>
-      <td>32.95</td>
-      <td>0.30</td>
-      <td>0.76</td>
-      <td>1.70</td>
-      <td>3.62</td>
-      <td>38161539</td>
-      <td>26860929</td>
-      <td>1.42</td>
-      <td>32.32</td>
-      <td>33.09</td>
-      <td>32.36</td>
-      <td>-6.13</td>
-      <td>1.93</td>
-      <td>5</td>
-      <td>0</td>
-      <td>NONE</td>
-      <td>開始轉強</td>
-      <td>還在觀察</td>
-      <td>0</td>
-      <td>正常</td>
-      <td>B</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>FLAT</td>
-      <td>觀察</td>
-      <td>2.73</td>
-      <td>近期有效</td>
+      <td>25.43</td>
     </tr>
     <tr>
       <td>22</td>
-      <td>2026-04-21</td>
-      <td>3711.TW</td>
-      <td>日月光投控</td>
-      <td>core</td>
-      <td>midlong_core</td>
-      <td>472.00</td>
-      <td>2.28</td>
-      <td>11.32</td>
-      <td>34.09</td>
-      <td>37.21</td>
-      <td>17256547</td>
-      <td>19565641</td>
-      <td>0.88</td>
-      <td>388.23</td>
-      <td>347.80</td>
-      <td>290.12</td>
-      <td>0.00</td>
-      <td>21.58</td>
-      <td>8</td>
-      <td>5</td>
-      <td>TREND</td>
-      <td>進攻優勢區</td>
-      <td>中段延續中</td>
-      <td>3</td>
-      <td>投機偏高</td>
-      <td>X</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>FLAT</td>
-      <td>分批落袋</td>
-      <td>2.73</td>
-      <td>近期有效</td>
-    </tr>
-    <tr>
-      <td>21</td>
-      <td>2026-04-21</td>
+      <td>2026-04-22</td>
       <td>2308.TW</td>
       <td>台達電</td>
       <td>core</td>
       <td>midlong_core</td>
-      <td>2015.00</td>
-      <td>6.05</td>
-      <td>15.14</td>
-      <td>33.00</td>
-      <td>36.61</td>
-      <td>8888821</td>
-      <td>11103964</td>
-      <td>0.80</td>
-      <td>1630.25</td>
-      <td>1393.08</td>
-      <td>1182.07</td>
+      <td>2030.00</td>
+      <td>0.74</td>
+      <td>13.73</td>
+      <td>21.92</td>
+      <td>43.97</td>
+      <td>6387782</td>
+      <td>10778928</td>
+      <td>0.59</td>
+      <td>1661.25</td>
+      <td>1409.25</td>
+      <td>1190.66</td>
       <td>0.00</td>
-      <td>23.60</td>
+      <td>22.20</td>
       <td>8</td>
       <td>5</td>
       <td>TREND</td>
       <td>進攻優勢區</td>
       <td>中段延續中</td>
-      <td>5</td>
+      <td>3</td>
       <td>投機偏高</td>
+      <td>4.42</td>
+      <td>活潑</td>
       <td>X</td>
+      <td>-1</td>
       <td>0</td>
       <td>0</td>
-      <td>0</td>
-      <td>FLAT</td>
+      <td>DOWN</td>
       <td>分批落袋</td>
-      <td>2.73</td>
+      <td>3.0</td>
       <td>近期有效</td>
+      <td>25.43</td>
+    </tr>
+    <tr>
+      <td>30</td>
+      <td>2026-04-22</td>
+      <td>3711.TW</td>
+      <td>日月光投控</td>
+      <td>core</td>
+      <td>midlong_core</td>
+      <td>468.00</td>
+      <td>-0.85</td>
+      <td>4.82</td>
+      <td>22.19</td>
+      <td>42.03</td>
+      <td>7723677</td>
+      <td>19199133</td>
+      <td>0.40</td>
+      <td>395.15</td>
+      <td>350.69</td>
+      <td>292.39</td>
+      <td>-0.85</td>
+      <td>18.44</td>
+      <td>7</td>
+      <td>5</td>
+      <td>TREND</td>
+      <td>偏強可追蹤</td>
+      <td>中段延續中</td>
+      <td>3</td>
+      <td>投機偏高</td>
+      <td>4.87</td>
+      <td>活潑</td>
+      <td>X</td>
+      <td>-8</td>
+      <td>-1</td>
+      <td>0</td>
+      <td>DOWN</td>
+      <td>分批落袋</td>
+      <td>3.0</td>
+      <td>近期有效</td>
+      <td>25.43</td>
+    </tr>
+    <tr>
+      <td>34</td>
+      <td>2026-04-22</td>
+      <td>00772B.TWO</td>
+      <td>中信高評級公司債</td>
+      <td>etf</td>
+      <td>defensive_watch</td>
+      <td>33.94</td>
+      <td>-0.21</td>
+      <td>-0.67</td>
+      <td>-0.93</td>
+      <td>1.79</td>
+      <td>888061</td>
+      <td>3090903</td>
+      <td>0.29</td>
+      <td>33.89</td>
+      <td>33.90</td>
+      <td>33.68</td>
+      <td>-1.21</td>
+      <td>0.15</td>
+      <td>6</td>
+      <td>1</td>
+      <td>BASE</td>
+      <td>偏強可追蹤</td>
+      <td>低檔慢慢墊高</td>
+      <td>0</td>
+      <td>正常</td>
+      <td>0.54</td>
+      <td>穩健</td>
+      <td>X</td>
+      <td>-3</td>
+      <td>0</td>
+      <td>0</td>
+      <td>DOWN</td>
+      <td>觀察</td>
+      <td>3.0</td>
+      <td>近期有效</td>
+      <td>25.43</td>
+    </tr>
+    <tr>
+      <td>42</td>
+      <td>2026-04-22</td>
+      <td>00773B.TWO</td>
+      <td>中信優先金融債</td>
+      <td>etf</td>
+      <td>defensive_watch</td>
+      <td>35.91</td>
+      <td>-0.31</td>
+      <td>-0.62</td>
+      <td>-0.92</td>
+      <td>1.39</td>
+      <td>492304</td>
+      <td>1271415</td>
+      <td>0.39</td>
+      <td>35.89</td>
+      <td>36.11</td>
+      <td>35.95</td>
+      <td>-2.11</td>
+      <td>0.07</td>
+      <td>4</td>
+      <td>1</td>
+      <td>BASE</td>
+      <td>開始轉強</td>
+      <td>低檔慢慢墊高</td>
+      <td>0</td>
+      <td>正常</td>
+      <td>0.50</td>
+      <td>穩健</td>
+      <td>X</td>
+      <td>-3</td>
+      <td>0</td>
+      <td>0</td>
+      <td>DOWN</td>
+      <td>觀察</td>
+      <td>3.0</td>
+      <td>近期有效</td>
+      <td>25.43</td>
     </tr>
   </tbody>
 </table>
@@ -2308,6 +2539,8 @@ th { background: #f4f4f4; }
       <th>regime</th>
       <th>spec_risk_score</th>
       <th>spec_risk_label</th>
+      <th>atr_pct</th>
+      <th>volatility_tag</th>
       <th>grade</th>
       <th>rank_change</th>
       <th>setup_change</th>
@@ -2317,25 +2550,25 @@ th { background: #f4f4f4; }
   </thead>
   <tbody>
     <tr>
-      <td>31</td>
-      <td>2026-04-21</td>
+      <td>34</td>
+      <td>2026-04-22</td>
       <td>00772B.TWO</td>
       <td>中信高評級公司債</td>
       <td>etf</td>
       <td>defensive_watch</td>
-      <td>34.01</td>
-      <td>0.32</td>
-      <td>-0.14</td>
-      <td>-0.03</td>
-      <td>0.38</td>
-      <td>2314000</td>
-      <td>3250100</td>
-      <td>0.71</td>
-      <td>33.86</td>
+      <td>33.94</td>
+      <td>-0.21</td>
+      <td>-0.67</td>
+      <td>-0.93</td>
+      <td>1.79</td>
+      <td>888061</td>
+      <td>3090903</td>
+      <td>0.29</td>
+      <td>33.89</td>
       <td>33.90</td>
       <td>33.68</td>
-      <td>-1.00</td>
-      <td>0.44</td>
+      <td>-1.21</td>
+      <td>0.15</td>
       <td>6</td>
       <td>1</td>
       <td>BASE</td>
@@ -2343,32 +2576,34 @@ th { background: #f4f4f4; }
       <td>低檔慢慢墊高</td>
       <td>0</td>
       <td>正常</td>
+      <td>0.54</td>
+      <td>穩健</td>
       <td>X</td>
+      <td>-3</td>
       <td>0</td>
       <td>0</td>
-      <td>0</td>
-      <td>FLAT</td>
+      <td>DOWN</td>
     </tr>
     <tr>
-      <td>39</td>
-      <td>2026-04-21</td>
+      <td>42</td>
+      <td>2026-04-22</td>
       <td>00773B.TWO</td>
       <td>中信優先金融債</td>
       <td>etf</td>
       <td>defensive_watch</td>
-      <td>36.02</td>
-      <td>0.36</td>
-      <td>-0.04</td>
-      <td>0.02</td>
-      <td>0.10</td>
-      <td>882000</td>
-      <td>1373600</td>
-      <td>0.64</td>
-      <td>35.86</td>
+      <td>35.91</td>
+      <td>-0.31</td>
+      <td>-0.62</td>
+      <td>-0.92</td>
+      <td>1.39</td>
+      <td>492304</td>
+      <td>1271415</td>
+      <td>0.39</td>
+      <td>35.89</td>
       <td>36.11</td>
-      <td>35.94</td>
-      <td>-1.81</td>
-      <td>0.44</td>
+      <td>35.95</td>
+      <td>-2.11</td>
+      <td>0.07</td>
       <td>4</td>
       <td>1</td>
       <td>BASE</td>
@@ -2376,77 +2611,83 @@ th { background: #f4f4f4; }
       <td>低檔慢慢墊高</td>
       <td>0</td>
       <td>正常</td>
+      <td>0.50</td>
+      <td>穩健</td>
       <td>X</td>
+      <td>-3</td>
       <td>0</td>
       <td>0</td>
-      <td>0</td>
-      <td>FLAT</td>
+      <td>DOWN</td>
     </tr>
     <tr>
       <td>37</td>
-      <td>2026-04-20</td>
+      <td>2026-04-22</td>
       <td>0050.TW</td>
       <td>元大台灣50</td>
       <td>etf</td>
       <td>midlong_core</td>
-      <td>84.55</td>
-      <td>0.48</td>
-      <td>4.90</td>
-      <td>14.33</td>
-      <td>11.25</td>
-      <td>95994589</td>
-      <td>118485265</td>
-      <td>0.81</td>
-      <td>78.16</td>
-      <td>75.81</td>
-      <td>69.27</td>
-      <td>-0.53</td>
-      <td>8.18</td>
-      <td>4</td>
+      <td>86.60</td>
+      <td>2.42</td>
+      <td>4.21</td>
+      <td>15.01</td>
+      <td>14.10</td>
+      <td>37736196</td>
+      <td>117008823</td>
+      <td>0.32</td>
+      <td>78.69</td>
+      <td>76.09</td>
+      <td>69.47</td>
+      <td>0.00</td>
+      <td>10.05</td>
+      <td>5</td>
       <td>2</td>
       <td>TREND</td>
       <td>開始轉強</td>
       <td>中段延續中</td>
       <td>0</td>
       <td>正常</td>
+      <td>2.07</td>
+      <td>標準</td>
       <td>X</td>
       <td>0</td>
+      <td>1</td>
       <td>0</td>
-      <td>0</td>
-      <td>FLAT</td>
+      <td>UP</td>
     </tr>
     <tr>
-      <td>26</td>
-      <td>2026-04-20</td>
+      <td>31</td>
+      <td>2026-04-22</td>
       <td>00878.TW</td>
       <td>國泰永續高股息</td>
       <td>etf</td>
       <td>midlong_core</td>
-      <td>24.51</td>
-      <td>1.87</td>
-      <td>6.52</td>
-      <td>11.26</td>
-      <td>9.08</td>
-      <td>131212324</td>
-      <td>66085359</td>
-      <td>1.99</td>
-      <td>22.76</td>
-      <td>22.64</td>
-      <td>21.74</td>
+      <td>25.09</td>
+      <td>2.37</td>
+      <td>8.15</td>
+      <td>12.51</td>
+      <td>11.66</td>
+      <td>66545365</td>
+      <td>67412818</td>
+      <td>0.99</td>
+      <td>22.89</td>
+      <td>22.69</td>
+      <td>21.78</td>
       <td>0.00</td>
-      <td>7.67</td>
-      <td>7</td>
+      <td>9.59</td>
+      <td>6</td>
       <td>2</td>
       <td>TREND</td>
       <td>偏強可追蹤</td>
       <td>中段延續中</td>
       <td>0</td>
       <td>正常</td>
+      <td>1.51</td>
+      <td>穩健</td>
       <td>B</td>
+      <td>-5</td>
+      <td>-1</td>
       <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>FLAT</td>
+      <td>DOWN</td>
     </tr>
   </tbody>
 </table>
@@ -2479,6 +2720,8 @@ th { background: #f4f4f4; }
       <th>regime</th>
       <th>spec_risk_score</th>
       <th>spec_risk_label</th>
+      <th>atr_pct</th>
+      <th>volatility_tag</th>
       <th>grade</th>
       <th>rank_change</th>
       <th>setup_change</th>
@@ -2488,103 +2731,74 @@ th { background: #f4f4f4; }
   </thead>
   <tbody>
     <tr>
-      <td>10</td>
-      <td>2026-04-21</td>
-      <td>2356.TW</td>
-      <td>英業達</td>
+      <td>24</td>
+      <td>2026-04-22</td>
+      <td>3019.TW</td>
+      <td>亞光</td>
       <td>theme</td>
       <td>short_attack</td>
-      <td>47.35</td>
-      <td>1.61</td>
-      <td>6.17</td>
-      <td>15.91</td>
-      <td>10.63</td>
-      <td>29328827</td>
-      <td>18654963</td>
-      <td>1.57</td>
-      <td>43.32</td>
-      <td>43.99</td>
-      <td>43.86</td>
-      <td>-7.52</td>
-      <td>9.30</td>
-      <td>12</td>
+      <td>133.0</td>
+      <td>1.92</td>
+      <td>4.72</td>
+      <td>5.56</td>
+      <td>5.98</td>
+      <td>2102313</td>
+      <td>2137610</td>
+      <td>0.98</td>
+      <td>126.40</td>
+      <td>137.71</td>
+      <td>139.44</td>
+      <td>-18.65</td>
+      <td>5.22</td>
+      <td>8</td>
+      <td>0</td>
+      <td>BASE</td>
+      <td>進攻優勢區</td>
+      <td>低檔慢慢墊高</td>
+      <td>0</td>
+      <td>正常</td>
+      <td>3.01</td>
+      <td>標準</td>
+      <td>X</td>
+      <td>5</td>
       <td>1</td>
-      <td>ACCEL</td>
-      <td>進攻優勢區</td>
-      <td>轉強速度有出來</td>
       <td>0</td>
-      <td>正常</td>
-      <td>A</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>FLAT</td>
+      <td>UP</td>
     </tr>
     <tr>
-      <td>18</td>
-      <td>2026-04-21</td>
-      <td>3013.TW</td>
-      <td>晟銘電</td>
+      <td>33</td>
+      <td>2026-04-22</td>
+      <td>3057.TW</td>
+      <td>喬鼎</td>
       <td>theme</td>
       <td>short_attack</td>
-      <td>110.00</td>
-      <td>-1.79</td>
-      <td>6.28</td>
-      <td>12.82</td>
-      <td>10.11</td>
-      <td>4400255</td>
-      <td>3489466</td>
-      <td>1.26</td>
-      <td>102.40</td>
-      <td>106.73</td>
-      <td>117.61</td>
-      <td>-21.43</td>
-      <td>7.42</td>
-      <td>9</td>
-      <td>0</td>
-      <td>ACCEL,PULLBACK</td>
-      <td>進攻優勢區</td>
-      <td>轉強速度有出來</td>
-      <td>0</td>
-      <td>正常</td>
-      <td>A</td>
-      <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>FLAT</td>
-    </tr>
-    <tr>
-      <td>37</td>
-      <td>2026-04-20</td>
-      <td>0050.TW</td>
-      <td>元大台灣50</td>
-      <td>etf</td>
-      <td>midlong_core</td>
-      <td>84.55</td>
-      <td>0.48</td>
-      <td>4.90</td>
-      <td>14.33</td>
-      <td>11.25</td>
-      <td>95994589</td>
-      <td>118485265</td>
-      <td>0.81</td>
-      <td>78.16</td>
-      <td>75.81</td>
-      <td>69.27</td>
-      <td>-0.53</td>
-      <td>8.18</td>
-      <td>4</td>
-      <td>2</td>
-      <td>TREND</td>
-      <td>開始轉強</td>
+      <td>19.1</td>
+      <td>2.41</td>
+      <td>0.53</td>
+      <td>19.00</td>
+      <td>11.70</td>
+      <td>305982</td>
+      <td>302909</td>
+      <td>1.01</td>
+      <td>17.06</td>
+      <td>16.92</td>
+      <td>16.56</td>
+      <td>-20.08</td>
+      <td>11.92</td>
+      <td>6</td>
+      <td>1</td>
+      <td>TREND,PULLBACK</td>
+      <td>偏強可追蹤</td>
       <td>中段延續中</td>
       <td>0</td>
       <td>正常</td>
+      <td>4.96</td>
+      <td>活潑</td>
       <td>X</td>
+      <td>3</td>
+      <td>1</td>
       <td>0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>FLAT</td>
+      <td>UP</td>
     </tr>
   </tbody>
 </table>
@@ -2596,6 +2810,9 @@ th { background: #f4f4f4; }
       <th>samples</th>
       <th>win_rate_pct</th>
       <th>avg_return_pct</th>
+      <th>avg_win_return_pct</th>
+      <th>avg_loss_return_pct</th>
+      <th>pl_ratio</th>
       <th>feedback_score</th>
       <th>feedback_label</th>
     </tr>
@@ -2604,19 +2821,25 @@ th { background: #f4f4f4; }
     <tr>
       <td>short</td>
       <td>__all__</td>
-      <td>40</td>
-      <td>77.50</td>
-      <td>5.47</td>
-      <td>3.84</td>
+      <td>44</td>
+      <td>84.09</td>
+      <td>9.04</td>
+      <td>10.85</td>
+      <td>-0.49</td>
+      <td>118.05</td>
+      <td>5.22</td>
       <td>近期有效</td>
     </tr>
     <tr>
       <td>short</td>
       <td>nan</td>
       <td>30</td>
-      <td>70.00</td>
-      <td>6.32</td>
-      <td>3.26</td>
+      <td>76.67</td>
+      <td>11.58</td>
+      <td>15.26</td>
+      <td>-0.49</td>
+      <td>103.21</td>
+      <td>4.98</td>
       <td>近期有效</td>
     </tr>
     <tr>
@@ -2625,56 +2848,75 @@ th { background: #f4f4f4; }
       <td>3</td>
       <td>100.00</td>
       <td>2.99</td>
+      <td>2.99</td>
+      <td>0.00</td>
+      <td>8.98</td>
       <td>2.10</td>
       <td>近期有效</td>
     </tr>
     <tr>
       <td>short</td>
       <td>等拉回</td>
-      <td>7</td>
+      <td>11</td>
       <td>100.00</td>
-      <td>2.87</td>
-      <td>4.88</td>
+      <td>3.77</td>
+      <td>3.77</td>
+      <td>0.00</td>
+      <td>41.47</td>
+      <td>5.75</td>
       <td>近期有效</td>
     </tr>
     <tr>
       <td>midlong</td>
       <td>__all__</td>
-      <td>50</td>
-      <td>68.00</td>
-      <td>4.67</td>
-      <td>2.73</td>
+      <td>55</td>
+      <td>69.09</td>
+      <td>5.46</td>
+      <td>8.22</td>
+      <td>-0.72</td>
+      <td>25.43</td>
+      <td>3.00</td>
       <td>近期有效</td>
     </tr>
     <tr>
       <td>midlong</td>
       <td>nan</td>
       <td>33</td>
-      <td>69.70</td>
-      <td>6.08</td>
-      <td>3.19</td>
+      <td>72.73</td>
+      <td>7.96</td>
+      <td>11.24</td>
+      <td>-0.78</td>
+      <td>38.42</td>
+      <td>3.87</td>
       <td>近期有效</td>
     </tr>
     <tr>
       <td>midlong</td>
       <td>可分批</td>
-      <td>11</td>
-      <td>54.55</td>
-      <td>2.15</td>
-      <td>0.88</td>
+      <td>13</td>
+      <td>46.15</td>
+      <td>1.78</td>
+      <td>4.37</td>
+      <td>-0.44</td>
+      <td>8.42</td>
+      <td>-0.03</td>
       <td>中性</td>
     </tr>
     <tr>
       <td>midlong</td>
       <td>續抱</td>
-      <td>6</td>
-      <td>83.33</td>
-      <td>1.53</td>
-      <td>2.73</td>
+      <td>9</td>
+      <td>88.89</td>
+      <td>1.60</td>
+      <td>2.08</td>
+      <td>-2.16</td>
+      <td>7.69</td>
+      <td>4.21</td>
       <td>近期有效</td>
     </tr>
   </tbody>
 </table>
+<h2>Adaptive Strategy Adjustments</h2><p>情境：明顯修正盤 | 目前節奏：先保守<br>- rebreak 量比: 1.35 → 1.45<br>- trend 20D: 0.08 → 0.09<br>- accel 5D: 0.08 → 0.09<br>- accel 10D: 0.12 → 0.14<br>- accel 快速量比: 1.30 → 1.45<br>- accel 緩速量比: 1.20 → 1.30</p>
 <h2>Steady Backtest</h2><table class="dataframe">
   <thead>
     <tr style="text-align: center;">
@@ -2688,24 +2930,24 @@ th { background: #f4f4f4; }
   <tbody>
     <tr>
       <td>1</td>
-      <td>28768</td>
-      <td>47.70</td>
+      <td>28759</td>
+      <td>47.67</td>
       <td>0.12</td>
       <td>0.00</td>
     </tr>
     <tr>
       <td>5</td>
-      <td>28768</td>
+      <td>28759</td>
       <td>51.68</td>
       <td>0.62</td>
       <td>0.22</td>
     </tr>
     <tr>
       <td>20</td>
-      <td>28768</td>
-      <td>55.92</td>
-      <td>2.54</td>
-      <td>0.95</td>
+      <td>28759</td>
+      <td>55.95</td>
+      <td>2.55</td>
+      <td>0.96</td>
     </tr>
   </tbody>
 </table>
@@ -2722,24 +2964,24 @@ th { background: #f4f4f4; }
   <tbody>
     <tr>
       <td>1</td>
-      <td>2034</td>
-      <td>44.84</td>
-      <td>0.30</td>
-      <td>-0.28</td>
+      <td>2038</td>
+      <td>44.75</td>
+      <td>0.29</td>
+      <td>-0.29</td>
     </tr>
     <tr>
       <td>5</td>
-      <td>2034</td>
-      <td>49.95</td>
-      <td>1.39</td>
+      <td>2038</td>
+      <td>49.85</td>
+      <td>1.38</td>
       <td>0.00</td>
     </tr>
     <tr>
       <td>20</td>
-      <td>2034</td>
-      <td>56.88</td>
-      <td>5.47</td>
-      <td>2.20</td>
+      <td>2038</td>
+      <td>56.97</td>
+      <td>5.52</td>
+      <td>2.22</td>
     </tr>
   </tbody>
 </table>
