@@ -94,6 +94,47 @@ class DetectRowTests(unittest.TestCase):
         self.assertGreater(adjusted.accel_vol_ratio_fast, CONFIG.strategy.accel_vol_ratio_fast)
 
 
+class MarketRegimeTests(unittest.TestCase):
+    def test_get_market_regime_treats_zero_volume_ratio_as_neutral(self) -> None:
+        dates = pd.date_range("2025-01-01", periods=260, freq="B")
+        closes = [100.0] * 240 + [101.0 + i for i in range(20)]
+        volumes = [1000.0] * 259 + [0.0]
+        df = pd.DataFrame(
+            {
+                "Open": closes,
+                "High": [c + 1 for c in closes],
+                "Low": [c - 1 for c in closes],
+                "Close": closes,
+                "Volume": volumes,
+            },
+            index=dates,
+        )
+
+        with patch("daily_theme_watchlist.yf_download_one", return_value=df), patch.object(
+            dtw, "market_session_phase", return_value="postclose"
+        ):
+            regime = dtw.get_market_regime()
+
+        self.assertTrue(regime["is_bullish"])
+        self.assertFalse(regime["volume_ratio20_valid"])
+        self.assertEqual(regime["volume_ratio20"], 1.0)
+        self.assertIn("量比資料異常", regime["comment"])
+
+    def test_build_market_scenario_uses_intraday_guard_before_close(self) -> None:
+        market_regime = {
+            "comment": "加權指數盤中偏弱",
+            "ret20_pct": 2.0,
+            "volume_ratio20": 0.9,
+            "is_bullish": False,
+            "session_phase": "intraday",
+        }
+        us_market = {"summary": "美股昨晚偏弱，台股早盤要提防開高走低或續殺。"}
+
+        scenario = dtw.build_market_scenario(market_regime, us_market, pd.DataFrame())
+
+        self.assertEqual(scenario["label"], "盤中保守觀察")
+
+
 class GradeSignalTests(unittest.TestCase):
     def test_grade_signal_returns_a_for_strong_accel_setup(self) -> None:
         row = {

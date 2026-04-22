@@ -811,7 +811,7 @@ def effective_short_top_n(
         return top_n
 
     scenario = build_market_scenario(market_regime, us_market, df_rank)
-    if str(scenario.get("label", "") or "") == "明顯修正盤":
+    if str(scenario.get("label", "") or "") in {"明顯修正盤", "盤中保守觀察"}:
         return min(top_n, int(CONFIG.scenario_policy.correction_short_top_n))
 
     heat_bias = heat_bias_message(df_rank, scenario)
@@ -830,7 +830,7 @@ def effective_midlong_top_n(
         return top_n
 
     scenario = build_market_scenario(market_regime, us_market, df_rank)
-    if str(scenario.get("label", "") or "") == "明顯修正盤":
+    if str(scenario.get("label", "") or "") in {"明顯修正盤", "盤中保守觀察"}:
         return min(top_n, int(CONFIG.scenario_policy.correction_midlong_top_n))
     return top_n
 
@@ -1228,6 +1228,16 @@ def save_last_success_date(success_date: str) -> None:
     )
 
 
+def market_session_phase(now_local: Optional[datetime] = None) -> str:
+    current = now_local or datetime.now(LOCAL_TZ)
+    minutes = current.hour * 60 + current.minute
+    if minutes < 9 * 60:
+        return "preopen"
+    if minutes < (13 * 60 + 35):
+        return "intraday"
+    return "postclose"
+
+
 def get_market_regime() -> dict:
     if not CONFIG.market_filter.enabled:
         return {"enabled": False, "is_bullish": True, "comment": "大盤濾網關掉"}
@@ -1238,7 +1248,10 @@ def get_market_regime() -> dict:
     close_ = float(x["Close"])
     ma = float(x[f"MA{CONFIG.market_filter.ma_period}"])
     ret20 = float(x["Ret20D"]) if pd.notna(x["Ret20D"]) else 0.0
-    vol_ratio = float(x["VolumeRatio20"]) if pd.notna(x["VolumeRatio20"]) else 1.0
+    raw_vol_ratio = float(x["VolumeRatio20"]) if pd.notna(x["VolumeRatio20"]) else float("nan")
+    vol_ratio_valid = pd.notna(raw_vol_ratio) and raw_vol_ratio > 0.05
+    vol_ratio = raw_vol_ratio if vol_ratio_valid else 1.0
+    session_phase = market_session_phase()
 
     is_bullish = (
         close_ >= ma
@@ -1253,6 +1266,9 @@ def get_market_regime() -> dict:
         "ma": round(ma, 2),
         "ret20_pct": round(ret20 * 100, 2),
         "volume_ratio20": round(vol_ratio, 2),
+        "volume_ratio20_raw": round(raw_vol_ratio, 2) if pd.notna(raw_vol_ratio) else None,
+        "volume_ratio20_valid": bool(vol_ratio_valid),
+        "session_phase": session_phase,
         "is_bullish": bool(is_bullish),
         "comment": (
             f"{CONFIG.market_filter.name}目前"
@@ -1260,6 +1276,7 @@ def get_market_regime() -> dict:
             f"收在 {round(close_,2)}，"
             f"20日漲幅 {round(ret20*100,2)}%，"
             f"量比 {round(vol_ratio,2)}。"
+            + (" 量比資料異常，這輪先按中性處理。" if not vol_ratio_valid else "")
         ),
     }
 
@@ -1325,6 +1342,7 @@ def build_market_scenario(market_regime: dict, us_market: dict, df_rank: Optiona
     ret20_pct = float(market_regime.get("ret20_pct", 0.0) or 0.0)
     volume_ratio20 = float(market_regime.get("volume_ratio20", 1.0) or 1.0)
     is_bullish = bool(market_regime.get("is_bullish", False))
+    session_phase = str(market_regime.get("session_phase", "postclose") or "postclose")
     us_summary = str(us_market.get("summary", ""))
     us_weak = ("偏弱" in us_summary) or ("續殺" in us_summary)
 
@@ -1354,7 +1372,16 @@ def build_market_scenario(market_regime: dict, us_market: dict, df_rank: Optiona
     hot_ratio = (hot_count / candidate_count) if candidate_count > 0 else 0.0
     strong_ratio = (strong_count / candidate_count) if candidate_count > 0 else 0.0
 
-    if not is_bullish or (ret20_pct <= 3 and us_weak):
+    correction_condition = (not is_bullish) or (ret20_pct <= 3 and us_weak)
+    if correction_condition and session_phase != "postclose":
+        return {
+            "label": "盤中保守觀察",
+            "stance": "先保守，等收盤定案",
+            "focus": "盤中先縮手，避免被即時波動或大盤欄位異常誤導；等收盤後再確認是否真轉修正盤。",
+            "exit_note": "盤中若持股轉弱先減碼，但不要只因盤中噪音就全面翻空。",
+        }
+
+    if correction_condition:
         return {
             "label": "明顯修正盤",
             "stance": "先保守",
@@ -1389,6 +1416,13 @@ def build_market_scenario(market_regime: dict, us_market: dict, df_rank: Optiona
 def subscriber_scenario_lines(scenario: dict) -> list[str]:
     label = str(scenario.get("label", "") or "")
 
+    if label == "盤中保守觀察":
+        return [
+            "今日盤勢：盤中保守觀察",
+            "今日策略：先保守，等收盤再定案。",
+            "白話說：盤中先縮手、少追高，但不要只因即時噪音就把整天當成修正盤。",
+        ]
+
     if label == "明顯修正盤":
         return [
             "今日盤勢：明顯修正盤",
@@ -1422,6 +1456,11 @@ def subscriber_watchlist_lines(scenario: dict, watch_type: str, candidate_limit:
     title = "短線" if watch_type == "short" else "中長線"
 
     if watch_type == "short":
+        if label == "盤中保守觀察":
+            return [
+                f"今天{title}策略：先保守，暫時只看 {candidate_limit} 檔，等收盤再決定要不要放大。",
+                "白話提醒：盤中先縮手，不急著把每次拉回都當買點。",
+            ]
         if label == "明顯修正盤":
             return [
                 f"今天{title}策略：先縮手，最多看 {candidate_limit} 檔最清楚的標的。",
@@ -1442,6 +1481,11 @@ def subscriber_watchlist_lines(scenario: dict, watch_type: str, candidate_limit:
             "白話提醒：有行情可以做，但仍以分批進場取代追高。",
         ]
 
+    if label == "盤中保守觀察":
+        return [
+            f"今天{title}策略：先守結構，只留 {candidate_limit} 檔核心觀察，收盤後再定案。",
+            "白話提醒：盤中先保守，不急著把部位一次放大。",
+        ]
     if label == "明顯修正盤":
         return [
             f"今天{title}策略：偏保守，只留 {candidate_limit} 檔核心觀察。",
@@ -1467,7 +1511,7 @@ def adjust_strategy_by_scenario(base_strat: StrategyConfig, scenario: dict) -> S
     strat = replace(base_strat)
     label = str(scenario.get("label", "") or "")
 
-    if label == "明顯修正盤":
+    if label in {"明顯修正盤", "盤中保守觀察"}:
         strat.rebreak_vol_ratio += 0.10
         strat.trend_ret20 += 0.01
         strat.accel_ret5 += 0.01
