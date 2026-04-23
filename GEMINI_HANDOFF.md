@@ -53,5 +53,40 @@
 - **驗證程式**：本次分析所使用的原始腳本已存放在 **`testv`** 分支中的 `verification/research/analyze_midlong.py`。
 - **Action**：請 Codex 前往該分支 review 腳本邏輯，並評估是否將此分析切片整合至 `summarize_outcomes.py`。
 
+## 9. 2026-04-23 `testv` Re-check
+- 已重新檢查最新 `testv` tip：`5afec8b`
+- 這次 Gemini 在 `testv` 的最新更新，**主要是 roadmap / handoff 的整理**，不是新的 production-ready code
+- `testv` 最新想傳達的核心方向是：
+  - `Phase 1` 已足夠證明 heat bias 是主驅動
+  - 下一步應優先考慮 safety valve / 限流，而不是加大 aggressiveness
+  - `midlong threshold` 與 `heat bias` 的拆解仍是最重要研究題
+
+### 這次 `testv` 新結論，哪些已值得吸收
+- **Heat bias 主導，不要被短期 1D 漂亮結果誤導**
+  - `testv` handoff 明確強調：`midlong` 在 `normal` 盤的超額報酬很弱，這和 `main` 現在的 verification 結論一致
+- **下一步應偏向保護，而不是擴張**
+  - 若未來要往前推，優先順序應是：
+    - 先做 scenario / heat-aware safety valve
+    - 再談 feedback / ATR 的更深 integration
+- **5D / 20D 仍比 1D 更重要**
+  - `testv` 最新 handoff 也再次提醒：不要只因 `below_threshold` 的 1D 不差，就過早放寬 production threshold
+
+### 這次 `testv` 不該直接搬回來的部分
+- 不要直接回灌 `testv` 的整包 code
+- `testv` 目前相對 `main` 會回退掉多個已落地的 local / verification workflow：
+  - `run_local_daily.py`
+  - `run_local_doctor.py`
+  - `run_local_housekeeping.py`
+  - `run_weekly_review.py`
+  - `verification/run_daily_verification.py`
+  - `verification/feedback_weight_sensitivity.py`
+- `testv` 也會回退掉部分已確認有用的 guardrails，例如：
+  - `.TW / .TWO` fallback
+  - `盤中保守觀察` 分流
+  - 同日 snapshot safe rerun 的主線流程配套
+
+### 給 Gemini / 後續 agent 的一句話
+`testv` 最新狀態最有價值的是「研究結論與優先順序」，不是 branch 上的 code 本身。若要吸收，請以 `main` 現有 workflow 為基底重做，而不是倒回 `testv`。
+
 ---
-*本文件依照 GEMINI_HANDOFF_TEMPLATE.md 格式撰寫，為 2026-04-23 決策脈絡。*
+*本文件整合遠端最新 threshold 分析與 2026-04-23 `testv` re-check，供後續 agent 接手。*

@@ -107,3 +107,67 @@
 ## 7) 一句話結論
 
 `testv` 現在最有價值的是設計方向與研究脈絡，不是可直接回灌的 production code。
+
+## 8) 2026-04-23 最新 `testv` branch 判讀
+
+這次重新檢查 `testv` 最新 tip（`5afec8b`）後，判斷如下：
+
+- 最新 commit **主要是文件整理**
+  - `ADAPTIVE_ENGINE_PLAN.md`
+  - `CODEX_HANDOFF.md`
+- 真正有策略層動作的是前一個 `1877619`
+- 但整體 branch 相對 `main` 仍偏舊，會回退多個已經在 `main` 上穩定運作的 local / verification 工具
+
+所以：
+
+- **可以吸收結論**
+- **不要直接 merge code**
+
+## 9) 目前仍值得 cherry-pick 的極小清單
+
+注意：這裡的「cherry-pick」比較接近「吸收想法 / 小塊整理」，不是直接搬整個 commit。
+
+### A. 可直接吸收的文件結論
+
+1. **Phase 1 的優先順序敘述**
+   - `heat bias` 已被量化證明是主因
+   - 下一步要先做保護，不是先做更激進的 adaptive 擴張
+
+2. **對 `midlong threshold` 的研究 framing**
+   - 問題不是「要不要立刻放寬」
+   - 而是先拆清楚：
+     - heat bias
+     - scenario
+     - action mix
+     - date concentration
+
+3. **對 5D / 20D 判讀權重的提醒**
+   - `1D` 可以當早期觀察
+   - 真正的 threshold 校準仍應以 `5D / 20D` 為主
+
+### B. 可在 `main` 上另做的新需求
+
+1. **Scenario / Heat safety valve**
+   - 不是直接搬 `testv` code
+   - 而是在 `main` 上設計一個更保守的版本：
+     - 只限流
+     - 不重寫主排序
+     - 必須先有 verification 支持
+
+2. **`portfolio_check.py` 的研究版 scenario-aware 收斂提醒**
+   - 先做提示 / report
+   - 不要直接做全自動 exit 執行
+
+## 10) 目前不值得 cherry-pick 的東西
+
+這次重新檢查後，下面這些仍然是 **不要動**：
+
+- `testv` 的整包 `daily_theme_watchlist.py`
+- `testv` 的整包 `verification/summarize_outcomes.py`
+- `testv` 的整包 `verification/backfill_from_git.py`
+- `testv` 對 local workflow 的刪減版本
+- `testv` 裡把 runtime notification 又加回 `觸發來源：Manual` 的方向
+
+## 11) 最新一句話結論
+
+`testv` 最新更新值得吸收的是：「先保護、先驗證、先拆 heat bias 與 threshold」，不是 branch 上那份已經落後於 `main` 的實作。

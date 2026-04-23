@@ -1127,3 +1127,52 @@ requirements.txt
 ### 給之後維護者的一句話
 
 今天之後，Gemini 的價值已不再只是「設計想法」，而是已經有一套可以安全重跑、持續累積、可量化驗證的 verification workflow；但主線策略本身仍應維持保守，不要因短期熱盤結果而過早放寬門檻。
+
+## 2026-04-23 補充：重新檢查 `testv` 最新 Gemini 更新
+
+今天又重新檢查了一次 `testv` branch，確認 Gemini 說的更新已經推上去。
+
+### 目前 branch 狀態
+
+- `testv` 最新 tip：`5afec8b`
+- 這次最新 commit 主要更新的是：
+  - `ADAPTIVE_ENGINE_PLAN.md`
+  - `CODEX_HANDOFF.md`
+- 不是新的 production-ready code merge
+
+### 這次重新確認後的結論
+
+1. **Gemini 在 `testv` 最新強調的方向，和 `main` 現在的 verification 結論一致**
+   - heat bias 仍是主驅動
+   - `midlong threshold` 仍是下一步最值得研究的題目
+   - 不應因短期 1D 表現就過早放寬 threshold
+
+2. **`testv` 的 branch code 目前仍不適合直接回灌 `main`**
+   - 會回退 local workflow：
+     - `run_local_daily.py`
+     - `run_local_doctor.py`
+     - `run_local_housekeeping.py`
+     - `run_weekly_review.py`
+   - 也會回退部分 verification 能力與 guardrails
+
+3. **真正值得吸收的是文件裡的「優先順序」**
+   - 先保護，再優化
+   - 先驗證，再放大 adaptive 權重
+   - 先拆 heat bias / threshold，再談大規模 scenario policy
+
+### 這次已同步到 `main` 的整理
+
+- `GEMINI_HANDOFF.md`
+  - 補了最新 `testv` re-check 的判讀
+- `TESTV_INTEGRATION_CHECKLIST.md`
+  - 補了目前仍值得 cherry-pick 的極小清單
+  - 也補了這次明確不值得回灌的項目
+
+### 維護判斷
+
+之後如果 Gemini 再說 `testv` 有更新，正確做法仍是：
+
+- 先看它是文件結論還是 code
+- 若是文件結論，就整理進 `main` notes
+- 若是 code，先看會不會回退 `main` 已有 guardrails
+- 原則上仍避免直接 merge `testv`
