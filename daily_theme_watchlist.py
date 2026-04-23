@@ -1171,7 +1171,6 @@ def runtime_context_lines() -> list[str]:
     now_local = datetime.now(LOCAL_TZ)
     trigger = runtime_trigger_label()
     lines = [
-        f"觸發來源：{trigger}",
         f"台灣時間：{now_local.strftime('%Y-%m-%d %H:%M:%S')}",
     ]
 

@@ -1000,7 +1000,7 @@ class PushMessageTests(unittest.TestCase):
         self.assertIn("操作重點", message)
         self.assertIn("出場提醒", message)
         self.assertIn("Heat Bias", message)
-        self.assertIn("觸發來源", message)
+        self.assertNotIn("觸發來源", message)
         self.assertIn("台灣時間", message)
 
     def test_macro_message_uses_correction_copy_for_subscribers(self) -> None:

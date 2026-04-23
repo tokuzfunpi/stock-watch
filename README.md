@@ -32,6 +32,18 @@
 - `python3 -m unittest discover -s tests`
 - `python3 daily_theme_watchlist.py`
 
+本機日常流程也可以直接用單一入口：
+- `python3 run_local_daily.py --mode preopen`
+- `python3 run_local_daily.py --mode postclose`
+- `python3 run_local_daily.py --mode full`
+- `python3 run_local_daily.py --mode portfolio`
+
+說明：
+- `preopen`：跑 `daily_theme_watchlist.py` + verification snapshot
+- `postclose`：跑 `daily_theme_watchlist.py` + `portfolio_check.py` + verification 後半段
+- `full`：整套本機流程一次跑完
+- `portfolio`：只跑本機持股檢查
+
 如果要跑持股檢查：
 - 複製 `portfolio.csv.example` 成本機的 `portfolio.csv`
 - 填入自己的持股資料
