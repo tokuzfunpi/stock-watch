@@ -107,6 +107,44 @@ def append_csv_with_existing_header(path: Path, rows: pd.DataFrame) -> None:
         aligned.to_csv(f, index=False, header=False)
 
 
+def upsert_csv_with_existing_header(path: Path, rows: pd.DataFrame, *, key_cols: list[str]) -> None:
+    if rows is None or rows.empty:
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    incoming = rows.copy()
+    for col in key_cols:
+        if col not in incoming.columns:
+            raise ValueError(f"Missing key column for upsert: {col}")
+        incoming[col] = incoming[col].astype(str).str.strip()
+
+    if not path.exists():
+        incoming.to_csv(path, index=False, encoding="utf-8")
+        return
+
+    existing = pd.read_csv(path)
+    if existing.empty:
+        incoming.to_csv(path, index=False, encoding="utf-8")
+        return
+
+    for col in incoming.columns:
+        if col not in existing.columns:
+            existing[col] = ""
+    for col in existing.columns:
+        if col not in incoming.columns:
+            incoming[col] = ""
+
+    existing = existing[incoming.columns.tolist()].copy()
+    for col in key_cols:
+        if col not in existing.columns:
+            existing[col] = ""
+        existing[col] = existing[col].astype(str).str.strip()
+
+    merged = pd.concat([existing, incoming], ignore_index=True)
+    merged = merged.drop_duplicates(subset=key_cols, keep="last")
+    merged.to_csv(path, index=False, encoding="utf-8")
+
+
 def _render_notes_section(title: str, notes: list[str]) -> list[str]:
     lines = [title]
     if not notes:
@@ -638,7 +676,11 @@ def main(argv: list[str] | None = None) -> int:
                 "reco_status",
             ]
             combined = combined[[c for c in keep if c in combined.columns]].copy()
-            append_csv_with_existing_header(snapshot_csv, combined)
+            upsert_csv_with_existing_header(
+                snapshot_csv,
+                combined,
+                key_cols=["signal_date", "watch_type", "ticker"],
+            )
     return 0
 
 

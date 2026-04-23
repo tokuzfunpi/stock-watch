@@ -17,9 +17,9 @@ if str(REPO_ROOT) not in sys.path:
 
 from daily_theme_watchlist import CONFIG, LOCAL_TZ, add_indicators, build_market_scenario
 from verification.verify_recommendations import (
-    append_csv_with_existing_header,
     build_verification_report_markdown,
     select_forced_recommendations,
+    upsert_csv_with_existing_header,
     _maybe_date_from_rank,  # type: ignore[attr-defined]
 )
 
@@ -264,7 +264,11 @@ def append_snapshot_rows(
         if col not in combined.columns:
             combined[col] = ""
     combined = combined[[c for c in keep if c in combined.columns]].copy()
-    append_csv_with_existing_header(snapshot_csv, combined)
+    upsert_csv_with_existing_header(
+        snapshot_csv,
+        combined,
+        key_cols=["signal_date", "watch_type", "ticker"],
+    )
     return int(len(combined))
 
 

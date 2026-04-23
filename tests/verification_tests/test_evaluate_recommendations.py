@@ -7,12 +7,38 @@ from pathlib import Path
 import pandas as pd
 
 from verification.evaluate_recommendations import compute_forward_return_pct
+from verification.evaluate_recommendations import dedupe_snapshots_by_key
 from verification.evaluate_recommendations import enrich_scenario_label_columns
 from verification.evaluate_recommendations import is_valid_signal_date
 from verification.evaluate_recommendations import _chunked
 
 
 class EvaluateRecommendationsTests(unittest.TestCase):
+    def test_dedupe_snapshots_by_key_keeps_latest_generated_row(self) -> None:
+        snapshots = pd.DataFrame(
+            [
+                {
+                    "generated_at": "2026-04-23 08:45:00 CST",
+                    "signal_date": "2026-04-22",
+                    "watch_type": "short",
+                    "ticker": "3231.TW",
+                    "action": "等拉回",
+                },
+                {
+                    "generated_at": "2026-04-23 09:55:00 CST",
+                    "signal_date": "2026-04-22",
+                    "watch_type": "short",
+                    "ticker": "3231.TW",
+                    "action": "開高不追",
+                },
+            ]
+        )
+
+        out = dedupe_snapshots_by_key(snapshots)
+
+        self.assertEqual(len(out), 1)
+        self.assertEqual(out.iloc[0]["action"], "開高不追")
+
     def test_is_valid_signal_date_accepts_yyyy_mm_dd(self) -> None:
         self.assertTrue(is_valid_signal_date("2026-04-17"))
         self.assertFalse(is_valid_signal_date("2026/04/17"))

@@ -88,6 +88,7 @@ python3.11 verification/run_daily_verification.py --mode postclose --skip-feedba
 - `--mode postclose`：跑 `evaluate_recommendations.py`、`summarize_outcomes.py`、`feedback_weight_sensitivity.py`
 - `--mode full`：從 `verify` 一路跑到 `feedback`（預設）
 - `--skip-*` 旗標仍然有效，會在 mode 的基礎上再跳過指定步驟
+- 同一天重跑 `preopen` 會以 `signal_date + watch_type + ticker` 覆蓋 snapshot，不再重複累積同一筆推薦
 
 ## 用 Git 歷史回填（補齊過去樣本）
 
