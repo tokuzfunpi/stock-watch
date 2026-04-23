@@ -37,6 +37,9 @@
 - `python3 run_local_daily.py --mode postclose`
 - `python3 run_local_daily.py --mode full`
 - `python3 run_local_daily.py --mode portfolio`
+- 先做環境檢查也可以：
+  - `python3 run_local_doctor.py`
+  - `python3 run_local_doctor.py --skip-network`
 
 說明：
 - `preopen`：跑 `daily_theme_watchlist.py` + verification snapshot
@@ -47,6 +50,10 @@
   - `theme_watchlist_daily/local_run_status.md`
   - `theme_watchlist_daily/local_run_status.json`
   - 用來快速看本次哪些 step 有跑、成功與否、以及最新 verification row 狀態
+- `run_local_doctor.py` 會更新：
+  - `theme_watchlist_daily/local_doctor.md`
+  - `theme_watchlist_daily/local_doctor.json`
+  - 用來檢查 Python / 本機設定檔 / Telegram / cache / Yahoo DNS readiness
 
 如果要跑持股檢查：
 - 複製 `portfolio.csv.example` 成本機的 `portfolio.csv`
