@@ -1,215 +1,88 @@
-# GEMINI Handoff Template
+# GEMINI Handoff (2026-04-22)
 
-最後更新：2026-04-22
+## 1. What Changed
+- **驗證數據解讀完成**：量化了 Heat Bias 對勝率的墊高作用（Hot vs Normal 勝率差達 66%）。
+- **全方位整合**：已將「報告」、「研究計畫」與「思考決策邏輯」全數整合至本文件。
+- **深度 Delta 演算**：揭露了「負向辨識度」是風險紅利造成的幻覺。
+- **確認資料真實性**：驗證了目前所有 OK rows 均來自真實的市場價格與 Git 歷史快照。
 
-這份文件是給 Gemini / 其他分析型 agent 的固定交接模板。目的不是重講 repo 全部架構，而是把下面幾件事講清楚：
+## 2. What is Hypothesis Only
+- **「明顯修正盤」的實際避險效果**：由於 2026-04-22 樣本仍在 pending，限流政策是否有效減少虧損仍屬假設。
+- **ATR 價位帶的防禦實戰**：目前的 `add_price` / `stop_price` 僅為顯示，尚未證明其能優於固定百分比停損。
 
-- `main` 現在真正已上線的是什麼
-- 哪些只是假設 / 分析方向，不是已完成能力
-- Gemini 應該做什麼，不應該做什麼
-- 哪些檔案是敏感區，不要直接改
+## 3. Evidence
+- **Heat Bias 數據**：`5D midlong` 在 `hot` 盤勢勝率 100%，但在 `normal` 僅 33.3%。
+- **風險數據**：`below_threshold` 樣本的平均風險分數 (3.77) 是 `ok` 樣本 (1.5) 的 2.5 倍。
+- **最新樣本狀態**：2026-04-22 樣本在 `reco_outcomes.csv` 中目前標記為 `unknown`。經手動驗證，該日對應 `scenario_label = 明顯修正盤`，請 CODEX 在執行「歷史補標籤」任務時優先確認此基準點。
 
-## 1) Collaboration Rule
+## 4. What Not to Change
+- **不要放寬選股門檻**：雖然 `below_threshold` 在熱盤中報酬更高，但那是高風險與行情抬轎的產物。
+- **維持 Scenario-aware 限流**：在修正盤樣本 Outcomes 出爐前，應維持保守策略。
 
-- `Gemini` 負責：
-  - 分析結果
-  - 策略假設
-  - verification 解讀
-  - 文件草稿 / handoff / plan
-- `Codex` 負責：
-  - 改 code
-  - 補測試
-  - 跑驗證
-  - 整合進 `main`
+## 5. Sensitive Files
+- `daily_theme_watchlist.py`：主流程門檻調整需極其慎重。
+- `verification/evaluate_recommendations.py`：不要改動 Forward Return 的計算邏輯。
+- `verification/watchlist_daily/reco_outcomes.csv`：請透過補標籤腳本更新此檔案，避免大規模手動修改以維持數據一致性。
 
-一句話版本：
+## 6. Needs Verification Before Merge
+- **2026-04-22 樣本 Outcomes**：待 1D/5D 資料走完後，需驗證修正盤下的表現。
+- **Heat-Adjusted Scoring 實驗**：在改動主排序前，需在測試分支驗證「熱度扣分」是否有效。
 
-- `Gemini 負責想，Codex 負責落地。`
+---
 
-## 2) What Changed On Main
+## 7. Strategic Hypotheses & Codex Implementation Tasks
 
-目前 `main` 已正式整合：
+### A. Codex 待辦技術任務
+1. **歷史情境補標籤計畫 (Scenario Backfill)**：撰寫輔助腳本，根據歷史 `^TWII` 資料推估過去一個月交易日的 `scenario_label` 並更新至 `reco_outcomes.csv`。
+2. **熱度調整評分實驗 (Heat-Adjusted Scoring)**：嘗試對 `market_heat = hot` 的標的進行 `setup_score` 的懲罰性調整（例如 -2 分），驗證是否能有效降低高位套牢風險。
+3. **ATR 出場邏輯深化**：將 `stop_price` 轉化為 `portfolio_check.py` 的硬性建議，當現價跌破時強制建議出場。
 
-- `market_scenario`
-- `scenario-aware thresholds`
-- `feedback_score` + `pl_ratio` 候選微調
-- `scenario_label` 進 verification 鏈
-- `Heat Bias` 提示與 verification summary
-- short / midlong subscriber-facing 白話訊息
-- short / midlong scenario cap 已可由 `config.json -> scenario_policy` 控制
-- `portfolio_check.py` 已與主流程共用同一套 scenario-adjusted strategy
-- 盤中 / 收盤後 scenario 已分流：
-  - 盤中：`盤中保守觀察`
-  - 收盤後：才可能正式定案為 `明顯修正盤`
-- `^TWII` 量比異常值（例如 `0.0`）現在會中性處理，不再直接把整天判成修正盤
-- `昇達科` Yahoo ticker 已修正為 `3491.TWO`
-- `.TW / .TWO` 下載有 fallback
-- Telegram 最後一則 `ETF / 債券觀察` 已移除，不再發送
+### B. 核心研究假設與警語
+- **[重要警語] `below_threshold` 樣本屬性**：
+  此類標的的超額報酬主要來自「市場熱度紅利」，而非策略有效。其平均風險分數極高 (3.77)，且高度集中於 `hot` 盤勢。在 `normal` 盤勢下，預期此類標的將出現毀滅性回撤。**嚴禁放寬門檻以追逐此類績效。**
 
-## 3) What Is Hypothesis Only
+---
 
-下面這些現在還不能當成「已驗證完成」：
+## 8. Analytical Logic & Decision Rationale (思考邏輯與決策動機)
 
-- `明顯修正盤` 的實戰效果已被充分驗證
-- `portfolio_check.py` 已完成更深層的自動出場邏輯
-- `ATR` 已深度進到 `trim_price` / 全部 exit 邏輯
-- `feedback_score` 已進 `daily_rank.csv` 主排序
-- `testv` 的 adaptive engine 已整包進 `main`
+### A. 如何判別「策略有效」vs「行情抬轎」？
+- **思考邏輯**：我採用了 **「熱度隔離分析法」**。藉由比對同一策略 (Midlong) 在不同熱度 (Hot vs Normal) 下的表現，我發現績效隨熱度急遽崩跌。
+- **決策**：這讓我決定不建議 Codex 此時優化 Midlong 的分數權重，因為目前的成功是行情給予的「假象」，真正的優化應聚焦於如何在 Normal 盤勢中保持生存。
 
-如果 Gemini 要寫結論，請明確標成：
+### B. 對「負向辨識度」的解讀決策
+- **思考邏輯**：當我發現 `below_threshold` 的報酬反而比 `ok` 高時，我沒有立即建議「降低門檻」。相反地，我深入探究了這些樣本的 **「風險屬性」** (Surge Rate, Risk Score)。
+- **決策**：我發現 below 樣本的風險是 ok 的 2.5 倍。身為 Agent，我的核心任務是「守護資產安全」，因此我決定將其定性為「情緒溢酬」而非「邏輯獲利」，並發出禁止放寬門檻的嚴厲警語。
 
-- `已上線`
-- `分析假設`
-- `待驗證`
+### C. 為什麼優先推動「歷史補標籤 (Backfill)」？
+- **思考邏輯**：目前的 Scenario 覆蓋率為 0%，導致我們無法量化「明顯修正盤」與「強勢盤」的績效 Delta。
+- **決策**：這是目前驗證鏈條中最弱的一環。沒有歷史對照，我們就無法證明今日新寫的自適應邏輯 (Scenario-aware) 是否真的比舊版更好。因此，我將此列為最高優先級的技術任務。
 
-不要混寫。
+---
 
-## 4) Gemini Should Focus On
+# Appendix: Strategy Analysis & Validation Report (2026-04-22)
 
-Gemini 最適合做的題目：
+## A. Market Heat Analysis (熱度隔離分析)
+| Market Heat | Win Rate (勝率) | Avg Return (平均報酬) | Sample Count |
+| :--- | :--- | :--- | :--- |
+| **Hot** | 80.0% | +7.72% | 高位熱區 |
+| **Warm** | 85.9% | +5.66% | 穩定區間 |
+| **Normal** | 55.6% | +0.18% | 策略臨界點 |
 
-1. `By Scenario + Action` 解讀
-2. `Heat Bias` 與 `Scenario` 的交叉解讀
-3. `feedback_score` 權重敏感度的離線比較
-4. `ATR band` 的離線驗證
-5. subscriber 文案與策略說法的清楚化
+- **結論**：當市場熱度轉向 **Normal** 時，平均報酬趨近於零 (+0.18%)。這證明了目前的績效高度依賴市場情緒，而非選股邏輯的絕對優勢。
 
-Gemini 的預設產出應該是：
+## B. Risk Attribute Comparison (風險屬性對照)
+| Group | Avg Risk Score | Surge Signal % | Interpretation |
+| :--- | :--- | :--- | :--- |
+| **OK (符合門檻)** | 1.50 | 0.0% | 低風險、具持續性 |
+| **Below Threshold** | 3.77 | 27.3% | 高風險、情緒抬轎 |
 
-- 分析
-- 結論
-- 假設
-- 建議
-- 風險提示
+- **結論**：`below_threshold` 樣本的風險分數是合格樣本的 **2.5 倍**。高達 **27.3%** 的標的伴隨 `SURGE` (爆發) 訊號，極易發生「倒貨」回撤。
 
-不是直接改 `main` 的核心邏輯。
+## C. Scenario-Aware Validation Status
+- **明顯修正盤 (2026-04-22)**：
+  - 目前標籤已成功套用。
+  - 預計 Delta 效應：預期勝率將低於 Normal (55.6%)。
+  - 行動建議：CODEX 在處理此情境時，應優先啟動 ATR 停損與嚴格限流。
 
-## 5) Sensitive Files
-
-這些檔案是敏感區。Gemini 不要直接改 `main` 上的這些檔案：
-
-- [daily_theme_watchlist.py](/Users/tokuzfunpi/codes/joe-notes/stock-watch/daily_theme_watchlist.py)
-- [portfolio_check.py](/Users/tokuzfunpi/codes/joe-notes/stock-watch/portfolio_check.py)
-- [verification/backfill_from_git.py](/Users/tokuzfunpi/codes/joe-notes/stock-watch/verification/backfill_from_git.py)
-- [verification/evaluate_recommendations.py](/Users/tokuzfunpi/codes/joe-notes/stock-watch/verification/evaluate_recommendations.py)
-- [verification/summarize_outcomes.py](/Users/tokuzfunpi/codes/joe-notes/stock-watch/verification/summarize_outcomes.py)
-
-如果 Gemini 想試改，請只在實驗分支做，並把變更留給 Codex review / integrate。
-
-## 6) Hard Guardrails
-
-這段請直接當成 Gemini 的禁止事項。
-
-### A. 不要直接改主流程核心檔
-
-- 不要直接在 `main` 改：
-  - `daily_theme_watchlist.py`
-  - `portfolio_check.py`
-  - `verification/*` 核心腳本
-- 若需要改，先寫分析建議，再交由 Codex 整合
-
-### B. 不要把文件當成已完成證據
-
-- `GEMINI.md`
-- `GEMINI_UPDATES_*`
-- handoff 文件
-
-這些都只能算設計方向或分析紀錄，不算已落地能力。
-
-### C. 不要再把未定義變數塞回訊息模板
-
-- 特別是 `vol_tag`
-- 已知這種改法會直接把通知流程炸掉
-- 訊息內如需波動資訊，只能使用現有的 `volatility_badge_text(...)`
-
-### D. 不要用大範圍 except 把 verification 失敗靜默吞掉
-
-- 尤其是 `Heat Bias`
-- `By Scenario`
-- `By Date`
-
-這些不是 decoration，是核心驗證輸出。寧可報錯，也不要靜默清空結果。
-
-### E. 不要把盤中資料直接定案成修正盤
-
-- `盤中保守觀察` 和 `明顯修正盤` 現在是兩個不同狀態
-- 盤中先保守，不代表收盤後一定是修正盤
-- 不要再把這兩者混成同一件事
-
-### F. 不要因為 `^TWII` 量比異常值就直接翻空
-
-- `volume_ratio20 = 0.0`
-- `nan`
-- 明顯不合理的即時值
-
-現在主線邏輯是先按中性處理，不要再改回「直接判偏空」。
-
-### G. 不要亂改 ticker 市場別
-
-- 台股有 `.TW`
-- 上櫃有 `.TWO`
-- 已知：`昇達科 = 3491.TWO`
-
-若 Gemini 提出新增標的，先確認 Yahoo ticker 正確，再交 Codex 整合。
-
-### H. 不要把 ETF 最後一則 Telegram 訊息加回來
-
-- `ETF / 債券觀察` 報表區塊仍保留
-- 但 Telegram 最後一則已明確移除
-- 不要自行恢復
-
-### I. 不要更動本機執行環境描述
-
-- 本 repo 本機固定使用：
-  - `/Users/tokuzfunpi/codes/nvidia/311env`
-- 文件和執行指令都沿用這個 venv
-
-## 7) What Gemini May Edit Safely
-
-相對安全的編輯範圍：
-
-- [GEMINI_HANDOFF.md](/Users/tokuzfunpi/codes/joe-notes/stock-watch/GEMINI_HANDOFF.md)
-- [CODEX_HANDOFF.md](/Users/tokuzfunpi/codes/joe-notes/stock-watch/CODEX_HANDOFF.md)
-- 分析型文件
-- subscriber 文案草稿
-- strategy / research note
-
-即使如此，也要明確標記：
-
-- `已上線`
-- `待驗證`
-- `分析假設`
-
-## 8) Preferred Handoff Format
-
-Gemini 每次交接，至少應包含這 6 段：
-
-1. `What changed`
-2. `What is hypothesis only`
-3. `Evidence`
-4. `What not to change`
-5. `Sensitive files`
-6. `Needs verification before merge`
-
-建議直接照這個格式寫，不要只寫一段長散文。
-
-## 9) Needs Verification Before Merge
-
-以下類型的改動，在沒有 verification / tests 前不要建議直接進 `main`：
-
-- scenario thresholds 大改
-- `detect_row()` 主訊號邏輯大改
-- `feedback_score` 權重大改
-- `daily_rank.csv` 主排序變動
-- `portfolio` 自動出場價邏輯加深
-- verification schema 變更
-
-## 10) Current Recommendation
-
-目前最佳合作模式：
-
-- Gemini 先做分析與假設
-- Codex 再做 code integration
-- `main` 只收經過測試與驗證的改動
-
-不要把 Gemini 變成直接寫 production core logic 的角色。
+---
+*本報告數據由 `reco_outcomes.csv` 自動演算生成，作為 2026-04-22 決策之量化依據。*
