@@ -48,6 +48,7 @@ PORTFOLIO_REPORT_HTML = OUTDIR / "portfolio_report.html"
 ALERT_TRACK_CSV = OUTDIR / "alert_tracking.csv"
 FEEDBACK_SUMMARY_CSV = OUTDIR / "feedback_summary.csv"
 SUCCESS_FILE = OUTDIR / "last_success_date.txt"
+VERIFICATION_OUTCOMES_CSV = BASE_DIR / "verification" / "watchlist_daily" / "reco_outcomes.csv"
 LOG_DIR = OUTDIR / "logs"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -142,6 +143,15 @@ class StrategyConfig:
 
 
 @dataclass
+class ScenarioPolicy:
+    correction_short_top_n: int
+    heat_bias_short_top_n: int
+    correction_midlong_top_n: int
+    min_correction_ok_samples: int
+    new_watch_spotlight_limit: int
+
+
+@dataclass
 class AppConfig:
     yf_period: str
     state_enabled: bool
@@ -153,12 +163,14 @@ class AppConfig:
     backtest: BacktestConfig
     group_weights: GroupWeights
     strategy: StrategyConfig
+    scenario_policy: ScenarioPolicy
 
 
 def load_config(path: Path) -> AppConfig:
     raw = json.loads(path.read_text(encoding="utf-8"))
     notify_raw = raw["notify"]
     strat_raw = raw.get("strategy", {})
+    scenario_policy_raw = raw.get("scenario_policy", {})
     return AppConfig(
         yf_period=raw.get("yf_period", "3y"),
         state_enabled=bool(raw.get("state_enabled", True)),
@@ -189,6 +201,13 @@ def load_config(path: Path) -> AppConfig:
             accel_ret10=float(strat_raw.get("accel_ret10", 0.12)),
             accel_vol_ratio_fast=float(strat_raw.get("accel_vol_ratio_fast", 1.3)),
             accel_vol_ratio_slow=float(strat_raw.get("accel_vol_ratio_slow", 1.2)),
+        ),
+        scenario_policy=ScenarioPolicy(
+            correction_short_top_n=int(scenario_policy_raw.get("correction_short_top_n", 1)),
+            heat_bias_short_top_n=int(scenario_policy_raw.get("heat_bias_short_top_n", 2)),
+            correction_midlong_top_n=int(scenario_policy_raw.get("correction_midlong_top_n", 3)),
+            min_correction_ok_samples=int(scenario_policy_raw.get("min_correction_ok_samples", 10)),
+            new_watch_spotlight_limit=int(scenario_policy_raw.get("new_watch_spotlight_limit", 3)),
         ),
     )
 
@@ -428,17 +447,43 @@ SPECIAL_ETF_TICKERS = [
 SCHEDULE_TARGET_TIMES = ["08:45", "14:00"]
 
 
-def yf_download_one(ticker: str, period: str) -> pd.DataFrame:
+def alternate_taiwan_ticker(ticker: str) -> str:
+    symbol = str(ticker or "").strip().upper()
+    if "." not in symbol:
+        return ""
+    base, suffix = symbol.split(".", 1)
+    if not (len(base) == 4 and base.isdigit()):
+        return ""
+    if suffix == "TW":
+        return f"{base}.TWO"
+    if suffix == "TWO":
+        return f"{base}.TW"
+    return ""
+
+
+def _download_daily_ohlcv(ticker: str, period: str) -> pd.DataFrame:
     df = yf.download(
         ticker, period=period, interval="1d",
         auto_adjust=True, progress=False, threads=False,
     )
     if df.empty:
-        raise ValueError(f"No data returned for {ticker}")
+        return df
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = df.columns.get_level_values(0)
     df = df.rename(columns=str.title)
-    df = df[["Open", "High", "Low", "Close", "Volume"]].dropna().copy()
+    return df[["Open", "High", "Low", "Close", "Volume"]].dropna().copy()
+
+
+def yf_download_one(ticker: str, period: str) -> pd.DataFrame:
+    df = _download_daily_ohlcv(ticker, period)
+    if df.empty:
+        alt_ticker = alternate_taiwan_ticker(ticker)
+        if alt_ticker:
+            df = _download_daily_ohlcv(alt_ticker, period)
+            if not df.empty:
+                logger.warning("Ticker fallback: %s -> %s", ticker, alt_ticker)
+        if df.empty:
+            raise ValueError(f"No data returned for {ticker}")
     if len(df) < 250:
         raise ValueError(f"Insufficient history for {ticker}: {len(df)} rows")
     return df
@@ -727,6 +772,67 @@ def heat_bias_message(df_rank: Optional[pd.DataFrame], scenario: dict) -> str:
     if hot_ratio >= 0.3 and label in {"高檔震盪盤", "強勢延伸盤"}:
         return "⚠️ Heat Bias 提醒：前排標的已有明顯熱度，請把拉回買點與分批落袋看得比平常更重。"
     return ""
+
+
+def correction_sample_warning_message(scenario: dict) -> str:
+    label = str(scenario.get("label", "") or "")
+    if label != "明顯修正盤":
+        return ""
+    if not VERIFICATION_OUTCOMES_CSV.exists():
+        return "修正盤驗證提醒：目前還沒有足夠的歷史驗證檔，先把防守放前面。"
+    try:
+        outcomes = pd.read_csv(
+            VERIFICATION_OUTCOMES_CSV,
+            dtype={"scenario_label": "string", "status": "string"},
+            usecols=["scenario_label", "status"],
+        )
+    except Exception:
+        return "修正盤驗證提醒：驗證資料暫時讀不到，今天先按保守模式處理。"
+
+    if outcomes.empty:
+        return "修正盤驗證提醒：目前修正盤 OK 樣本仍不足，先不要把反彈當成行情回來。"
+
+    scenario_label = outcomes.get("scenario_label", pd.Series(dtype="string")).astype(str).str.strip()
+    status = outcomes.get("status", pd.Series(dtype="string")).astype(str).str.strip()
+    ok_count = int(((scenario_label == "明顯修正盤") & (status == "ok")).sum())
+    min_ok = int(CONFIG.scenario_policy.min_correction_ok_samples)
+    if ok_count < min_ok:
+        return f"修正盤驗證提醒：目前明顯修正盤 OK 樣本只有 {ok_count} 筆，還沒到 {min_ok} 筆，先把風險控管放第一。"
+    return ""
+
+
+def effective_short_top_n(
+    df_rank: pd.DataFrame,
+    market_regime: Optional[dict] = None,
+    us_market: Optional[dict] = None,
+) -> int:
+    top_n = int(CONFIG.notify.top_n_short)
+    if market_regime is None or us_market is None or df_rank.empty:
+        return top_n
+
+    scenario = build_market_scenario(market_regime, us_market, df_rank)
+    if str(scenario.get("label", "") or "") in {"明顯修正盤", "盤中保守觀察"}:
+        return min(top_n, int(CONFIG.scenario_policy.correction_short_top_n))
+
+    heat_bias = heat_bias_message(df_rank, scenario)
+    if "Heat Bias 偏強" in heat_bias:
+        return min(top_n, int(CONFIG.scenario_policy.heat_bias_short_top_n))
+    return top_n
+
+
+def effective_midlong_top_n(
+    df_rank: pd.DataFrame,
+    market_regime: Optional[dict] = None,
+    us_market: Optional[dict] = None,
+) -> int:
+    top_n = int(CONFIG.notify.top_n_midlong)
+    if market_regime is None or us_market is None or df_rank.empty:
+        return top_n
+
+    scenario = build_market_scenario(market_regime, us_market, df_rank)
+    if str(scenario.get("label", "") or "") in {"明顯修正盤", "盤中保守觀察"}:
+        return min(top_n, int(CONFIG.scenario_policy.correction_midlong_top_n))
+    return top_n
 
 
 def detect_row(
@@ -1065,7 +1171,6 @@ def runtime_context_lines() -> list[str]:
     now_local = datetime.now(LOCAL_TZ)
     trigger = runtime_trigger_label()
     lines = [
-        f"觸發來源：{trigger}",
         f"台灣時間：{now_local.strftime('%Y-%m-%d %H:%M:%S')}",
     ]
 
@@ -1122,6 +1227,16 @@ def save_last_success_date(success_date: str) -> None:
     )
 
 
+def market_session_phase(now_local: Optional[datetime] = None) -> str:
+    current = now_local or datetime.now(LOCAL_TZ)
+    minutes = current.hour * 60 + current.minute
+    if minutes < 9 * 60:
+        return "preopen"
+    if minutes < (13 * 60 + 35):
+        return "intraday"
+    return "postclose"
+
+
 def get_market_regime() -> dict:
     if not CONFIG.market_filter.enabled:
         return {"enabled": False, "is_bullish": True, "comment": "大盤濾網關掉"}
@@ -1132,7 +1247,10 @@ def get_market_regime() -> dict:
     close_ = float(x["Close"])
     ma = float(x[f"MA{CONFIG.market_filter.ma_period}"])
     ret20 = float(x["Ret20D"]) if pd.notna(x["Ret20D"]) else 0.0
-    vol_ratio = float(x["VolumeRatio20"]) if pd.notna(x["VolumeRatio20"]) else 1.0
+    raw_vol_ratio = float(x["VolumeRatio20"]) if pd.notna(x["VolumeRatio20"]) else float("nan")
+    vol_ratio_valid = pd.notna(raw_vol_ratio) and raw_vol_ratio > 0.05
+    vol_ratio = raw_vol_ratio if vol_ratio_valid else 1.0
+    session_phase = market_session_phase()
 
     is_bullish = (
         close_ >= ma
@@ -1147,6 +1265,9 @@ def get_market_regime() -> dict:
         "ma": round(ma, 2),
         "ret20_pct": round(ret20 * 100, 2),
         "volume_ratio20": round(vol_ratio, 2),
+        "volume_ratio20_raw": round(raw_vol_ratio, 2) if pd.notna(raw_vol_ratio) else None,
+        "volume_ratio20_valid": bool(vol_ratio_valid),
+        "session_phase": session_phase,
         "is_bullish": bool(is_bullish),
         "comment": (
             f"{CONFIG.market_filter.name}目前"
@@ -1154,6 +1275,7 @@ def get_market_regime() -> dict:
             f"收在 {round(close_,2)}，"
             f"20日漲幅 {round(ret20*100,2)}%，"
             f"量比 {round(vol_ratio,2)}。"
+            + (" 量比資料異常，這輪先按中性處理。" if not vol_ratio_valid else "")
         ),
     }
 
@@ -1219,6 +1341,7 @@ def build_market_scenario(market_regime: dict, us_market: dict, df_rank: Optiona
     ret20_pct = float(market_regime.get("ret20_pct", 0.0) or 0.0)
     volume_ratio20 = float(market_regime.get("volume_ratio20", 1.0) or 1.0)
     is_bullish = bool(market_regime.get("is_bullish", False))
+    session_phase = str(market_regime.get("session_phase", "postclose") or "postclose")
     us_summary = str(us_market.get("summary", ""))
     us_weak = ("偏弱" in us_summary) or ("續殺" in us_summary)
 
@@ -1248,7 +1371,16 @@ def build_market_scenario(market_regime: dict, us_market: dict, df_rank: Optiona
     hot_ratio = (hot_count / candidate_count) if candidate_count > 0 else 0.0
     strong_ratio = (strong_count / candidate_count) if candidate_count > 0 else 0.0
 
-    if not is_bullish or (ret20_pct <= 3 and us_weak):
+    correction_condition = (not is_bullish) or (ret20_pct <= 3 and us_weak)
+    if correction_condition and session_phase != "postclose":
+        return {
+            "label": "盤中保守觀察",
+            "stance": "先保守，等收盤定案",
+            "focus": "盤中先縮手，避免被即時波動或大盤欄位異常誤導；等收盤後再確認是否真轉修正盤。",
+            "exit_note": "盤中若持股轉弱先減碼，但不要只因盤中噪音就全面翻空。",
+        }
+
+    if correction_condition:
         return {
             "label": "明顯修正盤",
             "stance": "先保守",
@@ -1280,11 +1412,105 @@ def build_market_scenario(market_regime: dict, us_market: dict, df_rank: Optiona
     }
 
 
+def subscriber_scenario_lines(scenario: dict) -> list[str]:
+    label = str(scenario.get("label", "") or "")
+
+    if label == "盤中保守觀察":
+        return [
+            "今日盤勢：盤中保守觀察",
+            "今日策略：先保守，等收盤再定案。",
+            "白話說：盤中先縮手、少追高，但不要只因即時噪音就把整天當成修正盤。",
+        ]
+
+    if label == "明顯修正盤":
+        return [
+            "今日盤勢：明顯修正盤",
+            "今日策略：先防守，短線名單縮小。",
+            "白話說：今天先保留資金、少做少追高，等盤勢穩定再提高出手頻率。",
+        ]
+
+    if label == "高檔震盪盤":
+        return [
+            "今日盤勢：高檔震盪盤",
+            "今日策略：可以挑股，但節奏放慢。",
+            "白話說：盤面還不差，但追價容錯率下降，優先等拉回、強中選強。",
+        ]
+
+    if label == "權值撐盤、個股轉弱":
+        return [
+            "今日盤勢：權值撐盤、個股轉弱",
+            "今日策略：指數可看，選股更要保守。",
+            "白話說：不是整個市場都好做，先看真正有量有延續性的個股，不要被指數撐住騙進去。",
+        ]
+
+    return [
+        "今日盤勢：強勢延伸盤",
+        "今日策略：正常推送，可做但不追高。",
+        "白話說：市場資金偏正向，名單可正常參考，但仍以拉回分批進場為主。",
+    ]
+
+
+def subscriber_watchlist_lines(scenario: dict, watch_type: str, candidate_limit: int) -> list[str]:
+    label = str(scenario.get("label", "") or "")
+    title = "短線" if watch_type == "short" else "中長線"
+
+    if watch_type == "short":
+        if label == "盤中保守觀察":
+            return [
+                f"今天{title}策略：先保守，暫時只看 {candidate_limit} 檔，等收盤再決定要不要放大。",
+                "白話提醒：盤中先縮手，不急著把每次拉回都當買點。",
+            ]
+        if label == "明顯修正盤":
+            return [
+                f"今天{title}策略：先縮手，最多看 {candidate_limit} 檔最清楚的標的。",
+                "白話提醒：少做比做錯更重要，先等盤勢穩定。",
+            ]
+        if label == "高檔震盪盤":
+            return [
+                f"今天{title}策略：可以做，但只挑前排 {candidate_limit} 檔，優先等拉回。",
+                "白話提醒：盤還熱，但追價風險明顯上來了。",
+            ]
+        if label == "權值撐盤、個股轉弱":
+            return [
+                f"今天{title}策略：只做最強的 {candidate_limit} 檔，不被指數撐盤帶著追。",
+                "白話提醒：指數不差，不代表個股都值得追。",
+            ]
+        return [
+            f"今天{title}策略：正常推送，最多看 {candidate_limit} 檔，拉回再切入。",
+            "白話提醒：有行情可以做，但仍以分批進場取代追高。",
+        ]
+
+    if label == "盤中保守觀察":
+        return [
+            f"今天{title}策略：先守結構，只留 {candidate_limit} 檔核心觀察，收盤後再定案。",
+            "白話提醒：盤中先保守，不急著把部位一次放大。",
+        ]
+    if label == "明顯修正盤":
+        return [
+            f"今天{title}策略：偏保守，只留 {candidate_limit} 檔核心觀察。",
+            "白話提醒：先守部位、看結構，不急著擴大進場。",
+        ]
+    if label == "高檔震盪盤":
+        return [
+            f"今天{title}策略：可以布局，但只挑 {candidate_limit} 檔結構最穩的標的。",
+            "白話提醒：這種盤要挑買點，不要因為看好就直接追。",
+        ]
+    if label == "權值撐盤、個股轉弱":
+        return [
+            f"今天{title}策略：偏精挑細選，只留 {candidate_limit} 檔延續性最好的標的。",
+            "白話提醒：先看個股有沒有真延續，不要只看指數撐住。",
+        ]
+    return [
+        f"今天{title}策略：正常布局，最多看 {candidate_limit} 檔。",
+        "白話提醒：趨勢還在，但仍以等拉回與分批進場為主。",
+    ]
+
+
 def adjust_strategy_by_scenario(base_strat: StrategyConfig, scenario: dict) -> StrategyConfig:
     strat = replace(base_strat)
     label = str(scenario.get("label", "") or "")
 
-    if label == "明顯修正盤":
+    if label in {"明顯修正盤", "盤中保守觀察"}:
         strat.rebreak_vol_ratio += 0.10
         strat.trend_ret20 += 0.01
         strat.accel_ret5 += 0.01
@@ -1414,13 +1640,17 @@ def rank_midlong_pool(df_rank: pd.DataFrame) -> pd.DataFrame:
     return df.drop(columns=["_grade_rank", "_signal_rank"])
 
 
-def select_short_term_candidates(df_rank: pd.DataFrame) -> pd.DataFrame:
-    rule = CONFIG.notify
+def select_short_term_candidates(
+    df_rank: pd.DataFrame,
+    market_regime: Optional[dict] = None,
+    us_market: Optional[dict] = None,
+) -> pd.DataFrame:
     df = rank_short_term_pool(df_rank)
     if df.empty:
         return df
     buyable_mask = df.apply(is_short_term_buyable, axis=1)
-    return apply_feedback_adjustment(df[buyable_mask].copy(), "short").head(rule.top_n_short).copy()
+    top_n_short = effective_short_top_n(df_rank, market_regime, us_market)
+    return apply_feedback_adjustment(df[buyable_mask].copy(), "short").head(top_n_short).copy()
 
 
 def select_short_term_backup_candidates(df_rank: pd.DataFrame, exclude_tickers: Optional[set[str]] = None) -> pd.DataFrame:
@@ -1432,8 +1662,12 @@ def select_short_term_backup_candidates(df_rank: pd.DataFrame, exclude_tickers: 
         df = df[~df["ticker"].astype(str).isin(exclude_tickers)].copy()
     return apply_feedback_adjustment(df.copy(), "short").head(5).copy()
 
-
-def select_midlong_candidates(df_rank: pd.DataFrame, exclude_tickers: Optional[set[str]] = None) -> pd.DataFrame:
+def select_midlong_candidates(
+    df_rank: pd.DataFrame,
+    market_regime: Optional[dict] = None,
+    us_market: Optional[dict] = None,
+    exclude_tickers: Optional[set[str]] = None,
+) -> pd.DataFrame:
     rule = CONFIG.notify
     df = rank_midlong_pool(df_rank)
     if not df.empty:
@@ -1441,7 +1675,8 @@ def select_midlong_candidates(df_rank: pd.DataFrame, exclude_tickers: Optional[s
         df = df[buyable_mask].copy()
     if exclude_tickers:
         df = df[~df["ticker"].astype(str).isin(exclude_tickers)].copy()
-    return apply_feedback_adjustment(df.copy(), "midlong").head(rule.top_n_midlong).copy()
+    top_n_midlong = effective_midlong_top_n(df_rank, market_regime, us_market)
+    return apply_feedback_adjustment(df.copy(), "midlong").head(min(rule.top_n_midlong, top_n_midlong)).copy()
 
 
 def select_midlong_backup_candidates(df_rank: pd.DataFrame, exclude_tickers: Optional[set[str]] = None) -> pd.DataFrame:
@@ -1454,19 +1689,27 @@ def select_midlong_backup_candidates(df_rank: pd.DataFrame, exclude_tickers: Opt
     return apply_feedback_adjustment(df.copy(), "midlong").head(5).copy()
 
 
-def select_push_candidates(df_rank: pd.DataFrame) -> pd.DataFrame:
-    short_candidates = select_short_term_candidates(df_rank)
-    midlong_candidates = select_midlong_candidates(df_rank)
+def select_push_candidates(
+    df_rank: pd.DataFrame,
+    market_regime: Optional[dict] = None,
+    us_market: Optional[dict] = None,
+) -> pd.DataFrame:
+    short_candidates = select_short_term_candidates(df_rank, market_regime, us_market)
+    midlong_candidates = select_midlong_candidates(df_rank, market_regime, us_market)
     return pd.concat([short_candidates, midlong_candidates], ignore_index=True)
 
 
-def build_candidate_sets(df_rank: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    short_candidates = select_short_term_candidates(df_rank)
+def build_candidate_sets(
+    df_rank: pd.DataFrame,
+    market_regime: Optional[dict] = None,
+    us_market: Optional[dict] = None,
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    short_candidates = select_short_term_candidates(df_rank, market_regime, us_market)
     short_backups = select_short_term_backup_candidates(
         df_rank,
         exclude_tickers=set(short_candidates["ticker"].astype(str)),
     )
-    midlong_candidates = select_midlong_candidates(df_rank)
+    midlong_candidates = select_midlong_candidates(df_rank, market_regime, us_market)
     midlong_backups = select_midlong_backup_candidates(
         df_rank,
         exclude_tickers=set(midlong_candidates["ticker"].astype(str)),
@@ -1837,12 +2080,22 @@ def build_special_etf_message(df_rank: pd.DataFrame, market_regime: dict, us_mar
     return "\n".join(lines).strip()
 
 
-def should_alert(df_rank: pd.DataFrame, current_state: str, last_state: str, market_regime: dict) -> bool:
+def should_alert(
+    df_rank: pd.DataFrame,
+    current_state: str,
+    last_state: str,
+    market_regime: dict,
+    us_market: Optional[dict] = None,
+) -> bool:
     if CONFIG.always_notify:
         return True
     if current_state == last_state:
         return False
-    short_candidates, short_backups, midlong_candidates, midlong_backups = build_candidate_sets(df_rank)
+    short_candidates, short_backups, midlong_candidates, midlong_backups = build_candidate_sets(
+        df_rank,
+        market_regime,
+        us_market,
+    )
     feedback_summary = build_feedback_summary()
     feedback_summary = build_feedback_summary()
     candidates = pd.concat([short_candidates, short_backups, midlong_candidates, midlong_backups], ignore_index=True)
@@ -1856,7 +2109,9 @@ def should_alert(df_rank: pd.DataFrame, current_state: str, last_state: str, mar
 
 
 def build_short_term_message(df_rank: pd.DataFrame, market_regime: dict, us_market: dict) -> str:
-    short_candidates, short_backups, _, _ = build_candidate_sets(df_rank)
+    short_candidates, short_backups, _, _ = build_candidate_sets(df_rank, market_regime, us_market)
+    scenario = build_market_scenario(market_regime, us_market, df_rank)
+    short_top_n = effective_short_top_n(df_rank, market_regime, us_market)
     total_a = int((df_rank["grade"] == "A").sum()) if not df_rank.empty else 0
     total_b = int((df_rank["grade"] == "B").sum()) if not df_rank.empty else 0
     total_up = int((df_rank["status_change"] == "UP").sum()) if "status_change" in df_rank.columns else 0
@@ -1866,6 +2121,7 @@ def build_short_term_message(df_rank: pd.DataFrame, market_regime: dict, us_mark
     ]
     summary_parts = [f"A級 {total_a} 檔", f"B級 {total_b} 檔", f"轉強 {total_up} 檔"]
     lines.append(" / ".join(summary_parts))
+    lines.extend(subscriber_watchlist_lines(scenario, "short", short_top_n))
     if short_candidates.empty:
         lines.append("今天短線沒有夠清楚的可買標的，先等。")
         return "\n".join(lines)
@@ -1897,12 +2153,15 @@ def build_short_term_message(df_rank: pd.DataFrame, market_regime: dict, us_mark
 
 
 def build_midlong_message(df_rank: pd.DataFrame, market_regime: dict, us_market: dict) -> str:
-    _, _, midlong_candidates, midlong_backups = build_candidate_sets(df_rank)
+    _, _, midlong_candidates, midlong_backups = build_candidate_sets(df_rank, market_regime, us_market)
+    scenario = build_market_scenario(market_regime, us_market, df_rank)
+    midlong_top_n = effective_midlong_top_n(df_rank, market_regime, us_market)
     total_b = int((df_rank["grade"] == "B").sum()) if not df_rank.empty else 0
     lines = [
         "📣 中長線可布局",
         f"B級結構股 {total_b} 檔",
     ]
+    lines.extend(subscriber_watchlist_lines(scenario, "midlong", midlong_top_n))
     if midlong_candidates.empty:
         lines.append("今天中長線沒有夠穩、夠適合布局的標的，先觀察。")
         return "\n".join(lines)
@@ -1933,10 +2192,33 @@ def build_midlong_message(df_rank: pd.DataFrame, market_regime: dict, us_market:
     return "\n".join(lines).strip()
 
 
+def new_watchlist_spotlight_lines(df_rank: Optional[pd.DataFrame]) -> list[str]:
+    limit = int(CONFIG.scenario_policy.new_watch_spotlight_limit)
+    if limit <= 0 or df_rank is None or df_rank.empty or "status_change" not in df_rank.columns:
+        return []
+    if not PREV_RANK_CSV.exists():
+        return []
+
+    fresh = df_rank[df_rank["status_change"].astype(str).eq("NEW")].copy().head(limit)
+    if fresh.empty:
+        return []
+
+    lines = ["新加入追蹤觀察："]
+    for _, row in fresh.iterrows():
+        watch_type = "short" if str(row.get("layer", "")) == "short_attack" else "midlong"
+        action = short_term_action_label(row) if watch_type == "short" else midlong_action_label(row)
+        lines.append(
+            f"- {row['name']} ({row['ticker']}) | {layer_label(str(row.get('layer', '')))} | "
+            f"{volatility_badge_text(row)} | 初步看法：{action} | {row['regime']}"
+        )
+    return lines
+
+
 def build_macro_message(market_regime: dict, us_market: dict, df_rank: Optional[pd.DataFrame] = None) -> str:
     scenario = build_market_scenario(market_regime, us_market, df_rank)
     lines = [
         "📣 大盤 / 美股摘要",
+        *subscriber_scenario_lines(scenario),
         market_regime["comment"],
         us_market["summary"],
         f"盤勢情境：{scenario['label']} | 目前節奏：{scenario['stance']}",
@@ -1946,11 +2228,15 @@ def build_macro_message(market_regime: dict, us_market: dict, df_rank: Optional[
     heat_bias = heat_bias_message(df_rank, scenario)
     if heat_bias:
         lines.append(heat_bias)
+    correction_note = correction_sample_warning_message(scenario)
+    if correction_note:
+        lines.append(correction_note)
     lines.extend(runtime_context_lines())
     if us_market.get("tech_bias"):
         lines.append(us_market["tech_bias"])
     if AUTO_ADDED_TICKERS:
         lines.append(f"持股同步加入觀察清單：{', '.join(AUTO_ADDED_TICKERS)}")
+    lines.extend(new_watchlist_spotlight_lines(df_rank))
     return "\n".join(lines).strip()
 
 
@@ -2583,7 +2869,11 @@ def build_daily_report_markdown(
             f"{r['signals']} / 量比 {r['volume_ratio20']} |"
         )
 
-    short_candidates, short_backups, midlong_candidates, midlong_backups = build_candidate_sets(df_rank)
+    short_candidates, short_backups, midlong_candidates, midlong_backups = build_candidate_sets(
+        df_rank,
+        market_regime,
+        us_market or {},
+    )
     feedback_summary = build_feedback_summary()
 
     lines.extend(["", "## Short-Term Candidates", ""])
@@ -2754,7 +3044,11 @@ def build_daily_report_html(
 ) -> str:
     steady_html = "<p>None</p>" if bt_steady is None or bt_steady.empty else dataframe_to_html(bt_steady)
     attack_html = "<p>None</p>" if bt_attack is None or bt_attack.empty else dataframe_to_html(bt_attack)
-    short_candidates, short_backups, midlong_candidates, midlong_backups = build_candidate_sets(df_rank)
+    short_candidates, short_backups, midlong_candidates, midlong_backups = build_candidate_sets(
+        df_rank,
+        market_regime,
+        us_market or {},
+    )
     short_html = "<p>None</p>" if short_candidates.empty else dataframe_to_html(short_candidates)
     short_backup_html = "<p>None</p>" if short_backups.empty else dataframe_to_html(short_backups)
     midlong_html = "<p>None</p>" if midlong_candidates.empty else dataframe_to_html(midlong_candidates)
@@ -2937,7 +3231,11 @@ def main() -> int:
         logger.info("=== 今日排行榜 ===\n%s", df_rank.to_string(index=False))
         logger.info("Market regime: %s", market_regime["comment"])
 
-        short_candidates, short_backups, midlong_candidates, _ = build_candidate_sets(df_rank)
+        short_candidates, short_backups, midlong_candidates, _ = build_candidate_sets(
+            df_rank,
+            market_regime,
+            us_market,
+        )
         market_scenario = build_market_scenario(market_regime, us_market, df_rank)
         upsert_alert_tracking(short_candidates, midlong_candidates, market_scenario)
         save_reports(df_rank, market_regime, bt_steady, bt_attack, us_market)
@@ -2950,12 +3248,11 @@ def main() -> int:
         current_state = build_state(df_rank, market_regime)
         last_state = load_last_state()
 
-        if should_alert(df_rank, current_state, last_state, market_regime):
+        if should_alert(df_rank, current_state, last_state, market_regime, us_market):
             send_telegram_message(build_macro_message(market_regime, us_market, df_rank))
             send_telegram_message(build_short_term_message(df_rank, market_regime, us_market))
             send_telegram_message(build_early_gem_message(df_rank, market_regime, us_market))
             send_telegram_message(build_midlong_message(df_rank, market_regime, us_market))
-            send_telegram_message(build_special_etf_message(df_rank, market_regime, us_market))
             logger.info("Notification sent.")
         else:
             logger.info("No notification sent.")

@@ -202,6 +202,10 @@ telegram_getupdates_url
 local_api_key
 theme_watchlist_daily/portfolio_report.md
 theme_watchlist_daily/portfolio_report.html
+theme_watchlist_daily/local_*.md
+theme_watchlist_daily/local_*.json
+theme_watchlist_daily/weekly_review.md
+theme_watchlist_daily/weekly_review.json
 theme_watchlist_daily/.yfinance_cache/
 verification/watchlist_daily/
 

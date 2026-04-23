@@ -1,0 +1,196 @@
+from __future__ import annotations
+
+import json
+import tempfile
+import unittest
+from pathlib import Path
+from unittest.mock import patch
+
+import pandas as pd
+
+from run_local_daily import build_verification_argv
+from run_local_daily import collect_status_metrics
+from run_local_daily import main
+from run_local_daily import parse_args
+from run_local_daily import should_run_step
+from run_local_daily import write_local_status_dashboard
+
+
+class RunLocalDailyTests(unittest.TestCase):
+    def test_parse_args_defaults_to_full_mode(self) -> None:
+        args = parse_args([])
+        self.assertEqual(args.mode, "full")
+
+    def test_should_run_step_uses_mode_defaults_and_skip_overrides(self) -> None:
+        preopen_args = parse_args(["--mode", "preopen"])
+        self.assertTrue(should_run_step(preopen_args, "watchlist"))
+        self.assertTrue(should_run_step(preopen_args, "verification"))
+        self.assertFalse(should_run_step(preopen_args, "portfolio"))
+
+        postclose_args = parse_args(["--mode", "postclose", "--skip-portfolio"])
+        self.assertTrue(should_run_step(postclose_args, "watchlist"))
+        self.assertTrue(should_run_step(postclose_args, "verification"))
+        self.assertFalse(should_run_step(postclose_args, "portfolio"))
+
+    def test_build_verification_argv_maps_local_mode(self) -> None:
+        args = parse_args(
+            [
+                "--mode",
+                "postclose",
+                "--horizons",
+                "1,5",
+                "--weights",
+                "70:30,60:40",
+                "--all-dates",
+            ]
+        )
+
+        argv = build_verification_argv(args)
+
+        self.assertIn("--mode", argv)
+        self.assertIn("postclose", argv)
+        self.assertIn("1,5", argv)
+        self.assertIn("70:30,60:40", argv)
+        self.assertIn("--all-dates", argv)
+
+    def test_collect_status_metrics_reads_latest_signal_dates_and_counts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            theme_outdir = Path(tmpdir) / "theme_watchlist_daily"
+            verification_outdir = Path(tmpdir) / "verification" / "watchlist_daily"
+            theme_outdir.mkdir(parents=True, exist_ok=True)
+            verification_outdir.mkdir(parents=True, exist_ok=True)
+
+            pd.DataFrame([{"ticker": "2330.TW"}, {"ticker": "2317.TW"}]).to_csv(theme_outdir / "daily_rank.csv", index=False)
+            pd.DataFrame(
+                [
+                    {"signal_date": "2026-04-22", "watch_type": "short", "ticker": "2330.TW"},
+                    {"signal_date": "2026-04-23", "watch_type": "midlong", "ticker": "2317.TW"},
+                ]
+            ).to_csv(verification_outdir / "reco_snapshots.csv", index=False)
+            pd.DataFrame(
+                [
+                    {"signal_date": "2026-04-22", "status": "ok"},
+                    {"signal_date": "2026-04-23", "status": "insufficient_forward_data"},
+                ]
+            ).to_csv(verification_outdir / "reco_outcomes.csv", index=False)
+
+            metrics = collect_status_metrics(theme_outdir, verification_outdir)
+
+        self.assertEqual(metrics["latest_snapshot_signal_date"], "2026-04-23")
+        self.assertEqual(metrics["latest_outcome_signal_date"], "2026-04-23")
+        self.assertEqual(metrics["daily_rank_rows"], 2)
+        self.assertEqual(metrics["snapshot_rows"], 2)
+        self.assertEqual(metrics["outcome_rows"], 2)
+        self.assertEqual(metrics["outcome_ok_rows"], 1)
+        self.assertEqual(metrics["outcome_pending_rows"], 1)
+
+    def test_write_local_status_dashboard_writes_markdown_and_json(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            theme_outdir = Path(tmpdir) / "theme_watchlist_daily"
+            verification_outdir = Path(tmpdir) / "verification" / "watchlist_daily"
+            status_md = theme_outdir / "local_run_status.md"
+            status_json = theme_outdir / "local_run_status.json"
+            theme_outdir.mkdir(parents=True, exist_ok=True)
+            verification_outdir.mkdir(parents=True, exist_ok=True)
+            pd.DataFrame([{"ticker": "2330.TW"}]).to_csv(theme_outdir / "daily_rank.csv", index=False)
+
+            args = parse_args(["--mode", "preopen"])
+            steps = [{"name": "watchlist", "label": "Watchlist", "status": "completed", "detail": "OK"}]
+
+            write_local_status_dashboard(
+                args=args,
+                steps=steps,
+                overall_status="ok",
+                theme_outdir=theme_outdir,
+                verification_outdir=verification_outdir,
+                status_md=status_md,
+                status_json=status_json,
+            )
+
+            markdown = status_md.read_text(encoding="utf-8")
+            payload = json.loads(status_json.read_text(encoding="utf-8"))
+
+        self.assertIn("Local Run Status", markdown)
+        self.assertIn("Watchlist", markdown)
+        self.assertEqual(payload["mode"], "preopen")
+        self.assertEqual(payload["overall_status"], "ok")
+        self.assertEqual(payload["steps"][0]["status"], "completed")
+
+    def test_main_runs_preopen_steps_in_order(self) -> None:
+        calls: list[str] = []
+
+        def _runner(name: str):
+            def _inner(argv: list[str] | None = None) -> int:
+                calls.append(name)
+                return 0
+
+            return _inner
+
+        with patch("run_local_daily.daily_theme_watchlist.main", side_effect=_runner("watchlist")), patch(
+            "run_local_daily.portfolio_check.main", side_effect=_runner("portfolio")
+        ), patch("run_local_daily.run_daily_verification.main", side_effect=_runner("verification")), patch(
+            "run_local_daily.write_local_status_dashboard"
+        ) as mock_status:
+            code = main(["--mode", "preopen"])
+
+        self.assertEqual(code, 0)
+        self.assertEqual(calls, ["watchlist", "verification"])
+        mock_status.assert_called_once()
+
+    def test_main_runs_postclose_steps_in_order(self) -> None:
+        calls: list[str] = []
+
+        def _runner(name: str):
+            def _inner(argv: list[str] | None = None) -> int:
+                calls.append(name)
+                return 0
+
+            return _inner
+
+        with patch("run_local_daily.daily_theme_watchlist.main", side_effect=_runner("watchlist")), patch(
+            "run_local_daily.portfolio_check.main", side_effect=_runner("portfolio")
+        ), patch("run_local_daily.run_daily_verification.main", side_effect=_runner("verification")), patch(
+            "run_local_daily.write_local_status_dashboard"
+        ) as mock_status:
+            code = main(["--mode", "postclose"])
+
+        self.assertEqual(code, 0)
+        self.assertEqual(calls, ["watchlist", "portfolio", "verification"])
+        mock_status.assert_called_once()
+
+    def test_main_runs_portfolio_only_mode(self) -> None:
+        calls: list[str] = []
+
+        def _runner(name: str):
+            def _inner(argv: list[str] | None = None) -> int:
+                calls.append(name)
+                return 0
+
+            return _inner
+
+        with patch("run_local_daily.daily_theme_watchlist.main", side_effect=_runner("watchlist")), patch(
+            "run_local_daily.portfolio_check.main", side_effect=_runner("portfolio")
+        ), patch("run_local_daily.run_daily_verification.main", side_effect=_runner("verification")), patch(
+            "run_local_daily.write_local_status_dashboard"
+        ) as mock_status:
+            code = main(["--mode", "portfolio"])
+
+        self.assertEqual(code, 0)
+        self.assertEqual(calls, ["portfolio"])
+        mock_status.assert_called_once()
+
+    def test_main_writes_failed_status_when_step_errors(self) -> None:
+        calls: list[str] = []
+
+        def _watchlist(argv: list[str] | None = None) -> int:
+            calls.append("watchlist")
+            return 1
+
+        with patch("run_local_daily.daily_theme_watchlist.main", side_effect=_watchlist), patch(
+            "run_local_daily.write_local_status_dashboard"
+        ) as mock_status:
+            code = main(["--mode", "postclose"])
+
+        self.assertEqual(code, 1)
+        self.assertEqual(calls, ["watchlist"])
+        self.assertEqual(mock_status.call_args.kwargs["overall_status"], "failed")

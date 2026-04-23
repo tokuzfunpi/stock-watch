@@ -32,6 +32,44 @@
 - `python3 -m unittest discover -s tests`
 - `python3 daily_theme_watchlist.py`
 
+本機日常流程也可以直接用單一入口：
+- `python3 run_local_daily.py --mode preopen`
+- `python3 run_local_daily.py --mode postclose`
+- `python3 run_local_daily.py --mode full`
+- `python3 run_local_daily.py --mode portfolio`
+- 先做環境檢查也可以：
+  - `python3 run_local_doctor.py`
+  - `python3 run_local_doctor.py --skip-network`
+- 每週整理 decision note 也可以：
+  - `python3 run_weekly_review.py`
+  - `python3 run_weekly_review.py --max-signal-dates 5`
+- 清理舊的 local verification 產物也可以：
+  - `python3 run_local_housekeeping.py`
+  - `python3 run_local_housekeeping.py --apply`
+  - `python3 run_local_housekeeping.py --verification-outdir verification/watchlist_daily --apply`
+
+說明：
+- `preopen`：跑 `daily_theme_watchlist.py` + verification snapshot
+- `postclose`：跑 `daily_theme_watchlist.py` + `portfolio_check.py` + verification 後半段
+- `full`：整套本機流程一次跑完
+- `portfolio`：只跑本機持股檢查
+- 每次執行後會更新：
+  - `theme_watchlist_daily/local_run_status.md`
+  - `theme_watchlist_daily/local_run_status.json`
+  - 用來快速看本次哪些 step 有跑、成功與否、以及最新 verification row 狀態
+- `run_local_doctor.py` 會更新：
+  - `theme_watchlist_daily/local_doctor.md`
+  - `theme_watchlist_daily/local_doctor.json`
+  - 用來檢查 Python / 本機設定檔 / Telegram / cache / Yahoo DNS readiness
+- `run_weekly_review.py` 會更新：
+  - `theme_watchlist_daily/weekly_review.md`
+  - `theme_watchlist_daily/weekly_review.json`
+  - 用來整理最近幾個 `signal_date` 的 threshold / ATR / feedback 決策建議
+- `run_local_housekeeping.py` 會更新：
+  - `theme_watchlist_daily/local_housekeeping.md`
+  - `theme_watchlist_daily/local_housekeeping.json`
+  - 預設是 dry-run，先列出會刪掉哪些舊 `contexts`、`backfill_reports`、`*.bak*`、舊 cache；加 `--apply` 才會真的刪
+
 如果要跑持股檢查：
 - 複製 `portfolio.csv.example` 成本機的 `portfolio.csv`
 - 填入自己的持股資料

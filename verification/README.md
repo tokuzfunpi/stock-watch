@@ -18,6 +18,14 @@
 - `summarize_outcomes.py`
   - 目的：把 `reco_outcomes.csv` 彙整成可讀的勝率/平均報酬/樣本數報告。
   - 輸出：`verification/watchlist_daily/outcomes_summary.md`
+- `feedback_weight_sensitivity.py`
+  - 目的：離線比較 `feedback_score` 的 `base/recent` 權重組合，不改 production 預設。
+  - 輸出：
+    - `verification/watchlist_daily/feedback_weight_sensitivity.md`
+    - `verification/watchlist_daily/feedback_weight_sensitivity.csv`
+- `run_daily_verification.py`
+  - 目的：把 `verify -> evaluate -> summarize -> feedback sensitivity` 串成單一入口，並支援 `盤前 / 盤後 / 全流程` 模式。
+  - 適合：想用同一支指令跑早上快照、收盤後回填，或完整 workflow 時使用。
 
 ## 建議執行時機（台灣時間）
 
@@ -51,7 +59,36 @@ python3.11 verification/evaluate_recommendations.py --all-dates --since 2026-04-
 
 # 3) 彙整 outcomes
 python3.11 verification/summarize_outcomes.py
+
+# 4) 比較 feedback 權重敏感度（預設 70/30, 80/20, 60/40）
+python3.11 verification/feedback_weight_sensitivity.py
+
+# 自訂權重組合
+python3.11 verification/feedback_weight_sensitivity.py --weights 70:30,85:15,50:50
+
+# 5) 一次跑完整個 verification workflow
+python3.11 verification/run_daily_verification.py
+
+# 5a) 盤前流程：只做 verify / snapshot
+python3.11 verification/run_daily_verification.py --mode preopen
+
+# 5b) 盤後流程：做 evaluate -> summarize -> feedback sensitivity
+python3.11 verification/run_daily_verification.py --mode postclose
+
+# 常用調整：指定 horizons / weights
+python3.11 verification/run_daily_verification.py --horizons 1,5,20 --weights 70:30,85:15,50:50
+
+# 若要在 mode 上再局部跳步
+python3.11 verification/run_daily_verification.py --mode postclose --skip-feedback
 ```
+
+`run_daily_verification.py` 的 mode 規則：
+
+- `--mode preopen`：只跑 `verify_recommendations.py`
+- `--mode postclose`：跑 `evaluate_recommendations.py`、`summarize_outcomes.py`、`feedback_weight_sensitivity.py`
+- `--mode full`：從 `verify` 一路跑到 `feedback`（預設）
+- `--skip-*` 旗標仍然有效，會在 mode 的基礎上再跳過指定步驟
+- 同一天重跑 `preopen` 會以 `signal_date + watch_type + ticker` 覆蓋 snapshot，不再重複累積同一筆推薦
 
 ## 用 Git 歷史回填（補齊過去樣本）
 
@@ -84,6 +121,7 @@ python3.11 verification/backfill_from_git.py --since 2026-04-15 --until 2026-04-
 - `reco_snapshots.csv`：每天早上推薦快照（偏「可追溯」）
 - `reco_outcomes.csv`：每個 ticker * 每個 horizon 的 realized return（偏「校正/評估」）
 - `outcomes_summary.md`：把 `reco_outcomes.csv` 聚合成勝率/平均報酬/樣本數（偏「管理 dashboard」）
+- `feedback_weight_sensitivity.md`：看不同 `feedback_score` 權重下，action 排名會不會明顯洗牌（偏「離線研究」）
 
 ## GitHub Actions（手動）
 

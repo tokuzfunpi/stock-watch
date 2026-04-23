@@ -35,7 +35,13 @@ def main() -> int:
         except Exception as exc:
             warnings.append(f"market_regime: {exc}")
             logger.exception("Market regime fetch failed (best effort): %s", exc)
-            market_regime = {"comment": "加權指數資料抓不到（best effort）"}
+            market_regime = {
+                "comment": "加權指數資料抓不到（best effort）",
+                "is_bullish": True,
+                "ret20_pct": 0.0,
+                "volume_ratio20": 1.0,
+                "session_phase": "postclose",
+            }
 
         try:
             us_market = get_us_market_reference()
@@ -45,7 +51,9 @@ def main() -> int:
             us_market = {"summary": "美股參考暫時抓不到（best effort）。", "rows": []}
 
         try:
-            df_rank = run_watchlist()
+            initial_scenario = build_market_scenario(market_regime, us_market)
+            adjusted_strat = adjust_strategy_by_scenario(CONFIG.strategy, initial_scenario)
+            df_rank = run_watchlist(strat=adjusted_strat)
         except Exception as exc:
             warnings.append(f"watchlist: {exc}")
             logger.exception("Watchlist scan failed (best effort): %s", exc)

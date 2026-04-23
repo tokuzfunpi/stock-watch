@@ -1,5 +1,7 @@
 # Project Update: 2026-04-22 (Adaptive Strategy & Volatility Awareness)
 
+> Archived design update from `testv`. Use this as historical context and compare against `GEMINI_HANDOFF.md` before assuming the same behavior is present on `main`.
+
 ## 1. 核心邏輯更新 (Core Logic Enhancements)
 
 ### 策略參數化 (Strategy Parameterization)

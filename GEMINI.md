@@ -1,5 +1,7 @@
 # GEMINI.md - AI Agent Context & Guidelines
 
+> Reference note: this document is design context from the `testv` line of work. Treat it as guidance to cross-check with `GEMINI_HANDOFF.md`, not as the sole source of truth for what `main` currently does.
+
 This file provides critical context and operational mandates for AI agents working on the `stock-watch` project. Adhere to these instructions to maintain system integrity and strategy consistency.
 
 ## 1. Project Identity & Purpose
@@ -18,7 +20,7 @@ This file provides critical context and operational mandates for AI agents worki
 - **Visualization**: Always use `volatility_label()` and the associated Emojis (`🧊`, `⚖️`, `🔥`, `⚡`) in user-facing messages.
 
 ### 2.3 Feedback Loop (P/L & Win Rate)
-- **Mandate**: Ranking priority MUST consider both Win Rate and P/L Ratio. 
+- **Mandate**: Ranking priority MUST consider both Win Rate and P/L Ratio.
 - **Scoring Formula**: `feedback_score` is the primary sorting weight for final push candidates. Ensure `build_feedback_summary()` is called to refresh these scores daily.
 
 ## 3. Critical Files & Data Schema
@@ -75,4 +77,3 @@ The following updates transitioned the strategy from "static rules" to a **Dynam
 6. `run_backtest_dual()`
 ...
 9. `upsert_alert_tracking(..., scenario=initial_scenario)`
-

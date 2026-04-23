@@ -112,7 +112,13 @@ def enrich_scenario_label_columns(
     if "scenario_label" not in out.columns:
         out["scenario_label"] = ""
     out["scenario_label"] = out["scenario_label"].astype(str).str.strip()
-    out.loc[(out["scenario_label"] == "") | (out["scenario_label"] == "b''") | (out["scenario_label"] == "nan"), "scenario_label"] = ""
+    out.loc[
+        (out["scenario_label"] == "")
+        | (out["scenario_label"] == "b''")
+        | (out["scenario_label"] == "nan")
+        | (out["scenario_label"] == "unknown"),
+        "scenario_label",
+    ] = ""
 
     merge_keys = ["signal_date", "watch_type", "ticker"]
     missing_mask = out["scenario_label"] == ""
@@ -453,6 +459,23 @@ _VALID_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _VALID_WATCH_TYPES = {"short", "midlong"}
 
 
+def dedupe_snapshots_by_key(df: pd.DataFrame) -> pd.DataFrame:
+    if df is None or df.empty:
+        return df
+    key_cols = ["signal_date", "watch_type", "ticker"]
+    if any(col not in df.columns for col in key_cols):
+        return df
+
+    out = df.copy()
+    for col in key_cols:
+        out[col] = out[col].astype(str).str.strip()
+
+    sort_cols = [col for col in ["generated_at", "source_sha", "source"] if col in out.columns]
+    if sort_cols:
+        out = out.sort_values(by=sort_cols, kind="stable")
+    return out.drop_duplicates(subset=key_cols, keep="last").copy()
+
+
 def is_valid_snapshot_ticker(raw: str) -> bool:
     t = str(raw or "").strip().upper()
     if not t or not _VALID_TICKER_RE.match(t):
@@ -537,6 +560,8 @@ def main(argv: list[str] | None = None) -> int:
             if snapshots.empty:
                 print("No valid snapshots left after watch_type filtering. Re-run verify/backfill.")
                 return 0
+
+    snapshots = dedupe_snapshots_by_key(snapshots)
 
     horizons = [int(x.strip()) for x in str(args.horizons).split(",") if x.strip()]
     horizons = sorted({h for h in horizons if h >= 1})

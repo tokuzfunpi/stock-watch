@@ -7,10 +7,13 @@ from importlib import util
 from pathlib import Path
 from unittest.mock import patch
 
+import daily_theme_watchlist as dtw
 import pandas as pd
+import portfolio_check as portfolio_check_module
 
 from daily_theme_watchlist import (
     add_indicators,
+    alternate_taiwan_ticker,
     adjust_strategy_by_scenario,
     apply_feedback_adjustment,
     build_feedback_summary,
@@ -47,6 +50,7 @@ from daily_theme_watchlist import (
     upsert_alert_tracking,
     watch_price_plan,
     watch_price_plan_text,
+    yf_download_one,
 )
 
 UPDATE_CHAT_ID_MAP_PATH = Path(__file__).resolve().parent.parent / "update_chat_id_map.py"
@@ -89,6 +93,47 @@ class DetectRowTests(unittest.TestCase):
 
         self.assertGreater(adjusted.rebreak_vol_ratio, CONFIG.strategy.rebreak_vol_ratio)
         self.assertGreater(adjusted.accel_vol_ratio_fast, CONFIG.strategy.accel_vol_ratio_fast)
+
+
+class MarketRegimeTests(unittest.TestCase):
+    def test_get_market_regime_treats_zero_volume_ratio_as_neutral(self) -> None:
+        dates = pd.date_range("2025-01-01", periods=260, freq="B")
+        closes = [100.0] * 240 + [101.0 + i for i in range(20)]
+        volumes = [1000.0] * 259 + [0.0]
+        df = pd.DataFrame(
+            {
+                "Open": closes,
+                "High": [c + 1 for c in closes],
+                "Low": [c - 1 for c in closes],
+                "Close": closes,
+                "Volume": volumes,
+            },
+            index=dates,
+        )
+
+        with patch("daily_theme_watchlist.yf_download_one", return_value=df), patch.object(
+            dtw, "market_session_phase", return_value="postclose"
+        ):
+            regime = dtw.get_market_regime()
+
+        self.assertTrue(regime["is_bullish"])
+        self.assertFalse(regime["volume_ratio20_valid"])
+        self.assertEqual(regime["volume_ratio20"], 1.0)
+        self.assertIn("量比資料異常", regime["comment"])
+
+    def test_build_market_scenario_uses_intraday_guard_before_close(self) -> None:
+        market_regime = {
+            "comment": "加權指數盤中偏弱",
+            "ret20_pct": 2.0,
+            "volume_ratio20": 0.9,
+            "is_bullish": False,
+            "session_phase": "intraday",
+        }
+        us_market = {"summary": "美股昨晚偏弱，台股早盤要提防開高走低或續殺。"}
+
+        scenario = dtw.build_market_scenario(market_regime, us_market, pd.DataFrame())
+
+        self.assertEqual(scenario["label"], "盤中保守觀察")
 
 
 class GradeSignalTests(unittest.TestCase):
@@ -305,6 +350,8 @@ class PortfolioTests(unittest.TestCase):
         self.assertEqual(normalize_ticker_symbol("50"), "0050.TW")
         self.assertEqual(normalize_ticker_symbol("878"), "00878.TW")
         self.assertEqual(normalize_ticker_symbol("00772B"), "00772B.TWO")
+        self.assertEqual(alternate_taiwan_ticker("3491.TW"), "3491.TWO")
+        self.assertEqual(alternate_taiwan_ticker("3491.TWO"), "3491.TW")
 
     def test_sync_watchlist_with_portfolio_adds_missing_symbols(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -788,6 +835,115 @@ class SelectPushCandidatesTests(unittest.TestCase):
         self.assertGreaterEqual(list(out["ticker"]).count("BOTH1.TW"), 2)
         self.assertIn("MID2.TW", list(out["ticker"]))
 
+    def test_select_push_candidates_caps_short_list_in_correction_scenario(self) -> None:
+        df = pd.DataFrame(
+            [
+                {
+                    "rank": 1,
+                    "ticker": "SHORT1.TW",
+                    "name": "Short One",
+                    "group": "theme",
+                    "layer": "short_attack",
+                    "grade": "A",
+                    "setup_score": 8,
+                    "risk_score": 2,
+                    "ret5_pct": 9.0,
+                    "ret10_pct": 10.0,
+                    "ret20_pct": 12.0,
+                    "volume_ratio20": 1.5,
+                    "signals": "ACCEL,TREND",
+                    "rank_change": 1,
+                    "setup_change": 1,
+                    "regime": "轉強速度有出來",
+                    "date": "2026-04-22",
+                    "close": 100.0,
+                },
+                {
+                    "rank": 2,
+                    "ticker": "SHORT2.TW",
+                    "name": "Short Two",
+                    "group": "theme",
+                    "layer": "short_attack",
+                    "grade": "A",
+                    "setup_score": 7,
+                    "risk_score": 2,
+                    "ret5_pct": 8.0,
+                    "ret10_pct": 9.0,
+                    "ret20_pct": 10.0,
+                    "volume_ratio20": 1.4,
+                    "signals": "ACCEL,TREND",
+                    "rank_change": 1,
+                    "setup_change": 1,
+                    "regime": "轉強速度有出來",
+                    "date": "2026-04-22",
+                    "close": 90.0,
+                },
+                {
+                    "rank": 3,
+                    "ticker": "MID1.TW",
+                    "name": "Mid One",
+                    "group": "theme",
+                    "layer": "midlong_core",
+                    "grade": "B",
+                    "setup_score": 7,
+                    "risk_score": 2,
+                    "ret5_pct": 2.0,
+                    "ret10_pct": 6.0,
+                    "ret20_pct": 9.0,
+                    "volume_ratio20": 0.9,
+                    "signals": "TREND",
+                    "rank_change": 1,
+                    "setup_change": 1,
+                    "regime": "中段延續中",
+                    "date": "2026-04-22",
+                    "close": 80.0,
+                },
+            ]
+        )
+
+        market_regime = {"comment": "加權回檔", "ret20_pct": 2.0, "volume_ratio20": 0.9, "is_bullish": False}
+        us_market = {"summary": "美股昨晚偏弱，科技股續殺。"}
+
+        out = select_push_candidates(df, market_regime, us_market)
+
+        short_names = [ticker for ticker in list(out["ticker"]) if ticker.startswith("SHORT")]
+        self.assertEqual(len(short_names), 1)
+        self.assertIn("MID1.TW", list(out["ticker"]))
+
+    def test_select_push_candidates_caps_midlong_list_in_correction_scenario(self) -> None:
+        df = pd.DataFrame(
+            [
+                {
+                    "rank": 1,
+                    "ticker": f"MID{i}.TW",
+                    "name": f"Mid {i}",
+                    "group": "theme",
+                    "layer": "midlong_core",
+                    "grade": "B",
+                    "setup_score": 7,
+                    "risk_score": 2,
+                    "ret5_pct": 2.0,
+                    "ret10_pct": 6.0,
+                    "ret20_pct": 9.0,
+                    "volume_ratio20": 0.9,
+                    "signals": "TREND",
+                    "rank_change": 1,
+                    "setup_change": 1,
+                    "regime": "中段延續中",
+                    "date": "2026-04-22",
+                    "close": 80.0 + i,
+                }
+                for i in range(1, 6)
+            ]
+        )
+
+        market_regime = {"comment": "加權回檔", "ret20_pct": 2.0, "volume_ratio20": 0.9, "is_bullish": False}
+        us_market = {"summary": "美股昨晚偏弱，科技股續殺。"}
+
+        out = select_midlong_candidates(df, market_regime, us_market)
+
+        self.assertEqual(len(out), CONFIG.scenario_policy.correction_midlong_top_n)
+
     def test_midlong_candidates_allow_lower_volume_ratio_when_trend_is_valid(self) -> None:
         df = pd.DataFrame(
             [
@@ -835,14 +991,32 @@ class PushMessageTests(unittest.TestCase):
         message = build_macro_message(market_regime, us_market, df_rank)
 
         self.assertIn("大盤 / 美股摘要", message)
+        self.assertIn("今日盤勢", message)
+        self.assertIn("今日策略", message)
+        self.assertIn("白話說", message)
         self.assertIn("加權指數目前偏多", message)
         self.assertIn("美股昨晚偏強", message)
         self.assertIn("盤勢情境", message)
         self.assertIn("操作重點", message)
         self.assertIn("出場提醒", message)
         self.assertIn("Heat Bias", message)
-        self.assertIn("觸發來源", message)
+        self.assertNotIn("觸發來源", message)
         self.assertIn("台灣時間", message)
+
+    def test_macro_message_uses_correction_copy_for_subscribers(self) -> None:
+        market_regime = {"comment": "加權指數轉弱", "ret20_pct": 2.0, "volume_ratio20": 0.9, "is_bullish": False}
+        us_market = {"summary": "美股昨晚偏弱，台股早盤要提防開高走低或續殺。"}
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            outcomes_csv = Path(tmpdir) / "reco_outcomes.csv"
+            pd.DataFrame([{"scenario_label": "強勢延伸盤", "status": "ok"}]).to_csv(outcomes_csv, index=False)
+            with patch.object(dtw, "VERIFICATION_OUTCOMES_CSV", outcomes_csv):
+                message = build_macro_message(market_regime, us_market, pd.DataFrame())
+
+        self.assertIn("今日盤勢：明顯修正盤", message)
+        self.assertIn("今日策略：先防守，短線名單縮小。", message)
+        self.assertIn("白話說：今天先保留資金、少做少追高", message)
+        self.assertIn("修正盤驗證提醒", message)
 
     def test_short_and_midlong_messages_render_independently(self) -> None:
         df = pd.DataFrame(
@@ -922,12 +1096,13 @@ class PushMessageTests(unittest.TestCase):
             ]
         )
 
-        market_regime = {"comment": "加權指數目前偏多"}
+        market_regime = {"comment": "加權指數目前偏多", "ret20_pct": 14.0, "volume_ratio20": 1.2, "is_bullish": True}
         us_market = {"summary": "美股昨晚偏強，台股開盤情緒通常較正面。"}
         short_message = build_short_term_message(df, market_regime, us_market)
         midlong_message = build_midlong_message(df, market_regime, us_market)
 
         self.assertIn("短線可買", short_message)
+        self.assertIn("今天短線策略", short_message)
         self.assertNotIn("美股昨晚偏強", short_message)
         self.assertNotIn("觸發來源", short_message)
         self.assertIn("5日 9.0%", short_message)
@@ -938,12 +1113,79 @@ class PushMessageTests(unittest.TestCase):
         self.assertTrue(any(label in short_message for label in ["等拉回", "開高不追", "續抱觀察", "分批落袋"]))
 
         self.assertIn("中長線可布局", midlong_message)
+        self.assertIn("今天中長線策略", midlong_message)
         self.assertNotIn("美股昨晚偏強", midlong_message)
         self.assertNotIn("觸發來源", midlong_message)
         self.assertIn("20日 14.0%", midlong_message)
         self.assertIn("🧊穩健", midlong_message)
         self.assertIn("加碼參考", midlong_message)
         self.assertTrue(any(label in midlong_message for label in ["續抱", "可分批", "觀察", "分批落袋"]))
+
+    def test_macro_message_includes_new_watchlist_spotlight(self) -> None:
+        market_regime = {"comment": "加權指數目前偏多", "ret20_pct": 14.0, "volume_ratio20": 1.2, "is_bullish": True}
+        us_market = {"summary": "美股昨晚偏強，台股開盤情緒通常較正面。"}
+        df_rank = pd.DataFrame(
+            [
+                {
+                    "rank": 7,
+                    "ticker": "3491.TWO",
+                    "name": "昇達科",
+                    "group": "satellite",
+                    "layer": "midlong_core",
+                    "grade": "B",
+                    "setup_score": 6,
+                    "risk_score": 2,
+                    "ret5_pct": 4.0,
+                    "ret10_pct": 8.0,
+                    "ret20_pct": 12.0,
+                    "volume_ratio20": 1.1,
+                    "signals": "TREND",
+                    "rank_change": 0,
+                    "setup_change": 1,
+                    "status_change": "NEW",
+                    "regime": "中段延續中",
+                    "date": "2026-04-22",
+                    "close": 320.0,
+                    "atr_pct": 3.1,
+                    "volatility_tag": "標準",
+                }
+            ]
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            prev_rank_csv = Path(tmpdir) / "prev_daily_rank.csv"
+            prev_rank_csv.write_text("ticker\n2330.TW\n", encoding="utf-8")
+            with patch.object(dtw, "PREV_RANK_CSV", prev_rank_csv):
+                message = build_macro_message(market_regime, us_market, df_rank)
+
+        self.assertIn("新加入追蹤觀察", message)
+        self.assertIn("昇達科 (3491.TWO)", message)
+        self.assertIn("初步看法", message)
+
+    def test_yf_download_one_falls_back_to_two_suffix(self) -> None:
+        dates = pd.date_range("2025-01-01", periods=260, freq="B")
+        df_hist = pd.DataFrame(
+            {
+                "Open": [100.0] * 260,
+                "High": [101.0] * 260,
+                "Low": [99.0] * 260,
+                "Close": [100.0] * 260,
+                "Volume": [1000.0] * 260,
+            },
+            index=dates,
+        )
+
+        def fake_download(ticker: str, **_: object) -> pd.DataFrame:
+            if ticker == "3491.TW":
+                return pd.DataFrame()
+            if ticker == "3491.TWO":
+                return df_hist
+            raise AssertionError(f"unexpected ticker {ticker}")
+
+        with patch("daily_theme_watchlist.yf.download", side_effect=fake_download):
+            out = yf_download_one("3491.TW", "3y")
+
+        self.assertEqual(len(out), 260)
 
     def test_special_etf_message_renders_requested_tickers(self) -> None:
         df = pd.DataFrame(
@@ -1182,6 +1424,60 @@ class PushMessageTests(unittest.TestCase):
         self.assertIn("strat", kwargs)
         self.assertGreater(kwargs["strat"].rebreak_vol_ratio, CONFIG.strategy.rebreak_vol_ratio)
 
+    def test_main_does_not_send_special_etf_telegram_message(self) -> None:
+        df = pd.DataFrame(
+            [
+                {
+                    "rank": 1,
+                    "ticker": "TEST1.TW",
+                    "name": "Test One",
+                    "group": "theme",
+                    "layer": "short_attack",
+                    "grade": "A",
+                    "setup_score": 8,
+                    "risk_score": 2,
+                    "ret5_pct": 9.0,
+                    "ret10_pct": 12.0,
+                    "ret20_pct": 15.0,
+                    "volume_ratio20": 1.6,
+                    "signals": "ACCEL,TREND",
+                    "rank_change": 1,
+                    "setup_change": 1,
+                    "status_change": "UP",
+                    "regime": "轉強速度有出來",
+                    "date": "2026-04-22",
+                    "close": 100.0,
+                    "spec_risk_label": "正常",
+                    "atr_pct": 4.8,
+                    "volatility_tag": "活潑",
+                }
+            ]
+        )
+        market_regime = {"comment": "加權指數目前偏多", "ret20_pct": 12.0, "volume_ratio20": 1.2, "is_bullish": True}
+        us_market = {"summary": "美股偏強"}
+
+        with patch("daily_theme_watchlist.load_last_success_date", return_value=""), patch(
+            "daily_theme_watchlist.current_run_signature", return_value="sig"
+        ), patch("daily_theme_watchlist.get_market_regime", return_value=market_regime), patch(
+            "daily_theme_watchlist.get_us_market_reference", return_value=us_market
+        ), patch("daily_theme_watchlist.run_watchlist", return_value=df), patch(
+            "daily_theme_watchlist.run_backtest_dual", return_value=(None, None)
+        ), patch("daily_theme_watchlist.upsert_alert_tracking"), patch(
+            "daily_theme_watchlist.save_reports"
+        ), patch("daily_theme_watchlist.build_state", return_value="state"), patch(
+            "daily_theme_watchlist.load_last_state", return_value=""
+        ), patch("daily_theme_watchlist.should_alert", return_value=True), patch(
+            "daily_theme_watchlist.save_last_state"
+        ), patch("daily_theme_watchlist.save_last_success_date"), patch(
+            "daily_theme_watchlist.send_telegram_message"
+        ) as send_mock, patch("daily_theme_watchlist.logger"):
+            result = watchlist_main()
+
+        self.assertEqual(result, 0)
+        self.assertEqual(send_mock.call_count, 4)
+        sent_messages = [call.args[0] for call in send_mock.call_args_list]
+        self.assertTrue(all("ETF / 債券觀察" not in msg for msg in sent_messages))
+
 
 class SplitMessageTests(unittest.TestCase):
     def test_split_message_respects_limit(self) -> None:
@@ -1199,6 +1495,54 @@ class SplitMessageTests(unittest.TestCase):
         parts = split_message(message, limit=100)
 
         self.assertEqual(parts, [message])
+
+
+class PortfolioCheckTests(unittest.TestCase):
+    def test_portfolio_check_applies_scenario_adjusted_strategy(self) -> None:
+        market_regime = {"comment": "加權指數目前偏多", "ret20_pct": 12.0, "volume_ratio20": 1.2, "is_bullish": True, "session_phase": "postclose"}
+        us_market = {"summary": "美股偏弱"}
+        df_rank = pd.DataFrame(
+            [
+                {
+                    "rank": 1,
+                    "ticker": "2330.TW",
+                    "name": "台積電",
+                    "group": "core",
+                    "layer": "midlong_core",
+                    "grade": "B",
+                    "setup_score": 7,
+                    "risk_score": 2,
+                    "ret5_pct": 4.0,
+                    "ret10_pct": 6.0,
+                    "ret20_pct": 10.0,
+                    "volume_ratio20": 1.1,
+                    "signals": "TREND",
+                    "rank_change": 1,
+                    "setup_change": 1,
+                    "status_change": "UP",
+                    "regime": "中段延續中",
+                    "date": "2026-04-22",
+                    "close": 950.0,
+                    "spec_risk_label": "正常",
+                    "atr_pct": 2.0,
+                    "volatility_tag": "標準",
+                }
+            ]
+        )
+
+        with patch.object(portfolio_check_module, "PORTFOLIO", pd.DataFrame([{"ticker": "2330.TW", "shares": 1, "avg_cost": 900, "target_profit_pct": 15}])), patch(
+            "portfolio_check.get_market_regime", return_value=market_regime
+        ), patch("portfolio_check.get_us_market_reference", return_value=us_market), patch(
+            "portfolio_check.run_watchlist", return_value=df_rank
+        ) as run_watchlist_mock, patch("portfolio_check.save_portfolio_reports"), patch(
+            "builtins.print"
+        ), patch("portfolio_check.logger"):
+            result = portfolio_check_module.main()
+
+        self.assertEqual(result, 0)
+        _, kwargs = run_watchlist_mock.call_args
+        self.assertIn("strat", kwargs)
+        self.assertGreater(kwargs["strat"].rebreak_vol_ratio, CONFIG.strategy.rebreak_vol_ratio)
 
 
 if __name__ == "__main__":
