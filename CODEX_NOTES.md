@@ -1033,3 +1033,97 @@ requirements.txt
 - **先做 report / verification，再做 ranking**
 - **先觀察 `5D` / `20D` 結果，再考慮放大 adaptive 權重**
 - **20D 樣本不足時，不要急著重調中線門檻**
+
+## 2026-04-23 補充：Gemini 方向已進一步落成 verification 與操作 guardrails
+
+今天主要做了三類工作：
+
+1. **補文件脈絡**
+   - 新增 / 整理：
+     - `GEMINI.md`
+     - `GEMINI_UPDATES_2026_04_22.md`
+     - `TESTV_INTEGRATION_CHECKLIST.md`
+   - 重點不是把 `testv` 當可直接 merge 的分支，而是把它降維成：
+     - 設計背景
+     - 研究題來源
+     - 不該回退的 guardrail 清單
+
+2. **把 Gemini 的研究題變成主線 verification 能力**
+   - `verification/summarize_outcomes.py`
+     - 新增 `Key Findings`
+     - 新增 `ATR Band Findings`
+     - 新增 `ATR Band Coverage`
+     - 新增 `ATR Band Checkpoints`
+   - 新增 `verification/feedback_weight_sensitivity.py`
+     - 可離線比較 `70/30`、`80/20`、`60/40`
+   - 新增 `verification/run_daily_verification.py`
+     - 後來又補成支援：
+       - `--mode preopen`
+       - `--mode postclose`
+       - `--mode full`
+
+3. **把 verification 的操作風險補齊**
+   - 修掉同一天重跑 `preopen` 會一直 append snapshot 的問題
+   - 現在 `verification/verify_recommendations.py`
+     - 會用 `signal_date + watch_type + ticker` 做 upsert
+   - `verification/backfill_from_git.py`
+     - 也同步改成同鍵 upsert
+   - `verification/evaluate_recommendations.py`
+     - 會先對 snapshots 做去重，再計算 outcomes
+   - 已手動清掉本機 `verification/watchlist_daily/reco_snapshots.csv` 的重複資料
+     - 從 `120` 筆整理到 `97` 筆
+     - 備份檔：`verification/watchlist_daily/reco_snapshots.csv.bak.dedupe.20260423_095839`
+
+### 這代表目前的實際狀態
+
+- `preopen` / `postclose` / `full` 現在都可以安全重跑
+- 但「安全重跑」的定義是：
+  - **不會把樣本數越堆越亂**
+  - **同一天同一檔 snapshot 以最後一次為準**
+- 不是：
+  - 幫你保留每一次盤前版本快照
+
+### 今天驗證後最重要的分析結論
+
+1. **Gemini 的大方向是對的，但目前最強證據仍是 Heat Bias**
+   - 最新 summary 顯示：
+     - `1D midlong`
+     - `hot - normal = +4.22%`
+     - `min_n=11`
+     - `confidence=high`
+   - 這表示 midlong 近期績效仍高度受熱盤支撐
+
+2. **Scenario 已接上，但還沒有壓過 heat 成為主解釋變數**
+   - `強勢延伸盤` 下的 `hot - normal` 仍約 `+4.44%`
+   - 所以目前不要把 scenario-aware 邏輯的存在，直接解讀成策略已獨立證明有效
+
+3. **forced-fill 不是現在最該先砍掉的東西**
+   - `1D midlong` 的 `ok - below_threshold` 仍約 `-1.68%`
+   - 代表 forced-fill 沒有明顯比較差
+   - 這不是叫人放寬門檻，而是提醒：
+     - 下一步若要調規則，應優先重看 `midlong threshold`
+
+4. **ATR 與 feedback 還在「可觀察、不可急改」階段**
+   - ATR：
+     - `1D` 有 checkpoint
+     - `5D / 20D` band 樣本仍不足
+   - feedback：
+     - 權重調整會改分數
+     - 但目前還不會洗掉 action 排名
+   - 所以 production 先維持：
+     - ATR 當 verification 報表
+     - feedback 維持 `70/30`
+
+### 目前最合理的維護節奏
+
+- production 先不動
+- 每天照常跑：
+  - 盤前：`python3.11 verification/run_daily_verification.py --mode preopen`
+  - 盤後：`python3.11 verification/run_daily_verification.py --mode postclose`
+- 繼續累積 `5D / 20D`
+- 之後最先重看的，不是 feedback 權重，也不是 ATR exit，而是：
+  - `midlong threshold`
+
+### 給之後維護者的一句話
+
+今天之後，Gemini 的價值已不再只是「設計想法」，而是已經有一套可以安全重跑、持續累積、可量化驗證的 verification workflow；但主線策略本身仍應維持保守，不要因短期熱盤結果而過早放寬門檻。
