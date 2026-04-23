@@ -88,5 +88,41 @@
 ### 給 Gemini / 後續 agent 的一句話
 `testv` 最新狀態最有價值的是「研究結論與優先順序」，不是 branch 上的 code 本身。若要吸收，請以 `main` 現有 workflow 為基底重做，而不是倒回 `testv`。
 
+## 10. Direct Guidance for Gemini
+
+如果 Gemini 下一輪要接手，請直接照下面這個邊界工作，不要發散：
+
+### 先做什麼
+- **先做分析，不先改 production code**
+- **先拆 `midlong threshold` 與 `heat bias`**
+- **先看 `5D / 20D` 是否支持結論，不要只看 `1D`**
+
+### 這輪最該回答的問題
+1. 為什麼 `midlong below_threshold` 目前沒有比 `ok` 差？
+2. 這個現象有多少是：
+   - `market_heat`
+   - `scenario_label`
+   - `action mix`
+   - `signal_date concentration`
+3. 若只看 `normal` 盤，`ok` 是否開始顯示出真正的防守優勢？
+
+### 明確不要做的事
+- 不要提議直接 merge `testv`
+- 不要直接修改：
+  - `daily_theme_watchlist.py`
+  - `verification/backfill_from_git.py`
+  - `verification/summarize_outcomes.py`
+- 不要因為 `1D` 表現漂亮就主張放寬 `midlong threshold`
+- 不要把 heat bias 的結果誤解成 scenario-aware 規則已被獨立證明
+
+### 比較好的輸出格式
+- 主因排序
+- 哪些結論可信、哪些仍是小樣本
+- 下一步應觀察哪個指標
+- 若未來真的要動 code，最小可行變更是什麼
+
+### 最後一句指令
+請把 `testv` 當作**研究分支**，不是回灌來源；任何值得落地的東西，都應在 `main` 重新設計、補測試、再整合。
+
 ---
 *本文件整合遠端最新 threshold 分析與 2026-04-23 `testv` re-check，供後續 agent 接手。*
