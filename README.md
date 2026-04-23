@@ -40,6 +40,9 @@
 - 先做環境檢查也可以：
   - `python3 run_local_doctor.py`
   - `python3 run_local_doctor.py --skip-network`
+- 每週整理 decision note 也可以：
+  - `python3 run_weekly_review.py`
+  - `python3 run_weekly_review.py --max-signal-dates 5`
 
 說明：
 - `preopen`：跑 `daily_theme_watchlist.py` + verification snapshot
@@ -54,6 +57,10 @@
   - `theme_watchlist_daily/local_doctor.md`
   - `theme_watchlist_daily/local_doctor.json`
   - 用來檢查 Python / 本機設定檔 / Telegram / cache / Yahoo DNS readiness
+- `run_weekly_review.py` 會更新：
+  - `theme_watchlist_daily/weekly_review.md`
+  - `theme_watchlist_daily/weekly_review.json`
+  - 用來整理最近幾個 `signal_date` 的 threshold / ATR / feedback 決策建議
 
 如果要跑持股檢查：
 - 複製 `portfolio.csv.example` 成本機的 `portfolio.csv`
