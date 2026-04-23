@@ -43,6 +43,10 @@
 - `postclose`：跑 `daily_theme_watchlist.py` + `portfolio_check.py` + verification 後半段
 - `full`：整套本機流程一次跑完
 - `portfolio`：只跑本機持股檢查
+- 每次執行後會更新：
+  - `theme_watchlist_daily/local_run_status.md`
+  - `theme_watchlist_daily/local_run_status.json`
+  - 用來快速看本次哪些 step 有跑、成功與否、以及最新 verification row 狀態
 
 如果要跑持股檢查：
 - 複製 `portfolio.csv.example` 成本機的 `portfolio.csv`
