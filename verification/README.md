@@ -24,8 +24,8 @@
     - `verification/watchlist_daily/feedback_weight_sensitivity.md`
     - `verification/watchlist_daily/feedback_weight_sensitivity.csv`
 - `run_daily_verification.py`
-  - 目的：把 `verify -> evaluate -> summarize -> feedback sensitivity` 串成單一入口。
-  - 適合：平常日常流程想一次跑完時使用。
+  - 目的：把 `verify -> evaluate -> summarize -> feedback sensitivity` 串成單一入口，並支援 `盤前 / 盤後 / 全流程` 模式。
+  - 適合：想用同一支指令跑早上快照、收盤後回填，或完整 workflow 時使用。
 
 ## 建議執行時機（台灣時間）
 
@@ -69,12 +69,25 @@ python3.11 verification/feedback_weight_sensitivity.py --weights 70:30,85:15,50:
 # 5) 一次跑完整個 verification workflow
 python3.11 verification/run_daily_verification.py
 
+# 5a) 盤前流程：只做 verify / snapshot
+python3.11 verification/run_daily_verification.py --mode preopen
+
+# 5b) 盤後流程：做 evaluate -> summarize -> feedback sensitivity
+python3.11 verification/run_daily_verification.py --mode postclose
+
 # 常用調整：指定 horizons / weights
 python3.11 verification/run_daily_verification.py --horizons 1,5,20 --weights 70:30,85:15,50:50
 
-# 若只想重跑後半段
-python3.11 verification/run_daily_verification.py --skip-verify
+# 若要在 mode 上再局部跳步
+python3.11 verification/run_daily_verification.py --mode postclose --skip-feedback
 ```
+
+`run_daily_verification.py` 的 mode 規則：
+
+- `--mode preopen`：只跑 `verify_recommendations.py`
+- `--mode postclose`：跑 `evaluate_recommendations.py`、`summarize_outcomes.py`、`feedback_weight_sensitivity.py`
+- `--mode full`：從 `verify` 一路跑到 `feedback`（預設）
+- `--skip-*` 旗標仍然有效，會在 mode 的基礎上再跳過指定步驟
 
 ## 用 Git 歷史回填（補齊過去樣本）
 

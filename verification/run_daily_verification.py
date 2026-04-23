@@ -13,11 +13,23 @@ from verification import feedback_weight_sensitivity
 from verification import summarize_outcomes
 from verification import verify_recommendations
 
+MODE_STEPS: dict[str, tuple[str, ...]] = {
+    "full": ("verify", "evaluate", "summary", "feedback"),
+    "preopen": ("verify",),
+    "postclose": ("evaluate", "summary", "feedback"),
+}
+
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     out_dir = Path("verification") / "watchlist_daily"
     parser = argparse.ArgumentParser(description="Run the daily verification workflow in one command.")
 
+    parser.add_argument(
+        "--mode",
+        choices=tuple(MODE_STEPS),
+        default="full",
+        help="Choose `preopen` for the morning snapshot, `postclose` for outcome updates, or `full` for both.",
+    )
     parser.add_argument("--rank-csv", default=str(Path("theme_watchlist_daily") / "daily_rank.csv"))
     parser.add_argument("--verification-out", default=str(out_dir / "verification_report.md"))
     parser.add_argument("--snapshot-csv", default=str(out_dir / "reco_snapshots.csv"))
@@ -121,25 +133,31 @@ def build_feedback_argv(args: argparse.Namespace) -> list[str]:
     ]
 
 
+def should_run_step(args: argparse.Namespace, step: str) -> bool:
+    if getattr(args, f"skip_{step}"):
+        return False
+    return step in MODE_STEPS[args.mode]
+
+
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
 
-    if not args.skip_verify:
+    if should_run_step(args, "verify"):
         code = verify_recommendations.main(build_verify_argv(args))
         if code:
             return code
 
-    if not args.skip_evaluate:
+    if should_run_step(args, "evaluate"):
         code = evaluate_recommendations.main(build_evaluate_argv(args))
         if code:
             return code
 
-    if not args.skip_summary:
+    if should_run_step(args, "summary"):
         code = summarize_outcomes.main(build_summary_argv(args))
         if code:
             return code
 
-    if not args.skip_feedback:
+    if should_run_step(args, "feedback"):
         code = feedback_weight_sensitivity.main(build_feedback_argv(args))
         if code:
             return code

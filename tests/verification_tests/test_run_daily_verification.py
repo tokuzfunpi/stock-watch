@@ -10,10 +10,15 @@ from verification.run_daily_verification import (
     build_verify_argv,
     main,
     parse_args,
+    should_run_step,
 )
 
 
 class RunDailyVerificationTests(unittest.TestCase):
+    def test_parse_args_defaults_to_full_mode(self) -> None:
+        args = parse_args([])
+        self.assertEqual(args.mode, "full")
+
     def test_build_verify_argv_includes_snapshot_flags(self) -> None:
         args = parse_args(["--top-n-short", "3", "--top-n-midlong", "4", "--no-snapshot"])
         argv = build_verify_argv(args)
@@ -51,6 +56,17 @@ class RunDailyVerificationTests(unittest.TestCase):
         self.assertIn("--weights", feedback_argv)
         self.assertIn("70:30,50:50", feedback_argv)
 
+    def test_should_run_step_uses_mode_defaults_and_skip_overrides(self) -> None:
+        preopen_args = parse_args(["--mode", "preopen"])
+        self.assertTrue(should_run_step(preopen_args, "verify"))
+        self.assertFalse(should_run_step(preopen_args, "evaluate"))
+
+        postclose_args = parse_args(["--mode", "postclose", "--skip-feedback"])
+        self.assertTrue(should_run_step(postclose_args, "evaluate"))
+        self.assertTrue(should_run_step(postclose_args, "summary"))
+        self.assertFalse(should_run_step(postclose_args, "verify"))
+        self.assertFalse(should_run_step(postclose_args, "feedback"))
+
     def test_main_runs_enabled_steps_in_order(self) -> None:
         calls: list[str] = []
 
@@ -72,6 +88,48 @@ class RunDailyVerificationTests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertEqual(calls, ["verify", "evaluate", "summary", "feedback"])
 
+    def test_main_runs_preopen_mode(self) -> None:
+        calls: list[str] = []
+
+        def _runner(name: str):
+            def _inner(argv: list[str] | None = None) -> int:
+                calls.append(name)
+                return 0
+            return _inner
+
+        with patch("verification.run_daily_verification.verify_recommendations.main", side_effect=_runner("verify")), patch(
+            "verification.run_daily_verification.evaluate_recommendations.main", side_effect=_runner("evaluate")
+        ), patch(
+            "verification.run_daily_verification.summarize_outcomes.main", side_effect=_runner("summary")
+        ), patch(
+            "verification.run_daily_verification.feedback_weight_sensitivity.main", side_effect=_runner("feedback")
+        ):
+            code = main(["--mode", "preopen"])
+
+        self.assertEqual(code, 0)
+        self.assertEqual(calls, ["verify"])
+
+    def test_main_runs_postclose_mode(self) -> None:
+        calls: list[str] = []
+
+        def _runner(name: str):
+            def _inner(argv: list[str] | None = None) -> int:
+                calls.append(name)
+                return 0
+            return _inner
+
+        with patch("verification.run_daily_verification.verify_recommendations.main", side_effect=_runner("verify")), patch(
+            "verification.run_daily_verification.evaluate_recommendations.main", side_effect=_runner("evaluate")
+        ), patch(
+            "verification.run_daily_verification.summarize_outcomes.main", side_effect=_runner("summary")
+        ), patch(
+            "verification.run_daily_verification.feedback_weight_sensitivity.main", side_effect=_runner("feedback")
+        ):
+            code = main(["--mode", "postclose"])
+
+        self.assertEqual(code, 0)
+        self.assertEqual(calls, ["evaluate", "summary", "feedback"])
+
     def test_main_respects_skip_flags(self) -> None:
         calls: list[str] = []
 
@@ -88,7 +146,7 @@ class RunDailyVerificationTests(unittest.TestCase):
         ), patch(
             "verification.run_daily_verification.feedback_weight_sensitivity.main", side_effect=_runner("feedback")
         ):
-            code = main(["--skip-evaluate", "--skip-feedback"])
+            code = main(["--mode", "postclose", "--skip-summary", "--skip-feedback"])
 
         self.assertEqual(code, 0)
-        self.assertEqual(calls, ["verify", "summary"])
+        self.assertEqual(calls, ["evaluate"])
