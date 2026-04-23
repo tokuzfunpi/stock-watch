@@ -59,6 +59,22 @@
    - 目前最重要的是增加成熟樣本，不是立刻改規則
 2. **優先研究 midlong threshold**
    - 因為 `ok vs below_threshold` 仍顯示 forced-fill 沒有明顯更差
+   - Gemini 若接手，請只做**結構分析**，不要直接提議修改 production code
+   - 核心問題：
+     - 為什麼 `midlong below_threshold` 目前沒有比 `ok` 差？
+   - 必拆維度：
+     - `market_heat`
+     - `scenario_label`
+     - `action`
+     - `signal_date`
+   - 需要回答：
+     - `below_threshold` 的相對強勢是否主要集中在 `hot` 樣本
+     - 分開看 `scenario` 後，`below_threshold` 是否仍有優勢
+     - 是否只是少數 `action` / 少數日期把 `below_threshold` 拉高
+   - 期望輸出：
+     - 最可信的主因排序
+     - 哪些結論可信、哪些仍是小樣本
+     - 若未來要調 `midlong threshold`，應先觀察哪個指標，而不是直接改參數
 3. **延後 ATR / feedback production 調整**
    - 先維持 `70/30`
    - 先把 ATR 當 coverage / checkpoint 報表，而不是直接下交易規則
