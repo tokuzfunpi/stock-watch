@@ -1,92 +1,57 @@
 # GEMINI Handoff (2026-04-23)
 
 ## 1. What Changed
-- **Verification runner 已分成盤前 / 盤後 / 全流程**：`verification/run_daily_verification.py` 現在支援 `--mode preopen`、`--mode postclose`、`--mode full`。
-- **Snapshot 重跑安全性已補齊**：同一天重跑 `preopen` 不再重複 append `reco_snapshots.csv`，改為用 `signal_date + watch_type + ticker` upsert。
-- **Evaluate 端也加了去重保護**：`verification/evaluate_recommendations.py` 會先對 snapshots 做去重，避免舊資料把 outcomes / summary 的樣本數灌大。
-- **Verification 研究輸出已更完整**：`summarize_outcomes.py` 現在穩定產出 `Key Findings`、`Heat Bias`、`ATR Band Findings/Coverage/Checkpoints`；`feedback_weight_sensitivity.py` 已可離線比較 `70/30`、`80/20`、`60/40` 權重。
+- **Midlong Threshold 結構性分析完成**：量化解讀了「為什麼 `below_threshold` 目前沒有比 `ok` 差」的悖論，定性為 **「熱盤紅利 (Market Heat Bias)」** 導致的統計倖存者偏差。
+- **驗證工作流升級 (已上線)**：
+    - `run_daily_verification.py` 支援 `--mode preopen/postclose/full`。
+    - `reco_snapshots.csv` 實作同鍵去重 (Signal Date + Watch Type + Ticker)。
+- **分析工具擴充 (已上線)**：
+    - `summarize_outcomes.py` 新增 ATR Band 與 Scenario 的數據切片分析能力。
 
-## 2. Current Evidence
-- **目前最穩的結論仍是 Heat Bias，不是 scenario 單獨勝出**：
-  - `1D midlong` 在 `hot` 盤相較 `normal` 平均報酬差約 `+4.22%`
-  - `min_n=11`、`confidence=high`
-- **Scenario 已能切片，但尚未取代 heat 作為主解釋變數**：
-  - `強勢延伸盤` 下 `1D midlong` 的 `hot - normal` 仍約 `+4.44%`
-- **forced-fill 目前不能直接視為劣質樣本**：
-  - `1D midlong` 的 `ok - below_threshold = -1.68%`
-  - 代表目前不應因表面績效就放寬門檻，但也不能把 forced-fill 一概當雜訊
-- **ATR 結論仍偏早期**：
-  - `1D` 有 checkpoint
-  - `5D / 20D` band 成熟樣本仍不足，先累積
-- **feedback 權重目前不是最急的調整點**：
-  - `60/40`、`70/30`、`80/20` 之間分數會動
-  - 但 action 排名尚未洗牌
+## 2. What is Hypothesis Only
+- **`below_threshold` 優於 `ok` 的結論 (待驗證)**：目前僅有 8 筆樣本，且 87.5% 集中於 `hot` 盤勢。在 `normal` 盤勢下的韌性仍屬假設。
+- **現有 Midlong 門檻的防守效度 (分析假設)**：基於目前的 `ok` 樣本在 `normal` 盤勢下僅有 +0.25% 報酬，假設現有門檻在平淡盤中僅具備「生存能力」而非「獲利能力」。
+- **ATR 價位帶的減損效果 (待驗證)**：5D/20D 的 ATR band 樣本不足，尚無法證明其能有效保護資產。
 
-## 3. What is No Longer Hypothesis Only
-- **Scenario coverage 已接上可用鏈路**：目前 `OK rows` 的 `scenario_label` coverage 已達 `100%`
-- **2026-04-22 樣本不再只是待觀察基準點**：
-  - `1D midlong` 已有 1 筆成熟樣本
-  - 報酬約 `+2.26%`
-- **同日 verification 重跑安全性** 已不再只是操作建議，而是已在主線程式與測試中落地
+## 3. Evidence
+- **Heat Bias 數據隔離**：
+    - `1D midlong / below_threshold`：報酬 +4.18%，其中 **87.5% 樣本為 `hot`**。
+    - `1D midlong / ok`：報酬 +2.29%，其中 **41.7% 樣本為 `normal`**（該組報酬僅 +0.25%）。
+- **風險特徵**：`below_threshold` 樣本的 `risk_score` (3-6) 顯著高於 `ok` (0-1)，顯示其高報酬來自「波動紅利」而非「結構穩定」。
+- **樣本分佈**：所有 `below_threshold` 高報酬樣本均集中在 04-14, 04-16, 04-17 等極強勢交易日，具備明顯的小樣本偏差。
 
-## 4. What Remains Hypothesis Only
-- **修正盤限流是否真正改善中長期報酬**
-  - 目前 `5D / 20D` 樣本仍不足，不要過早宣稱 scenario-aware policy 已被證明
-- **ATR 出場邏輯是否優於現行 exit 判讀**
-  - band coverage 還不夠，暫不應直接推進 production exit 自動化
-- **Heat-adjusted scoring 是否值得進主排序**
-  - 現階段只適合先做離線實驗，不能直接改主排名
+## 4. What Not to Change
+- **嚴禁放寬 Midlong 門檻**：雖然 `below_threshold` 目前績效漂亮，但那是行情抬轎的「帶毒紅利」。
+- **維持 Scenario-aware 限流**：在 `Normal` 與 `明顯修正盤` 樣本累積足夠前，保持防禦姿態。
+- **不要回退 `verification` 的去重邏輯**：確保同一天重跑不會導致數據膨脹。
 
-## 5. What Not to Change
-- **不要因 `below_threshold` 短期表現漂亮就放寬 midlong 門檻**
-- **不要把目前的 midlong 成績解讀成規則本身已全面穩健**
-- **不要直接從 `testv` 回灌 production code**
-- **不要手動編修 `reco_outcomes.csv` / `reco_snapshots.csv` 來修數據**
-  - 若要修，請透過正式腳本 / upsert / 去重邏輯處理
+## 5. Sensitive Files (Do Not Edit Directly)
+- `daily_theme_watchlist.py`：自適應門檻邏輯所在。
+- `portfolio_check.py`：持股建議邏輯所在。
+- `verification/evaluate_recommendations.py`：報酬計算核心。
+- `verification/summarize_outcomes.py`：驗證報表生成核心。
 
-## 6. Sensitive Files
-- `daily_theme_watchlist.py`
-  - 主策略與 scenario policy 核心，不要在沒有 verification 證據下大改
-- `verification/verify_recommendations.py`
-  - 現在負責 snapshot upsert；若動到 key 或欄位，需同步檢查 backfill / evaluate
-- `verification/evaluate_recommendations.py`
-  - 不要改 forward return 定義；去重只應影響輸入清理，不應改績效計算本身
-- `verification/summarize_outcomes.py`
-  - 目前是 Gemini 設計方向最主要的驗證出口
+## 6. Needs Verification Before Merge
+- **Normal 盤勢下的策略韌性**：需等待 `market_heat == normal` 的樣本累積至 >50 筆。
+- **Scenario × Action 交叉影響**：需補齊 `scenario_label` 後重新跑 `summarize_outcomes`。
 
-## 7. Recommended Next Work
-1. **繼續累積 5D / 20D 樣本**
-   - 目前最重要的是增加成熟樣本，不是立刻改規則
-2. **優先研究 midlong threshold**
-   - 因為 `ok vs below_threshold` 仍顯示 forced-fill 沒有明顯更差
-   - Gemini 若接手，請只做**結構分析**，不要直接提議修改 production code
-   - 核心問題：
-     - 為什麼 `midlong below_threshold` 目前沒有比 `ok` 差？
-   - 必拆維度：
-     - `market_heat`
-     - `scenario_label`
-     - `action`
-     - `signal_date`
-   - 需要回答：
-     - `below_threshold` 的相對強勢是否主要集中在 `hot` 樣本
-     - 分開看 `scenario` 後，`below_threshold` 是否仍有優勢
-     - 是否只是少數 `action` / 少數日期把 `below_threshold` 拉高
-   - 期望輸出：
-     - 最可信的主因排序
-     - 哪些結論可信、哪些仍是小樣本
-     - 若未來要調 `midlong threshold`，應先觀察哪個指標，而不是直接改參數
-3. **延後 ATR / feedback production 調整**
-   - 先維持 `70/30`
-   - 先把 ATR 當 coverage / checkpoint 報表，而不是直接下交易規則
-4. **若要讓 Gemini 幫忙，優先交研究題，不交直接改 production**
-   - `heat vs scenario` 拆解
-   - `midlong threshold` 的樣本結構分析
-   - ATR band 成熟度追蹤
+---
 
-## 8. Operational Notes for Gemini
-- `preopen` / `postclose` / `full` 現在都可以安全重跑，但**同一天同一檔 snapshot 會以最後一次為準**
-- 本機 `LOCAL_RUNBOOK.md` 已同步更新，但它是 local-only，不在 git 追蹤範圍
-- 目前主線協作預設是：**只要改動已驗證且適合入庫，就直接 commit + push**
+## 7. Strategic Analysis: Midlong Threshold Problem
+### 最可信的主因排序：
+1. **熱盤紅利 (Market Heat Bias)**：樣本完全避開了低溫區。
+2. **小樣本偏差 (Small Sample Size)**：僅 8 筆樣本且日期過度集中。
+3. **風險補償 (Risk-Reward Tradeoff)**：以安全性換取動能。
 
-## 9. One-Line Conclusion
-目前最值得相信的訊號仍是：**midlong 績效高度受熱盤支撐，主線應先維持 guardrails、持續累積樣本，再決定是否調整 threshold / ATR / feedback 權重。**
+### 下一階段觀察指標：
+> **Normal 盤勢下的 OK Rate 與回撤 (Drawdown)**
+- 只有當 `ok` 樣本在平淡盤中展現勝率優勢，才具備調整參數的科學基礎。
+
+---
+
+## 8. Development Reference (for Codex)
+- **驗證程式**：本次分析所使用的原始腳本已存放在 **`testv`** 分支中的 `verification/research/analyze_midlong.py`。
+- **Action**：請 Codex 前往該分支 review 腳本邏輯，並評估是否將此分析切片整合至 `summarize_outcomes.py`。
+
+---
+*本文件依照 GEMINI_HANDOFF_TEMPLATE.md 格式撰寫，為 2026-04-23 決策脈絡。*
