@@ -6,7 +6,13 @@ from datetime import datetime
 import pandas as pd
 
 from daily_theme_watchlist import LOCAL_TZ
-from verification.summarize_outcomes import build_summary_markdown, summarize_outcomes
+from verification.summarize_outcomes import (
+    build_atr_band_findings,
+    build_key_findings,
+    build_summary_markdown,
+    summarize_atr_band_checkpoints,
+    summarize_outcomes,
+)
 
 
 class SummarizeOutcomesTests(unittest.TestCase):
@@ -185,6 +191,7 @@ class SummarizeOutcomesTests(unittest.TestCase):
         self.assertIn("## Coverage", md)
         self.assertIn("## Scenario Coverage", md)
         self.assertIn("## Notes", md)
+        self.assertIn("## Key Findings", md)
         self.assertIn("market_heat", md)
         self.assertIn("## Overall By Market Heat", md)
         self.assertIn("## Overall By Scenario", md)
@@ -196,3 +203,146 @@ class SummarizeOutcomesTests(unittest.TestCase):
         self.assertIn("## Overall By Scenario + Action", md)
         self.assertIn("reco_status", md)
         self.assertIn("## By Action", md)
+
+    def test_build_key_findings_summarizes_heat_and_scenario(self) -> None:
+        df = pd.DataFrame(
+            [
+                {
+                    "signal_date": "2026-04-20",
+                    "horizon_days": 5,
+                    "watch_type": "midlong",
+                    "reco_status": "ok",
+                    "market_heat": "hot",
+                    "scenario_label": "強勢延伸盤",
+                    "action": "續抱",
+                    "realized_ret_pct": 13.0,
+                    "status": "ok",
+                },
+                {
+                    "signal_date": "2026-04-19",
+                    "horizon_days": 5,
+                    "watch_type": "midlong",
+                    "reco_status": "ok",
+                    "market_heat": "hot",
+                    "scenario_label": "強勢延伸盤",
+                    "action": "續抱",
+                    "realized_ret_pct": 11.0,
+                    "status": "ok",
+                },
+                {
+                    "signal_date": "2026-04-18",
+                    "horizon_days": 5,
+                    "watch_type": "midlong",
+                    "reco_status": "ok",
+                    "market_heat": "hot",
+                    "scenario_label": "強勢延伸盤",
+                    "action": "續抱",
+                    "realized_ret_pct": 12.0,
+                    "status": "ok",
+                },
+                {
+                    "signal_date": "2026-04-20",
+                    "horizon_days": 5,
+                    "watch_type": "midlong",
+                    "reco_status": "ok",
+                    "market_heat": "normal",
+                    "scenario_label": "強勢延伸盤",
+                    "action": "續抱",
+                    "realized_ret_pct": 4.0,
+                    "status": "ok",
+                },
+                {
+                    "signal_date": "2026-04-19",
+                    "horizon_days": 5,
+                    "watch_type": "midlong",
+                    "reco_status": "ok",
+                    "market_heat": "normal",
+                    "scenario_label": "強勢延伸盤",
+                    "action": "續抱",
+                    "realized_ret_pct": 5.0,
+                    "status": "ok",
+                },
+                {
+                    "signal_date": "2026-04-18",
+                    "horizon_days": 5,
+                    "watch_type": "midlong",
+                    "reco_status": "ok",
+                    "market_heat": "normal",
+                    "scenario_label": "強勢延伸盤",
+                    "action": "續抱",
+                    "realized_ret_pct": 3.0,
+                    "status": "ok",
+                },
+            ]
+        )
+        findings = build_key_findings(summarize_outcomes(df))
+        self.assertTrue(findings)
+        joined = "\n".join(findings)
+        self.assertIn("5D midlong", joined)
+        self.assertIn("強勢延伸盤", joined)
+        self.assertIn("2026-04-20", joined)
+
+    def test_summarize_atr_band_checkpoints_tracks_maturity_and_levels(self) -> None:
+        alert_tracking = pd.DataFrame(
+            [
+                {
+                    "alert_close": 100.0,
+                    "add_price": 95.0,
+                    "trim_price": 106.0,
+                    "stop_price": 92.0,
+                    "watch_type": "short",
+                    "ret1_future_pct": 8.0,
+                    "ret5_future_pct": None,
+                    "ret20_future_pct": None,
+                },
+                {
+                    "alert_close": 100.0,
+                    "add_price": 94.0,
+                    "trim_price": 108.0,
+                    "stop_price": 92.0,
+                    "watch_type": "short",
+                    "ret1_future_pct": -9.0,
+                    "ret5_future_pct": None,
+                    "ret20_future_pct": None,
+                },
+                {
+                    "alert_close": 200.0,
+                    "add_price": 190.0,
+                    "trim_price": 214.0,
+                    "stop_price": 184.0,
+                    "watch_type": "midlong",
+                    "ret1_future_pct": None,
+                    "ret5_future_pct": None,
+                    "ret20_future_pct": None,
+                },
+            ]
+        )
+        parts = summarize_atr_band_checkpoints(alert_tracking)
+        self.assertFalse(parts["band_coverage"].empty)
+        self.assertFalse(parts["band_checkpoints"].empty)
+        short_1d = parts["band_checkpoints"][
+            (parts["band_checkpoints"]["horizon_days"] == 1)
+            & (parts["band_checkpoints"]["watch_type"] == "short")
+        ].iloc[0]
+        self.assertEqual(int(short_1d["closed_above_trim"]), 1)
+        self.assertEqual(int(short_1d["closed_below_stop"]), 1)
+
+    def test_build_atr_band_findings_reports_insufficient_maturity(self) -> None:
+        alert_tracking = pd.DataFrame(
+            [
+                {
+                    "alert_close": 100.0,
+                    "add_price": 95.0,
+                    "trim_price": 106.0,
+                    "stop_price": 92.0,
+                    "watch_type": "short",
+                    "ret1_future_pct": 1.0,
+                    "ret5_future_pct": None,
+                    "ret20_future_pct": None,
+                }
+            ]
+        )
+        findings = build_atr_band_findings(summarize_atr_band_checkpoints(alert_tracking))
+        self.assertTrue(findings)
+        self.assertIn("5D", "\n".join(findings))
+        self.assertIn("還沒有成熟資料", "\n".join(findings))

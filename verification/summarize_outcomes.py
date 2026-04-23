@@ -11,7 +11,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from daily_theme_watchlist import LOCAL_TZ
+from daily_theme_watchlist import ALERT_TRACK_CSV, LOCAL_TZ
 
 
 def _pct(v: float | None) -> str:
@@ -48,6 +48,152 @@ def _confidence_label(min_n: int) -> str:
     if min_n >= 5:
         return "medium"
     return "low"
+
+
+def _pick_best_row(df: pd.DataFrame, min_samples: int, delta_col: str) -> pd.Series | None:
+    if df.empty or delta_col not in df.columns:
+        return None
+    work = df.copy()
+    if "min_n" in work.columns:
+        work = work[pd.to_numeric(work["min_n"], errors="coerce") >= min_samples].copy()
+    if work.empty:
+        return None
+    work["_abs_delta"] = pd.to_numeric(work[delta_col], errors="coerce").abs()
+    work = work.sort_values(by=["_abs_delta"], ascending=[False])
+    if work.empty:
+        return None
+    return work.iloc[0]
+
+
+def build_key_findings(parts: dict[str, pd.DataFrame]) -> list[str]:
+    findings: list[str] = []
+
+    heat_row = _pick_best_row(parts.get("heat_bias_check", pd.DataFrame()), min_samples=5, delta_col="delta_avg_ret_hot_minus_normal")
+    if heat_row is not None:
+        direction = "較強" if float(heat_row["delta_avg_ret_hot_minus_normal"]) >= 0 else "較弱"
+        findings.append(
+            f"`{int(heat_row['horizon_days'])}D {heat_row['watch_type']}` 在 `hot` 盤相較 `normal` {direction}，"
+            f"平均報酬差 `{_pct(heat_row['delta_avg_ret_hot_minus_normal'])}%`，"
+            f"`min_n={int(heat_row['min_n'])}`、`confidence={heat_row['confidence']}`。"
+        )
+
+    scenario_row = _pick_best_row(parts.get("heat_bias_by_scenario", pd.DataFrame()), min_samples=3, delta_col="delta_avg_ret_hot_minus_normal")
+    if scenario_row is not None:
+        direction = "較強" if float(scenario_row["delta_avg_ret_hot_minus_normal"]) >= 0 else "較弱"
+        findings.append(
+            f"放到同一個 scenario 看，`{scenario_row['scenario_label']}` 下的 "
+            f"`{int(scenario_row['horizon_days'])}D {scenario_row['watch_type']}` 在 `hot` 盤仍然{direction}，"
+            f"平均報酬差 `{_pct(scenario_row['delta_avg_ret_hot_minus_normal'])}%`。"
+        )
+
+    date_row = _pick_best_row(parts.get("heat_bias_by_date", pd.DataFrame()), min_samples=2, delta_col="delta_avg_ret_hot_minus_normal")
+    if date_row is not None:
+        findings.append(
+            f"按日期看，`{date_row['signal_date']}` 的熱度差最明顯："
+            f"`hot-normal = {_pct(date_row['delta_avg_ret_hot_minus_normal'])}%` "
+            f"（`hot_n={int(date_row['hot_n'])}`、`normal_n={int(date_row['normal_n'])}`）。"
+        )
+
+    if not findings and not parts.get("overall_by_scenario", pd.DataFrame()).empty:
+        findings.append("目前 scenario 資料已開始累積，但 `hot vs normal` 的可比較樣本還不夠，先以表格追蹤，不急著下規則結論。")
+
+    return findings
+
+
+def summarize_atr_band_checkpoints(alert_tracking: pd.DataFrame) -> dict[str, pd.DataFrame]:
+    empty = pd.DataFrame()
+    if alert_tracking.empty:
+        return {"band_coverage": empty, "band_checkpoints": empty}
+
+    required = {"alert_close", "add_price", "trim_price", "stop_price", "watch_type"}
+    if not required.issubset(set(alert_tracking.columns)):
+        return {"band_coverage": empty, "band_checkpoints": empty}
+
+    df = alert_tracking.copy()
+    df["watch_type"] = df["watch_type"].astype(str).str.strip().str.lower()
+    df = df[df["watch_type"].isin(["short", "midlong"])].copy()
+    if df.empty:
+        return {"band_coverage": empty, "band_checkpoints": empty}
+
+    for col in ["alert_close", "add_price", "trim_price", "stop_price"]:
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+    band_ready = df.dropna(subset=["alert_close", "add_price", "trim_price", "stop_price"]).copy()
+    if band_ready.empty:
+        return {"band_coverage": empty, "band_checkpoints": empty}
+
+    coverage_rows: list[dict[str, object]] = []
+    checkpoint_rows: list[dict[str, object]] = []
+
+    for horizon in [1, 5, 20]:
+        ret_col = f"ret{horizon}_future_pct"
+        if ret_col not in band_ready.columns:
+            continue
+        band_ready[ret_col] = pd.to_numeric(band_ready[ret_col], errors="coerce")
+        for watch_type, group in band_ready.groupby("watch_type", dropna=False):
+            matured = group.dropna(subset=[ret_col]).copy()
+            coverage_rows.append(
+                {
+                    "horizon_days": horizon,
+                    "watch_type": watch_type,
+                    "band_rows": int(len(group)),
+                    "matured_rows": int(len(matured)),
+                    "maturity_rate_pct": round((len(matured) / len(group)) * 100, 1) if len(group) else 0.0,
+                }
+            )
+            if matured.empty:
+                continue
+            future_close = matured["alert_close"] * (1 + matured[ret_col] / 100.0)
+            checkpoint_rows.append(
+                {
+                    "horizon_days": horizon,
+                    "watch_type": watch_type,
+                    "n": int(len(matured)),
+                    "closed_below_add": int((future_close <= matured["add_price"]).sum()),
+                    "closed_above_trim": int((future_close >= matured["trim_price"]).sum()),
+                    "closed_below_stop": int((future_close <= matured["stop_price"]).sum()),
+                    "avg_ret_pct": round(float(matured[ret_col].mean()), 2),
+                }
+            )
+
+    band_coverage = pd.DataFrame(coverage_rows)
+    band_checkpoints = pd.DataFrame(checkpoint_rows)
+    if not band_coverage.empty:
+        band_coverage = band_coverage.sort_values(by=["horizon_days", "watch_type"]).reset_index(drop=True)
+    if not band_checkpoints.empty:
+        band_checkpoints = band_checkpoints.sort_values(by=["horizon_days", "watch_type"]).reset_index(drop=True)
+        for col in ["closed_below_add", "closed_above_trim", "closed_below_stop"]:
+            band_checkpoints[f"{col}_rate_pct"] = (
+                (band_checkpoints[col] / band_checkpoints["n"]) * 100
+            ).round(1)
+    return {"band_coverage": band_coverage, "band_checkpoints": band_checkpoints}
+
+
+def build_atr_band_findings(band_parts: dict[str, pd.DataFrame]) -> list[str]:
+    findings: list[str] = []
+    coverage = band_parts.get("band_coverage", pd.DataFrame())
+    checkpoints = band_parts.get("band_checkpoints", pd.DataFrame())
+
+    if coverage.empty:
+        return findings
+
+    for horizon in [5, 20]:
+        matured = coverage[pd.to_numeric(coverage["horizon_days"], errors="coerce") == horizon]
+        if matured.empty:
+            continue
+        matured_rows = int(pd.to_numeric(matured["matured_rows"], errors="coerce").sum())
+        band_rows = int(pd.to_numeric(matured["band_rows"], errors="coerce").sum())
+        if matured_rows == 0 and band_rows > 0:
+            findings.append(f"`ATR band` 目前已有 `{band_rows}` 筆 band 樣本，但 `{horizon}D` 還沒有成熟資料，先累積樣本。")
+
+    row = _pick_best_row(checkpoints, min_samples=3, delta_col="closed_above_trim_rate_pct")
+    if row is not None:
+        findings.append(
+            f"`{int(row['horizon_days'])}D {row['watch_type']}` 的 band checkpoint 目前有 `{int(row['n'])}` 筆成熟樣本，"
+            f"收盤站上 `trim` 比例 `{_pct(row['closed_above_trim_rate_pct'])}%`，"
+            f"跌破 `stop` 比例 `{_pct(row['closed_below_stop_rate_pct'])}%`。"
+        )
+
+    return findings
 
 
 def summarize_outcomes(outcomes: pd.DataFrame) -> dict[str, pd.DataFrame]:
@@ -508,7 +654,12 @@ def summarize_outcomes(outcomes: pd.DataFrame) -> dict[str, pd.DataFrame]:
     }
 
 
-def build_summary_markdown(outcomes: pd.DataFrame, source: str, now_local: datetime | None = None) -> str:
+def build_summary_markdown(
+    outcomes: pd.DataFrame,
+    source: str,
+    now_local: datetime | None = None,
+    alert_tracking: pd.DataFrame | None = None,
+) -> str:
     now_local = now_local or datetime.now(LOCAL_TZ)
     parts = summarize_outcomes(outcomes)
 
@@ -570,6 +721,19 @@ def build_summary_markdown(outcomes: pd.DataFrame, source: str, now_local: datet
         ]
     )
 
+    key_findings = build_key_findings(parts)
+    if key_findings:
+        lines.append("## Key Findings")
+        lines.extend([f"- {item}" for item in key_findings])
+        lines.append("")
+
+    band_parts = summarize_atr_band_checkpoints(alert_tracking if alert_tracking is not None else pd.DataFrame())
+    band_findings = build_atr_band_findings(band_parts)
+    if band_findings:
+        lines.append("## ATR Band Findings")
+        lines.extend([f"- {item}" for item in band_findings])
+        lines.append("")
+
     # Extra coverage diagnostics (helps understand why 20D isn't showing up yet).
     try:
         cov = outcomes.copy()
@@ -603,6 +767,10 @@ def build_summary_markdown(outcomes: pd.DataFrame, source: str, now_local: datet
         lines.extend(["## Heat Bias By Scenario (hot - normal)", _table_markdown(parts["heat_bias_by_scenario"]).rstrip(), ""])
     if not parts["heat_bias_by_date"].empty:
         lines.extend(["## Heat Bias By Date (hot - normal, top 20)", _table_markdown(parts["heat_bias_by_date"].head(20)).rstrip(), ""])
+    if not band_parts["band_coverage"].empty:
+        lines.extend(["## ATR Band Coverage", _table_markdown(band_parts["band_coverage"]).rstrip(), ""])
+    if not band_parts["band_checkpoints"].empty:
+        lines.extend(["## ATR Band Checkpoints", _table_markdown(band_parts["band_checkpoints"]).rstrip(), ""])
     if not parts["overall_by_signal_status"].empty:
         lines.extend(["## Overall By Signal + reco_status (all dates)", _table_markdown(parts["overall_by_signal_status"]).rstrip(), ""])
     if not parts["delta_ok_minus_below"].empty:
@@ -654,7 +822,13 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     outcomes = pd.read_csv(outcomes_csv)
-    report = build_summary_markdown(outcomes, source=str(outcomes_csv))
+    alert_tracking = pd.DataFrame()
+    if ALERT_TRACK_CSV.exists():
+        try:
+            alert_tracking = pd.read_csv(ALERT_TRACK_CSV)
+        except Exception:
+            alert_tracking = pd.DataFrame()
+    report = build_summary_markdown(outcomes, source=str(outcomes_csv), alert_tracking=alert_tracking)
     out_path.write_text(report, encoding="utf-8")
     print(report)
     return 0
