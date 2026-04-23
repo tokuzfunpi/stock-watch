@@ -43,6 +43,10 @@
 - 每週整理 decision note 也可以：
   - `python3 run_weekly_review.py`
   - `python3 run_weekly_review.py --max-signal-dates 5`
+- 清理舊的 local verification 產物也可以：
+  - `python3 run_local_housekeeping.py`
+  - `python3 run_local_housekeeping.py --apply`
+  - `python3 run_local_housekeeping.py --verification-outdir verification/watchlist_daily --apply`
 
 說明：
 - `preopen`：跑 `daily_theme_watchlist.py` + verification snapshot
@@ -61,6 +65,10 @@
   - `theme_watchlist_daily/weekly_review.md`
   - `theme_watchlist_daily/weekly_review.json`
   - 用來整理最近幾個 `signal_date` 的 threshold / ATR / feedback 決策建議
+- `run_local_housekeeping.py` 會更新：
+  - `theme_watchlist_daily/local_housekeeping.md`
+  - `theme_watchlist_daily/local_housekeeping.json`
+  - 預設是 dry-run，先列出會刪掉哪些舊 `contexts`、`backfill_reports`、`*.bak*`、舊 cache；加 `--apply` 才會真的刪
 
 如果要跑持股檢查：
 - 複製 `portfolio.csv.example` 成本機的 `portfolio.csv`
