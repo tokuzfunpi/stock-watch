@@ -23,6 +23,9 @@
   - 輸出：
     - `verification/watchlist_daily/feedback_weight_sensitivity.md`
     - `verification/watchlist_daily/feedback_weight_sensitivity.csv`
+- `run_daily_verification.py`
+  - 目的：把 `verify -> evaluate -> summarize -> feedback sensitivity` 串成單一入口。
+  - 適合：平常日常流程想一次跑完時使用。
 
 ## 建議執行時機（台灣時間）
 
@@ -62,6 +65,15 @@ python3.11 verification/feedback_weight_sensitivity.py
 
 # 自訂權重組合
 python3.11 verification/feedback_weight_sensitivity.py --weights 70:30,85:15,50:50
+
+# 5) 一次跑完整個 verification workflow
+python3.11 verification/run_daily_verification.py
+
+# 常用調整：指定 horizons / weights
+python3.11 verification/run_daily_verification.py --horizons 1,5,20 --weights 70:30,85:15,50:50
+
+# 若只想重跑後半段
+python3.11 verification/run_daily_verification.py --skip-verify
 ```
 
 ## 用 Git 歷史回填（補齊過去樣本）
