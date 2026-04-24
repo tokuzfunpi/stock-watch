@@ -20,6 +20,8 @@ THEME_OUTDIR = REPO_ROOT / "theme_watchlist_daily"
 VERIFICATION_OUTDIR = REPO_ROOT / "verification" / "watchlist_daily"
 LOCAL_STATUS_MD = THEME_OUTDIR / "local_run_status.md"
 LOCAL_STATUS_JSON = THEME_OUTDIR / "local_run_status.json"
+RUNTIME_METRICS_JSON = THEME_OUTDIR / "runtime_metrics.json"
+PORTFOLIO_RUNTIME_METRICS_JSON = THEME_OUTDIR / "portfolio_runtime_metrics.json"
 
 MODE_STEPS: dict[str, tuple[str, ...]] = {
     "preopen": ("watchlist", "verification"),
@@ -143,10 +145,24 @@ def _latest_signal_date(path: Path) -> str:
     return str(sorted(non_empty.tolist())[-1])
 
 
+def _load_runtime_metrics(path: Path) -> dict[str, object]:
+    if not path.exists():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    if not isinstance(payload, dict):
+        return {}
+    return payload
+
+
 def collect_status_metrics(theme_outdir: Path = THEME_OUTDIR, verification_outdir: Path = VERIFICATION_OUTDIR) -> dict[str, object]:
     snapshots_csv = verification_outdir / "reco_snapshots.csv"
     outcomes_csv = verification_outdir / "reco_outcomes.csv"
     daily_rank_csv = theme_outdir / "daily_rank.csv"
+    watchlist_runtime = _load_runtime_metrics(theme_outdir / "runtime_metrics.json")
+    portfolio_runtime = _load_runtime_metrics(theme_outdir / "portfolio_runtime_metrics.json")
 
     outcomes_total = 0
     outcomes_ok = 0
@@ -171,6 +187,10 @@ def collect_status_metrics(theme_outdir: Path = THEME_OUTDIR, verification_outdi
         "outcome_rows": outcomes_total,
         "outcome_ok_rows": outcomes_ok,
         "outcome_pending_rows": outcomes_pending,
+        "watchlist_runtime_seconds": float(watchlist_runtime.get("wall_seconds", 0.0) or 0.0),
+        "watchlist_runtime_status": str(watchlist_runtime.get("status", "") or ""),
+        "portfolio_runtime_seconds": float(portfolio_runtime.get("wall_seconds", 0.0) or 0.0),
+        "portfolio_runtime_status": str(portfolio_runtime.get("status", "") or ""),
     }
 
 
@@ -208,11 +228,15 @@ def render_local_status_markdown(
             f"- Outcome rows: `{metrics.get('outcome_rows', 0)}`",
             f"- Outcome OK rows: `{metrics.get('outcome_ok_rows', 0)}`",
             f"- Outcome pending rows: `{metrics.get('outcome_pending_rows', 0)}`",
+            f"- Watchlist runtime: `{metrics.get('watchlist_runtime_seconds', 0.0):.3f}s` ({metrics.get('watchlist_runtime_status') or 'n/a'})",
+            f"- Portfolio runtime: `{metrics.get('portfolio_runtime_seconds', 0.0):.3f}s` ({metrics.get('portfolio_runtime_status') or 'n/a'})",
             "",
             "## Key Outputs",
             "",
             f"- Watchlist report: `{theme_outdir_str('daily_report.md')}`",
+            f"- Watchlist runtime: `{theme_outdir_str('runtime_metrics.md')}`",
             f"- Portfolio report: `{theme_outdir_str('portfolio_report.md')}`",
+            f"- Portfolio runtime: `{theme_outdir_str('portfolio_runtime_metrics.md')}`",
             f"- Verification report: `{verification_outdir_str('verification_report.md')}`",
             f"- Outcomes summary: `{verification_outdir_str('outcomes_summary.md')}`",
             f"- Feedback sensitivity: `{verification_outdir_str('feedback_weight_sensitivity.md')}`",
@@ -249,7 +273,9 @@ def write_local_status_dashboard(
         "metrics": metrics,
         "outputs": {
             "watchlist_report": str(theme_outdir / "daily_report.md"),
+            "watchlist_runtime": str(theme_outdir / "runtime_metrics.md"),
             "portfolio_report": str(theme_outdir / "portfolio_report.md"),
+            "portfolio_runtime": str(theme_outdir / "portfolio_runtime_metrics.md"),
             "verification_report": str(verification_outdir / "verification_report.md"),
             "outcomes_summary": str(verification_outdir / "outcomes_summary.md"),
             "feedback_sensitivity": str(verification_outdir / "feedback_weight_sensitivity.md"),

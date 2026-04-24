@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import json
 import os
 import tempfile
 import unittest
+from datetime import datetime
 from importlib import util
 from pathlib import Path
 from unittest.mock import patch
@@ -10,6 +12,13 @@ from unittest.mock import patch
 import daily_theme_watchlist as dtw
 import pandas as pd
 import portfolio_check as portfolio_check_module
+from stock_watch.backtesting.core import run_backtest_dual as run_backtest_dual_module
+from stock_watch.ranking.scoring import build_rank_table
+from stock_watch.signals.detect import (
+    add_indicators as module_add_indicators,
+    detect_row as module_detect_row,
+    grade_signal as module_grade_signal,
+)
 
 from daily_theme_watchlist import (
     add_indicators,
@@ -22,6 +31,7 @@ from daily_theme_watchlist import (
     build_macro_message,
     build_portfolio_message,
     build_portfolio_report_markdown,
+    build_runtime_metrics_markdown,
     holding_style_label,
     is_placeholder_name,
     lookup_twse_display_name,
@@ -45,6 +55,8 @@ from daily_theme_watchlist import (
     select_push_candidates,
     split_message,
     CONFIG,
+    _DAILY_OHLCV_CACHE,
+    _INDICATOR_FRAME_CACHE,
     main as watchlist_main,
     sync_watchlist_with_portfolio,
     upsert_alert_tracking,
@@ -61,6 +73,84 @@ UPDATE_CHAT_ID_MAP_SPEC.loader.exec_module(update_chat_id_map)
 
 
 class DetectRowTests(unittest.TestCase):
+    def test_main_skips_duplicate_run_without_force(self) -> None:
+        with patch("daily_theme_watchlist.load_last_success_date", return_value=dtw.today_local_str()), patch(
+            "daily_theme_watchlist.load_last_success_signature", return_value="sig"
+        ), patch("daily_theme_watchlist.current_run_signature", return_value="sig"), patch(
+            "daily_theme_watchlist.get_market_regime"
+        ) as market_regime_mock:
+            result = watchlist_main()
+
+        self.assertEqual(result, 0)
+        market_regime_mock.assert_not_called()
+
+    def test_main_force_run_bypasses_duplicate_guard(self) -> None:
+        df_rank = pd.DataFrame(
+            [
+                {
+                    "rank": 1,
+                    "ticker": "AAA.TW",
+                    "name": "Alpha",
+                    "group": "theme",
+                    "layer": "short_attack",
+                    "setup_score": 7,
+                    "risk_score": 2,
+                    "signals": "ACCEL",
+                    "ret5_pct": 9.0,
+                    "ret10_pct": 12.0,
+                    "ret20_pct": 15.0,
+                    "volume_ratio20": 1.4,
+                    "spec_risk_label": "正常",
+                    "regime": "轉強速度有出來",
+                    "rank_change": 0,
+                    "setup_change": 0,
+                    "grade": "A",
+                }
+            ]
+        )
+
+        with patch("daily_theme_watchlist.load_last_success_date", return_value=dtw.today_local_str()), patch(
+            "daily_theme_watchlist.load_last_success_signature", return_value="sig"
+        ), patch("daily_theme_watchlist.current_run_signature", return_value="sig"), patch(
+            "daily_theme_watchlist.get_market_regime", return_value={"comment": "ok", "is_bullish": True}
+        ) as market_regime_mock, patch(
+            "daily_theme_watchlist.get_us_market_reference", return_value={"summary": "ok", "rows": []}
+        ), patch(
+            "daily_theme_watchlist.build_market_scenario",
+            return_value={"label": "正常盤", "stance": "中性", "exit_note": "照計畫"},
+        ), patch(
+            "daily_theme_watchlist.adjust_strategy_by_scenario", return_value=dtw.CONFIG.strategy
+        ), patch(
+            "daily_theme_watchlist.prewarm_watchlist_indicator_cache"
+        ), patch(
+            "daily_theme_watchlist.run_watchlist", return_value=df_rank
+        ), patch(
+            "daily_theme_watchlist.run_backtest_dual", return_value=(None, None)
+        ), patch(
+            "daily_theme_watchlist.build_candidate_sets",
+            return_value=(pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()),
+        ), patch(
+            "daily_theme_watchlist.save_reports"
+        ), patch(
+            "daily_theme_watchlist.upsert_alert_tracking"
+        ), patch(
+            "daily_theme_watchlist.strategy_preview_lines", return_value=["- noop"]
+        ), patch(
+            "daily_theme_watchlist.build_state", return_value="STATE"
+        ), patch(
+            "daily_theme_watchlist.load_last_state", return_value=""
+        ), patch(
+            "daily_theme_watchlist.should_alert", return_value=False
+        ), patch(
+            "daily_theme_watchlist.save_last_state"
+        ), patch(
+            "daily_theme_watchlist.save_last_success_date"
+        ):
+            result = watchlist_main(force_run=True)
+
+        self.assertEqual(result, 0)
+        market_regime_mock.assert_called_once()
+
     def test_detect_row_generates_expected_fields_for_accel_case(self) -> None:
         dates = pd.date_range("2025-01-01", periods=260, freq="B")
         closes = [100.0] * 249 + [100.0, 101.0, 102.0, 103.0, 105.0, 112.0, 113.0, 114.0, 115.0, 116.0, 117.0]
@@ -87,12 +177,262 @@ class DetectRowTests(unittest.TestCase):
         self.assertIn("volatility_tag", out)
         self.assertIn("date", out)
 
+    def test_detect_row_module_matches_legacy_wrapper(self) -> None:
+        dates = pd.date_range("2025-01-01", periods=260, freq="B")
+        closes = [100.0] * 249 + [100.0, 101.0, 102.0, 103.0, 105.0, 112.0, 113.0, 114.0, 115.0, 116.0, 117.0]
+        volumes = [1000] * 255 + [2500, 2600, 2700, 2800, 2900]
+
+        df = pd.DataFrame(
+            {
+                "Open": closes,
+                "High": [c + 1 for c in closes],
+                "Low": [c - 1 for c in closes],
+                "Close": closes,
+                "Volume": volumes,
+            },
+            index=dates,
+        )
+
+        legacy = detect_row(add_indicators(df), "TEST1.TW", "Accel Name", "theme", "short_attack")
+        modular = module_detect_row(
+            module_add_indicators(df),
+            "TEST1.TW",
+            "Accel Name",
+            "theme",
+            "short_attack",
+            dtw.CONFIG.strategy,
+            dtw.CONFIG.group_weights,
+        )
+
+        self.assertEqual(legacy, modular)
+
     def test_adjust_strategy_by_scenario_is_preview_only_helper(self) -> None:
         scenario = {"label": "明顯修正盤"}
         adjusted = adjust_strategy_by_scenario(CONFIG.strategy, scenario)
 
         self.assertGreater(adjusted.rebreak_vol_ratio, CONFIG.strategy.rebreak_vol_ratio)
         self.assertGreater(adjusted.accel_vol_ratio_fast, CONFIG.strategy.accel_vol_ratio_fast)
+
+    def test_yf_download_one_reuses_in_memory_history_cache(self) -> None:
+        dates = pd.date_range("2025-01-01", periods=260, freq="B")
+        df = pd.DataFrame(
+            {
+                "Open": [100.0] * 260,
+                "High": [101.0] * 260,
+                "Low": [99.0] * 260,
+                "Close": [100.0] * 260,
+                "Volume": [1000.0] * 260,
+            },
+            index=dates,
+        )
+
+        class FakeProvider:
+            name = "fake"
+
+            def __init__(self) -> None:
+                self.calls = 0
+
+            def download_daily_ohlcv(self, ticker: str, period: str) -> pd.DataFrame:
+                self.calls += 1
+                return df.copy()
+
+        provider = FakeProvider()
+        _DAILY_OHLCV_CACHE.clear()
+        with patch("daily_theme_watchlist.DAILY_PRICE_PROVIDERS", [provider]), patch(
+            "daily_theme_watchlist.PRIMARY_DAILY_PROVIDER", provider
+        ), patch("daily_theme_watchlist.ENABLE_HISTORY_CACHE", True), patch(
+            "daily_theme_watchlist.ENABLE_DISK_HISTORY_CACHE", False
+        ):
+            first = dtw.yf_download_one("2330.TW", "3y")
+            second = dtw.yf_download_one("2330.TW", "3y")
+
+        self.assertEqual(provider.calls, 1)
+        self.assertEqual(len(first), len(second))
+        self.assertIsNot(first, second)
+
+    def test_yf_download_one_reuses_superset_history_cache(self) -> None:
+        dates = pd.date_range("2020-01-01", periods=1600, freq="B")
+        df = pd.DataFrame(
+            {
+                "Open": [100.0] * len(dates),
+                "High": [101.0] * len(dates),
+                "Low": [99.0] * len(dates),
+                "Close": [100.0] * len(dates),
+                "Volume": [1000.0] * len(dates),
+            },
+            index=dates,
+        )
+
+        class FailProvider:
+            name = "fail"
+
+            def download_daily_ohlcv(self, ticker: str, period: str) -> pd.DataFrame:
+                raise AssertionError("provider should not be called when superset cache is available")
+
+        _DAILY_OHLCV_CACHE.clear()
+        dtw._CACHE_STATS["history_hit"] = 0
+        dtw._CACHE_STATS["history_superset_hit"] = 0
+        dtw._CACHE_STATS["history_miss"] = 0
+        _DAILY_OHLCV_CACHE[("2330.TW", "5y")] = df.copy()
+
+        with patch("daily_theme_watchlist.DAILY_PRICE_PROVIDERS", [FailProvider()]), patch(
+            "daily_theme_watchlist.ENABLE_HISTORY_CACHE", True
+        ):
+            out = dtw.yf_download_one("2330.TW", "3y")
+
+        self.assertLess(len(out), len(df))
+        self.assertEqual(dtw._CACHE_STATS["history_superset_hit"], 1)
+        self.assertEqual(dtw._CACHE_STATS["history_miss"], 0)
+
+    def test_yf_download_one_reuses_disk_history_cache(self) -> None:
+        dates = pd.date_range("2023-01-01", periods=800, freq="B")
+        df = pd.DataFrame(
+            {
+                "Open": [100.0] * len(dates),
+                "High": [101.0] * len(dates),
+                "Low": [99.0] * len(dates),
+                "Close": [100.0] * len(dates),
+                "Volume": [1000.0] * len(dates),
+            },
+            index=dates,
+        )
+
+        class FailProvider:
+            name = "fail"
+
+            def download_daily_ohlcv(self, ticker: str, period: str) -> pd.DataFrame:
+                raise AssertionError("provider should not be called when disk cache is available")
+
+        _DAILY_OHLCV_CACHE.clear()
+        dtw._CACHE_STATS["history_hit"] = 0
+        dtw._CACHE_STATS["history_disk_hit"] = 0
+        dtw._CACHE_STATS["history_superset_hit"] = 0
+        dtw._CACHE_STATS["history_miss"] = 0
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache_dir = Path(tmpdir)
+            cache_path = cache_dir / "2330_TW__3y.csv"
+            cached = df.copy()
+            cached.index.name = "Date"
+            cached.to_csv(cache_path, encoding="utf-8")
+
+            with patch("daily_theme_watchlist.HISTORY_CACHE_DIR", cache_dir), patch(
+                "daily_theme_watchlist.DAILY_PRICE_PROVIDERS", [FailProvider()]
+            ), patch("daily_theme_watchlist.ENABLE_HISTORY_CACHE", True), patch(
+                "daily_theme_watchlist.ENABLE_DISK_HISTORY_CACHE", True
+            ), patch(
+                "daily_theme_watchlist._required_history_end_date", return_value=pd.Timestamp("2025-03-20")
+            ):
+                out = dtw.yf_download_one("2330.TW", "3y")
+
+        self.assertEqual(len(out), len(df))
+        self.assertEqual(dtw._CACHE_STATS["history_disk_hit"], 1)
+        self.assertEqual(dtw._CACHE_STATS["history_miss"], 0)
+
+    def test_required_history_end_date_uses_taiwan_session(self) -> None:
+        preopen = datetime(2026, 4, 24, 8, 30, tzinfo=dtw.LOCAL_TZ)
+        postclose = datetime(2026, 4, 24, 14, 0, tzinfo=dtw.LOCAL_TZ)
+
+        self.assertEqual(dtw._required_history_end_date("2330.TW", preopen), pd.Timestamp("2026-04-23"))
+        self.assertEqual(dtw._required_history_end_date("2330.TW", postclose), pd.Timestamp("2026-04-24"))
+
+    def test_required_history_end_date_uses_us_session(self) -> None:
+        before_us_close = datetime(2026, 4, 24, 3, 0, tzinfo=dtw.LOCAL_TZ)
+        after_us_close = datetime(2026, 4, 24, 9, 0, tzinfo=dtw.LOCAL_TZ)
+
+        self.assertEqual(dtw._required_history_end_date("NVDA", before_us_close), pd.Timestamp("2026-04-22"))
+        self.assertEqual(dtw._required_history_end_date("NVDA", after_us_close), pd.Timestamp("2026-04-23"))
+
+    def test_required_history_end_date_rolls_weekend_to_previous_business_day(self) -> None:
+        saturday = datetime(2026, 4, 25, 15, 0, tzinfo=dtw.LOCAL_TZ)
+        sunday_evening_taipei = datetime(2026, 4, 26, 22, 0, tzinfo=dtw.LOCAL_TZ)
+
+        self.assertEqual(dtw._required_history_end_date("2330.TW", saturday), pd.Timestamp("2026-04-24"))
+        self.assertEqual(dtw._required_history_end_date("SOXX", sunday_evening_taipei), pd.Timestamp("2026-04-24"))
+
+    def test_get_indicator_frame_reuses_cached_indicator_dataframe(self) -> None:
+        dates = pd.date_range("2025-01-01", periods=260, freq="B")
+        df = pd.DataFrame(
+            {
+                "Open": [100.0] * 260,
+                "High": [101.0] * 260,
+                "Low": [99.0] * 260,
+                "Close": [100.0] * 260,
+                "Volume": [1000.0] * 260,
+            },
+            index=dates,
+        )
+
+        _INDICATOR_FRAME_CACHE.clear()
+        with patch("daily_theme_watchlist.yf_download_one", return_value=df.copy()) as download_mock, patch(
+            "daily_theme_watchlist.ENABLE_HISTORY_CACHE", True
+        ):
+            first = dtw.get_indicator_frame("2330.TW", "3y")
+            second = dtw.get_indicator_frame("2330.TW", "3y")
+
+        self.assertEqual(download_mock.call_count, 1)
+        self.assertIn("MA20", first.columns)
+        self.assertIsNot(first, second)
+
+    def test_get_indicator_frame_reuses_superset_indicator_cache(self) -> None:
+        dates = pd.date_range("2020-01-01", periods=1600, freq="B")
+        df = pd.DataFrame(
+            {
+                "Open": [100.0] * len(dates),
+                "High": [101.0] * len(dates),
+                "Low": [99.0] * len(dates),
+                "Close": [100.0] * len(dates),
+                "Volume": [1000.0] * len(dates),
+                "MA20": [100.0] * len(dates),
+                "Ret20D": [0.0] * len(dates),
+                "Ret5D": [0.0] * len(dates),
+                "VolumeMA20": [1000.0] * len(dates),
+                "VolumeRatio20": [1.0] * len(dates),
+                "ATR14": [1.0] * len(dates),
+                "ATR14Pct": [0.01] * len(dates),
+            },
+            index=dates,
+        )
+
+        _INDICATOR_FRAME_CACHE.clear()
+        dtw._CACHE_STATS["indicator_hit"] = 0
+        dtw._CACHE_STATS["indicator_superset_hit"] = 0
+        dtw._CACHE_STATS["indicator_miss"] = 0
+        _INDICATOR_FRAME_CACHE[("2330.TW", "5y", 20)] = df.copy()
+
+        with patch("daily_theme_watchlist.yf_download_one", side_effect=AssertionError("should not download")), patch(
+            "daily_theme_watchlist.ENABLE_HISTORY_CACHE", True
+        ):
+            out = dtw.get_indicator_frame("2330.TW", "3y")
+
+        self.assertLess(len(out), len(df))
+        self.assertEqual(dtw._CACHE_STATS["indicator_superset_hit"], 1)
+        self.assertEqual(dtw._CACHE_STATS["indicator_miss"], 0)
+
+    def test_build_runtime_metrics_markdown_includes_cache_and_backtest_sections(self) -> None:
+        markdown = build_runtime_metrics_markdown(
+            generated_at="2026-04-24 11:00:00",
+            status="ok",
+            step_timings={"watchlist": 0.123, "backtest": 0.456},
+            warnings=["market_regime: best effort"],
+            cache_stats={
+                "history_hit": 5,
+                "history_disk_hit": 2,
+                "history_superset_hit": 4,
+                "history_miss": 2,
+                "indicator_hit": 3,
+                "indicator_superset_hit": 2,
+                "indicator_miss": 1,
+            },
+            backtest_meta={"last_run_mode": "incremental_noop", "last_run_scanned_cutoffs": 0},
+            wall_seconds=0.789,
+        )
+
+        self.assertIn("## Cache", markdown)
+        self.assertIn("History cache", markdown)
+        self.assertIn("## Backtest", markdown)
+        self.assertIn("incremental_noop", markdown)
+        self.assertIn("Wall-clock seconds", markdown)
 
 
 class MarketRegimeTests(unittest.TestCase):
@@ -148,6 +488,7 @@ class GradeSignalTests(unittest.TestCase):
         }
 
         self.assertEqual(grade_signal(row), "A")
+        self.assertEqual(module_grade_signal(row), "A")
 
     def test_grade_signal_returns_c_for_overheated_name(self) -> None:
         row = {
@@ -160,6 +501,99 @@ class GradeSignalTests(unittest.TestCase):
         }
 
         self.assertEqual(grade_signal(row), "C")
+        self.assertEqual(module_grade_signal(row), "C")
+
+    def test_build_rank_table_sorts_and_tracks_changes(self) -> None:
+        rows = [
+            {
+                "ticker": "AAA.TW",
+                "setup_score": 7,
+                "risk_score": 2,
+                "signals": "ACCEL",
+                "ret5_pct": 10.0,
+                "volume_ratio20": 1.4,
+                "ret20_pct": 12.0,
+            },
+            {
+                "ticker": "BBB.TW",
+                "setup_score": 5,
+                "risk_score": 2,
+                "signals": "TREND",
+                "ret5_pct": 6.0,
+                "volume_ratio20": 1.2,
+                "ret20_pct": 8.0,
+            },
+        ]
+        prev_rank = pd.DataFrame(
+            [
+                {"ticker": "BBB.TW", "rank": 1, "setup_score": 4, "risk_score": 2},
+                {"ticker": "AAA.TW", "rank": 2, "setup_score": 6, "risk_score": 2},
+            ]
+        )
+
+        ranked = build_rank_table(rows, prev_rank)
+
+        self.assertEqual(list(ranked["ticker"]), ["AAA.TW", "BBB.TW"])
+        self.assertEqual(list(ranked["rank_change"]), [1, -1])
+        self.assertEqual(list(ranked["status_change"]), ["UP", "UP"])
+
+    def test_incremental_backtest_scans_only_new_cutoff_dates(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            outdir = Path(tmpdir)
+            dates = pd.date_range("2025-01-01", periods=280, freq="B")
+            df = pd.DataFrame(
+                {
+                    "Open": [100.0] * 280,
+                    "High": [101.0] * 280,
+                    "Low": [99.0] * 280,
+                    "Close": [100.0 + i * 0.1 for i in range(280)],
+                    "Volume": [1000.0] * 280,
+                },
+                index=dates,
+            )
+
+            watchlist = [{"ticker": "2330.TW", "name": "台積電", "group": "core", "layer": "midlong_core"}]
+            detect_calls: list[str] = []
+
+            def _detect_row(cut: pd.DataFrame, ticker: str, name: str, group: str, layer: str) -> dict:
+                detect_calls.append(cut.index[-1].strftime("%Y-%m-%d"))
+                return {
+                    "setup_score": 6,
+                    "risk_score": 2,
+                    "signals": "ACCEL",
+                    "ret5_pct": 9.0,
+                    "ret20_pct": 12.0,
+                    "volume_ratio20": 1.5,
+                }
+
+            run_backtest_dual_module(
+                backtest_enabled=True,
+                signature="sig-1",
+                watchlist=watchlist,
+                backtest_period="3y",
+                lookahead_days=[1, 5, 20],
+                outdir=outdir,
+                get_indicator_frame=lambda ticker, period: df,
+                detect_row=_detect_row,
+                logger=dtw.logger,
+            )
+            first_call_count = len(detect_calls)
+            self.assertGreater(first_call_count, 0)
+
+            detect_calls.clear()
+            run_backtest_dual_module(
+                backtest_enabled=True,
+                signature="sig-1",
+                watchlist=watchlist,
+                backtest_period="3y",
+                lookahead_days=[1, 5, 20],
+                outdir=outdir,
+                get_indicator_frame=lambda ticker, period: df,
+                detect_row=_detect_row,
+                logger=dtw.logger,
+            )
+
+            self.assertEqual(detect_calls, [])
 
 
 class SpeculativeRiskTests(unittest.TestCase):
@@ -217,6 +651,69 @@ class FeedbackTests(unittest.TestCase):
 
                 self.assertEqual(adjusted.iloc[0]["ticker"], "CHASE.TW")
                 self.assertIn("feedback_label", adjusted.columns)
+
+    def test_watchlist_main_writes_reports_before_best_effort_alert_tracking(self) -> None:
+        df_rank = pd.DataFrame(
+            [
+                {
+                    "rank": 1,
+                    "ticker": "AAA.TW",
+                    "name": "Alpha",
+                    "group": "theme",
+                    "layer": "short_attack",
+                    "setup_score": 7,
+                    "risk_score": 2,
+                    "signals": "ACCEL",
+                    "ret5_pct": 9.0,
+                    "ret10_pct": 12.0,
+                    "ret20_pct": 15.0,
+                    "volume_ratio20": 1.4,
+                    "spec_risk_label": "正常",
+                    "regime": "轉強速度有出來",
+                    "rank_change": 0,
+                    "setup_change": 0,
+                    "grade": "A",
+                }
+            ]
+        )
+
+        with patch("daily_theme_watchlist.load_last_success_date", return_value=""), patch(
+            "daily_theme_watchlist.current_run_signature", return_value="sig"
+        ), patch("daily_theme_watchlist.get_market_regime", return_value={"comment": "ok", "is_bullish": True}), patch(
+            "daily_theme_watchlist.get_us_market_reference", return_value={"summary": "ok", "rows": []}
+        ), patch(
+            "daily_theme_watchlist.build_market_scenario",
+            return_value={"label": "正常盤", "stance": "中性", "exit_note": "照計畫"},
+        ), patch(
+            "daily_theme_watchlist.adjust_strategy_by_scenario", return_value=dtw.CONFIG.strategy
+        ), patch(
+            "daily_theme_watchlist.run_watchlist", return_value=df_rank
+        ), patch(
+            "daily_theme_watchlist.run_backtest_dual", return_value=(None, None)
+        ), patch(
+            "daily_theme_watchlist.build_candidate_sets",
+            return_value=(pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()),
+        ), patch(
+            "daily_theme_watchlist.save_reports"
+        ) as mock_save_reports, patch(
+            "daily_theme_watchlist.upsert_alert_tracking", side_effect=RuntimeError("tracking failed")
+        ), patch(
+            "daily_theme_watchlist.strategy_preview_lines", return_value=["- noop"]
+        ), patch(
+            "daily_theme_watchlist.build_state", return_value="STATE"
+        ), patch(
+            "daily_theme_watchlist.load_last_state", return_value=""
+        ), patch(
+            "daily_theme_watchlist.should_alert", return_value=False
+        ), patch(
+            "daily_theme_watchlist.save_last_state"
+        ), patch(
+            "daily_theme_watchlist.save_last_success_date"
+        ):
+            result = watchlist_main()
+
+        self.assertEqual(result, 0)
+        mock_save_reports.assert_called_once()
 
     def test_upsert_alert_tracking_persists_scenario_label(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -1543,6 +2040,58 @@ class PortfolioCheckTests(unittest.TestCase):
         _, kwargs = run_watchlist_mock.call_args
         self.assertIn("strat", kwargs)
         self.assertGreater(kwargs["strat"].rebreak_vol_ratio, CONFIG.strategy.rebreak_vol_ratio)
+
+    def test_portfolio_check_writes_runtime_metrics(self) -> None:
+        market_regime = {"comment": "加權指數目前偏多", "ret20_pct": 12.0, "volume_ratio20": 1.2, "is_bullish": True, "session_phase": "postclose"}
+        us_market = {"summary": "美股偏弱"}
+        df_rank = pd.DataFrame(
+            [
+                {
+                    "rank": 1,
+                    "ticker": "2330.TW",
+                    "name": "台積電",
+                    "group": "core",
+                    "layer": "midlong_core",
+                    "grade": "B",
+                    "setup_score": 7,
+                    "risk_score": 2,
+                    "ret5_pct": 4.0,
+                    "ret10_pct": 6.0,
+                    "ret20_pct": 10.0,
+                    "volume_ratio20": 1.1,
+                    "signals": "TREND",
+                    "rank_change": 1,
+                    "setup_change": 1,
+                    "status_change": "UP",
+                    "regime": "中段延續中",
+                    "date": "2026-04-22",
+                    "close": 950.0,
+                    "spec_risk_label": "正常",
+                    "atr_pct": 2.0,
+                    "volatility_tag": "標準",
+                }
+            ]
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir, patch.object(
+            portfolio_check_module, "PORTFOLIO", pd.DataFrame([{"ticker": "2330.TW", "shares": 1, "avg_cost": 900, "target_profit_pct": 15}])
+        ), patch("portfolio_check.get_market_regime", return_value=market_regime), patch(
+            "portfolio_check.get_us_market_reference", return_value=us_market
+        ), patch("portfolio_check.run_watchlist", return_value=df_rank), patch(
+            "portfolio_check.save_portfolio_reports"
+        ), patch(
+            "builtins.print"
+        ), patch("portfolio_check.logger"), patch.object(
+            portfolio_check_module, "PORTFOLIO_RUNTIME_METRICS_MD", Path(tmpdir) / "portfolio_runtime_metrics.md"
+        ), patch.object(
+            portfolio_check_module, "PORTFOLIO_RUNTIME_METRICS_JSON", Path(tmpdir) / "portfolio_runtime_metrics.json"
+        ):
+            result = portfolio_check_module.main()
+            payload = json.loads((Path(tmpdir) / "portfolio_runtime_metrics.json").read_text(encoding="utf-8"))
+
+        self.assertEqual(result, 0)
+        self.assertEqual(payload["status"], "ok")
+        self.assertIn("watchlist", payload["step_timings"])
 
 
 if __name__ == "__main__":

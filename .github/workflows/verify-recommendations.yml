@@ -7,6 +7,11 @@ on:
         description: "Run daily_theme_watchlist.py to refresh daily_rank.csv first"
         required: false
         default: "true"
+      force_watchlist_run:
+        description: "Force rerun daily_theme_watchlist.py when refreshing daily_rank.csv first"
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   verify:
@@ -43,7 +48,11 @@ jobs:
           WATCHLIST_CSV: watchlist.csv
           REALTIME_QUOTES: "0"
         run: |
-          python daily_theme_watchlist.py || true
+          if [ "${{ inputs.force_watchlist_run }}" = "true" ]; then
+            python daily_theme_watchlist.py --force || true
+          else
+            python daily_theme_watchlist.py || true
+          fi
 
       - name: Verify recommendations from daily_rank.csv
         env:

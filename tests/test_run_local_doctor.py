@@ -23,7 +23,14 @@ class RunLocalDoctorTests(unittest.TestCase):
 
     def test_write_doctor_outputs_writes_markdown_and_json(self) -> None:
         checks = [DoctorCheck(name="python_runtime", status="ok", detail="Python 3.11")]
-        metrics = {"daily_rank_rows": 1, "alert_tracking_rows": 2, "snapshot_rows": 3, "outcome_rows": 4}
+        metrics = {
+            "daily_rank_rows": 1,
+            "alert_tracking_rows": 2,
+            "snapshot_rows": 3,
+            "outcome_rows": 4,
+            "history_cache_files": 5,
+            "history_cache_bytes": 600,
+        }
 
         with tempfile.TemporaryDirectory() as tmpdir:
             output_md = Path(tmpdir) / "local_doctor.md"
@@ -35,6 +42,7 @@ class RunLocalDoctorTests(unittest.TestCase):
 
         self.assertIn("Local Doctor", markdown)
         self.assertIn("python_runtime", markdown)
+        self.assertIn("History cache files", markdown)
         self.assertEqual(payload["overall"], "ok")
         self.assertEqual(payload["checks"][0]["status"], "ok")
 
@@ -43,8 +51,10 @@ class RunLocalDoctorTests(unittest.TestCase):
             root = Path(tmpdir)
             theme_outdir = root / "theme_watchlist_daily"
             verification_outdir = root / "verification" / "watchlist_daily"
+            history_cache_dir = theme_outdir / "history_cache"
             theme_outdir.mkdir(parents=True, exist_ok=True)
             verification_outdir.mkdir(parents=True, exist_ok=True)
+            history_cache_dir.mkdir(parents=True, exist_ok=True)
 
             (root / "requirements.txt").write_text("pandas\n", encoding="utf-8")
             (root / "config.json").write_text(
@@ -62,6 +72,7 @@ class RunLocalDoctorTests(unittest.TestCase):
             (root / "portfolio.csv.example").write_text("ticker,shares\n2330,1\n", encoding="utf-8")
             (root / "chat_id_map.csv.example").write_text("chat_id,name\n", encoding="utf-8")
             (root / "telegram_getupdates_url.example").write_text("https://example.com\n", encoding="utf-8")
+            (history_cache_dir / "2330_TW__5y.csv").write_text("Date,Close\n2026-04-24,1\n", encoding="utf-8")
 
             with patch("run_local_doctor.REPO_ROOT", root), patch("run_local_doctor.THEME_OUTDIR", theme_outdir), patch(
                 "run_local_doctor.VERIFICATION_OUTDIR", verification_outdir
@@ -71,9 +82,13 @@ class RunLocalDoctorTests(unittest.TestCase):
                 code = main(["--skip-network"])
 
             payload = json.loads((theme_outdir / "local_doctor.json").read_text(encoding="utf-8"))
+            check_names = {check["name"] for check in payload["checks"]}
 
         self.assertEqual(code, 0)
         self.assertEqual(payload["overall"], "warn")
+        self.assertIn("history_cache_dir", check_names)
+        self.assertEqual(payload["metrics"]["history_cache_files"], 1)
+        self.assertGreater(payload["metrics"]["history_cache_bytes"], 0)
 
     def test_main_returns_one_for_fail_state(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

@@ -2,6 +2,12 @@ name: stock-watch
 
 on:
   workflow_dispatch:
+    inputs:
+      force_run:
+        description: "Force rerun even if the same code/config already completed successfully today"
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -44,7 +50,11 @@ jobs:
           CONFIG_PATH: config.json
           WATCHLIST_CSV: watchlist.csv
         run: |
-          python daily_theme_watchlist.py
+          if [ "${{ inputs.force_run }}" = "true" ]; then
+            python daily_theme_watchlist.py --force
+          else
+            python daily_theme_watchlist.py
+          fi
 
       - name: Commit updated artifacts
         run: |

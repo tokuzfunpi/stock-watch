@@ -17,13 +17,16 @@ from run_local_housekeeping import main
 class RunLocalHousekeepingTests(unittest.TestCase):
     def test_collect_housekeeping_actions_keeps_latest_and_marks_older_files(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
+            theme_outdir = Path(tmpdir) / "theme_watchlist_daily"
             verification_outdir = Path(tmpdir) / "verification" / "watchlist_daily"
             contexts_dir = verification_outdir / "contexts"
             backfill_dir = verification_outdir / "backfill_reports"
             cache_dir = verification_outdir / "yfinance_cache"
+            history_cache_dir = theme_outdir / "history_cache"
             contexts_dir.mkdir(parents=True, exist_ok=True)
             backfill_dir.mkdir(parents=True, exist_ok=True)
             cache_dir.mkdir(parents=True, exist_ok=True)
+            history_cache_dir.mkdir(parents=True, exist_ok=True)
 
             now = datetime(2026, 4, 23, 12, 0, 0)
             for index in range(3):
@@ -53,12 +56,27 @@ class RunLocalHousekeepingTests(unittest.TestCase):
             os.utime(stale_cache, ((now - timedelta(days=20)).timestamp(), (now - timedelta(days=20)).timestamp()))
             os.utime(fresh_cache, ((now - timedelta(days=1)).timestamp(), (now - timedelta(days=1)).timestamp()))
 
+            stale_history_cache = history_cache_dir / "2330_TW__5y.csv"
+            fresh_history_cache = history_cache_dir / "2454_TW__5y.csv"
+            stale_history_cache.write_text("x\n", encoding="utf-8")
+            fresh_history_cache.write_text("x\n", encoding="utf-8")
+            os.utime(
+                stale_history_cache,
+                ((now - timedelta(days=40)).timestamp(), (now - timedelta(days=40)).timestamp()),
+            )
+            os.utime(
+                fresh_history_cache,
+                ((now - timedelta(days=2)).timestamp(), (now - timedelta(days=2)).timestamp()),
+            )
+
             actions = collect_housekeeping_actions(
+                theme_outdir=theme_outdir,
                 verification_outdir=verification_outdir,
                 keep_contexts=2,
                 keep_backfill_reports=1,
                 keep_backups=1,
                 cache_max_age_days=14,
+                history_cache_max_age_days=30,
                 now=now,
             )
 
@@ -68,6 +86,8 @@ class RunLocalHousekeepingTests(unittest.TestCase):
         self.assertIn(("reco_snapshots.csv.bak.20260420", "planned", "csv_backups"), statuses)
         self.assertIn(("old.csv", "planned", "verification_cache"), statuses)
         self.assertIn(("fresh.csv", "kept", "verification_cache"), statuses)
+        self.assertIn(("2330_TW__5y.csv", "planned", "history_cache"), statuses)
+        self.assertIn(("2454_TW__5y.csv", "kept", "history_cache"), statuses)
 
     def test_apply_housekeeping_actions_deletes_planned_files(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -103,6 +123,8 @@ class RunLocalHousekeepingTests(unittest.TestCase):
 
             code = main(
                 [
+                    "--theme-outdir",
+                    str(root / "theme_watchlist_daily"),
                     "--verification-outdir",
                     str(verification_outdir),
                     "--keep-contexts",

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import csv
 import contextlib
 import hashlib
@@ -20,6 +21,38 @@ import pandas as pd
 import requests
 import yfinance as yf
 from requests.adapters import HTTPAdapter
+from stock_watch.data.providers.finmind import FinMindPriceProvider
+from stock_watch.data.providers.yahoo import (
+    YahooFinancePriceProvider,
+    alternate_taiwan_ticker as alternate_taiwan_ticker_impl,
+)
+from stock_watch.backtesting.core import (
+    run_backtest_dual as run_backtest_dual_impl,
+    summarize_events as summarize_events_impl,
+)
+from stock_watch.ranking.scoring import build_rank_table, enrich_rank_changes as enrich_rank_changes_impl
+from stock_watch.reports.common import dataframe_to_html as dataframe_to_html_impl
+from stock_watch.reports.daily import (
+    build_daily_report_html as build_daily_report_html_impl,
+    build_daily_report_markdown as build_daily_report_markdown_impl,
+    save_reports as save_reports_impl,
+)
+from stock_watch.reports.portfolio import (
+    build_portfolio_report_html as build_portfolio_report_html_impl,
+    build_portfolio_report_markdown as build_portfolio_report_markdown_impl,
+    save_portfolio_reports as save_portfolio_reports_impl,
+)
+from stock_watch.state.alert_tracking import upsert_alert_tracking as upsert_alert_tracking_impl
+from stock_watch.signals.detect import (
+    add_indicators as add_indicators_impl,
+    apply_group_weight as apply_group_weight_impl,
+    detect_row as detect_row_impl,
+    grade_signal as grade_signal_impl,
+    score_band as score_band_impl,
+    speculative_risk_label as speculative_risk_label_impl,
+    speculative_risk_score as speculative_risk_score_impl,
+    volatility_label as volatility_label_impl,
+)
 from urllib3.util.retry import Retry
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -45,6 +78,8 @@ REPORT_MD = OUTDIR / "daily_report.md"
 REPORT_HTML = OUTDIR / "daily_report.html"
 PORTFOLIO_REPORT_MD = OUTDIR / "portfolio_report.md"
 PORTFOLIO_REPORT_HTML = OUTDIR / "portfolio_report.html"
+RUNTIME_METRICS_MD = OUTDIR / "runtime_metrics.md"
+RUNTIME_METRICS_JSON = OUTDIR / "runtime_metrics.json"
 ALERT_TRACK_CSV = OUTDIR / "alert_tracking.csv"
 FEEDBACK_SUMMARY_CSV = OUTDIR / "feedback_summary.csv"
 SUCCESS_FILE = OUTDIR / "last_success_date.txt"
@@ -53,13 +88,25 @@ LOG_DIR = OUTDIR / "logs"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "").strip()
+FINMIND_TOKEN = os.getenv("FINMIND_TOKEN", "").strip()
 HTTP_TIMEOUT = int(os.getenv("HTTP_TIMEOUT", "20"))
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 FORCE_RUN = os.getenv("FORCE_RUN", "").strip().lower() in {"1", "true", "yes", "y"}
 LOCAL_TZ = ZoneInfo(os.getenv("LOCAL_TZ", "Asia/Taipei"))
+STOCK_DATA_PROVIDER = os.getenv("STOCK_DATA_PROVIDER", "yahoo").strip().lower()
+STOCK_DATA_FALLBACKS = [
+    item.strip().lower()
+    for item in os.getenv("STOCK_DATA_FALLBACKS", "finmind").split(",")
+    if item.strip()
+]
 TWSE_NAME_CACHE: dict[str, str] = {}
 REALTIME_QUOTE_INTERVAL = os.getenv("REALTIME_QUOTE_INTERVAL", "1m").strip()
 REALTIME_QUOTE_PERIOD = os.getenv("REALTIME_QUOTE_PERIOD", "1d").strip()
+ENABLE_HISTORY_CACHE = os.getenv("ENABLE_HISTORY_CACHE", "1").strip().lower() in {"1", "true", "yes", "y"}
+ENABLE_DISK_HISTORY_CACHE = os.getenv("ENABLE_DISK_HISTORY_CACHE", "1").strip().lower() in {"1", "true", "yes", "y"}
+HISTORY_CACHE_DIR = OUTDIR / "history_cache"
+HISTORY_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+US_MARKET_TZ = ZoneInfo("America/New_York")
 
 
 def realtime_quotes_enabled() -> bool:
@@ -67,6 +114,17 @@ def realtime_quotes_enabled() -> bool:
 
 
 _REALTIME_QUOTE_CACHE: dict[tuple[str, str, tuple[str, ...]], tuple[float, dict[str, float]]] = {}
+_DAILY_OHLCV_CACHE: dict[tuple[str, str], pd.DataFrame] = {}
+_INDICATOR_FRAME_CACHE: dict[tuple[str, str, int], pd.DataFrame] = {}
+_CACHE_STATS = {
+    "history_hit": 0,
+    "history_disk_hit": 0,
+    "history_superset_hit": 0,
+    "history_miss": 0,
+    "indicator_hit": 0,
+    "indicator_superset_hit": 0,
+    "indicator_miss": 0,
+}
 
 
 def parse_chat_ids(raw: str) -> list[int]:
@@ -236,6 +294,23 @@ def build_session() -> requests.Session:
 
 
 HTTP = build_session()
+
+
+def _make_daily_price_provider(name: str):
+    if name == "yahoo":
+        return YahooFinancePriceProvider(yf_module=yf, logger=logger)
+    if name == "finmind":
+        return FinMindPriceProvider(session=HTTP, token=FINMIND_TOKEN)
+    raise ValueError(f"Unsupported stock data provider: {name}")
+
+
+PRIMARY_DAILY_PROVIDER = _make_daily_price_provider(STOCK_DATA_PROVIDER)
+FALLBACK_DAILY_PROVIDERS = [
+    _make_daily_price_provider(name)
+    for name in STOCK_DATA_FALLBACKS
+    if name and name != STOCK_DATA_PROVIDER
+]
+DAILY_PRICE_PROVIDERS = [PRIMARY_DAILY_PROVIDER, *FALLBACK_DAILY_PROVIDERS]
 
 
 def load_watchlist(csv_path: Path) -> List[dict]:
@@ -448,45 +523,209 @@ SCHEDULE_TARGET_TIMES = ["08:45", "14:00"]
 
 
 def alternate_taiwan_ticker(ticker: str) -> str:
-    symbol = str(ticker or "").strip().upper()
-    if "." not in symbol:
-        return ""
-    base, suffix = symbol.split(".", 1)
-    if not (len(base) == 4 and base.isdigit()):
-        return ""
-    if suffix == "TW":
-        return f"{base}.TWO"
-    if suffix == "TWO":
-        return f"{base}.TW"
-    return ""
+    return alternate_taiwan_ticker_impl(ticker)
 
 
 def _download_daily_ohlcv(ticker: str, period: str) -> pd.DataFrame:
-    df = yf.download(
-        ticker, period=period, interval="1d",
-        auto_adjust=True, progress=False, threads=False,
-    )
+    return PRIMARY_DAILY_PROVIDER.download_daily_ohlcv(ticker, period)
+
+
+def _period_to_days(period: str) -> Optional[int]:
+    period = str(period or "").strip().lower()
+    if not period:
+        return None
+    if period == "max":
+        return 10**9
+    if period == "ytd":
+        return 366
+    if period.endswith("d") and period[:-1].isdigit():
+        return int(period[:-1])
+    if period.endswith("mo") and period[:-2].isdigit():
+        return int(period[:-2]) * 30
+    if period.endswith("y") and period[:-1].isdigit():
+        return int(period[:-1]) * 365
+    return None
+
+
+def _slice_frame_to_period(df: pd.DataFrame, period: str) -> pd.DataFrame:
     if df.empty:
-        return df
-    if isinstance(df.columns, pd.MultiIndex):
-        df.columns = df.columns.get_level_values(0)
-    df = df.rename(columns=str.title)
-    return df[["Open", "High", "Low", "Close", "Volume"]].dropna().copy()
+        return df.copy()
+    requested_days = _period_to_days(period)
+    if requested_days is None:
+        return df.copy()
+    last_index = df.index.max()
+    if not isinstance(last_index, pd.Timestamp):
+        return df.copy()
+    cutoff = last_index - pd.Timedelta(days=requested_days + 10)
+    sliced = df.loc[df.index >= cutoff].copy()
+    return sliced if not sliced.empty else df.copy()
+
+
+def _lookup_superset_cache(
+    cache: dict[tuple, pd.DataFrame],
+    ticker: str,
+    period: str,
+    *,
+    suffix: tuple = (),
+) -> Optional[pd.DataFrame]:
+    requested_days = _period_to_days(period)
+    if requested_days is None:
+        return None
+    normalized_ticker = str(ticker).strip().upper()
+    best: Optional[tuple[int, pd.DataFrame]] = None
+    for key, cached_df in cache.items():
+        if not key or key[0] != normalized_ticker:
+            continue
+        if suffix and tuple(key[-len(suffix):]) != suffix:
+            continue
+        cached_days = _period_to_days(str(key[1]))
+        if cached_days is None or cached_days < requested_days:
+            continue
+        if best is None or cached_days < best[0]:
+            best = (cached_days, cached_df)
+    return None if best is None else best[1]
+
+
+def _preferred_shared_period() -> Optional[str]:
+    periods = [CONFIG.yf_period]
+    if CONFIG.backtest.enabled:
+        periods.append(CONFIG.backtest.period)
+    normalized = [(period, _period_to_days(period)) for period in periods]
+    normalized = [(period, days) for period, days in normalized if days is not None]
+    if not normalized:
+        return None
+    return max(normalized, key=lambda item: item[1])[0]
+
+
+def _history_cache_path(ticker: str, period: str) -> Path:
+    safe_ticker = re.sub(r"[^A-Z0-9]+", "_", str(ticker).strip().upper()).strip("_") or "UNKNOWN"
+    safe_period = re.sub(r"[^a-zA-Z0-9]+", "_", str(period).strip()).strip("_") or "period"
+    return HISTORY_CACHE_DIR / f"{safe_ticker}__{safe_period}.csv"
+
+
+def _read_history_cache(path: Path) -> Optional[pd.DataFrame]:
+    if not path.exists():
+        return None
+    try:
+        df = pd.read_csv(path, index_col=0, parse_dates=True)
+    except Exception:
+        return None
+    if df.empty:
+        return None
+    try:
+        df.index = pd.to_datetime(df.index)
+    except Exception:
+        return None
+    required_columns = {"Open", "High", "Low", "Close", "Volume"}
+    if not required_columns.issubset(df.columns):
+        return None
+    return df.sort_index()
+
+
+def _write_history_cache(path: Path, df: pd.DataFrame) -> None:
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        frame = df.copy()
+        frame.index.name = "Date"
+        frame.to_csv(path, encoding="utf-8")
+    except Exception as exc:
+        logger.warning("History cache write skipped for %s: %s", path.name, exc)
+
+
+def _history_market(ticker: str) -> str:
+    normalized = str(ticker or "").strip().upper()
+    if normalized.endswith(".TW") or normalized.endswith(".TWO") or normalized in {"^TWII", "TWII"}:
+        return "tw"
+    return "us"
+
+
+def _business_day_on_or_before(day: pd.Timestamp) -> pd.Timestamp:
+    current = pd.Timestamp(day).normalize()
+    while current.weekday() >= 5:
+        current -= pd.Timedelta(days=1)
+    return current
+
+
+def _previous_business_day(day: pd.Timestamp) -> pd.Timestamp:
+    current = pd.Timestamp(day).normalize() - pd.Timedelta(days=1)
+    while current.weekday() >= 5:
+        current -= pd.Timedelta(days=1)
+    return current
+
+
+def _required_history_end_date(ticker: str, now_local: Optional[datetime] = None) -> pd.Timestamp:
+    current = now_local or datetime.now(LOCAL_TZ)
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=LOCAL_TZ)
+
+    market = _history_market(ticker)
+    market_tz = LOCAL_TZ if market == "tw" else US_MARKET_TZ
+    close_minutes = 13 * 60 + 35 if market == "tw" else 16 * 60 + 5
+
+    market_now = current.astimezone(market_tz)
+    market_day = pd.Timestamp(market_now.date()).normalize()
+    if market_now.weekday() >= 5:
+        return _business_day_on_or_before(market_day)
+
+    if market_now.hour * 60 + market_now.minute >= close_minutes:
+        return market_day
+
+    return _previous_business_day(market_day)
+
+
+def _load_history_from_disk_cache(ticker: str, period: str) -> Optional[pd.DataFrame]:
+    if not ENABLE_DISK_HISTORY_CACHE:
+        return None
+    path = _history_cache_path(ticker, period)
+    df = _read_history_cache(path)
+    if df is None:
+        return None
+    latest_index = df.index.max()
+    if not isinstance(latest_index, pd.Timestamp):
+        return None
+    if latest_index.normalize() < _required_history_end_date(ticker):
+        return None
+    _CACHE_STATS["history_disk_hit"] += 1
+    return df.copy()
 
 
 def yf_download_one(ticker: str, period: str) -> pd.DataFrame:
-    df = _download_daily_ohlcv(ticker, period)
-    if df.empty:
-        alt_ticker = alternate_taiwan_ticker(ticker)
-        if alt_ticker:
-            df = _download_daily_ohlcv(alt_ticker, period)
-            if not df.empty:
-                logger.warning("Ticker fallback: %s -> %s", ticker, alt_ticker)
-        if df.empty:
-            raise ValueError(f"No data returned for {ticker}")
-    if len(df) < 250:
-        raise ValueError(f"Insufficient history for {ticker}: {len(df)} rows")
-    return df
+    cache_key = (str(ticker).strip().upper(), str(period).strip())
+    if ENABLE_HISTORY_CACHE and cache_key in _DAILY_OHLCV_CACHE:
+        _CACHE_STATS["history_hit"] += 1
+        return _DAILY_OHLCV_CACHE[cache_key].copy()
+    if ENABLE_HISTORY_CACHE:
+        superset = _lookup_superset_cache(_DAILY_OHLCV_CACHE, ticker, period)
+        if superset is not None:
+            _CACHE_STATS["history_superset_hit"] += 1
+            sliced = _slice_frame_to_period(superset, period)
+            _DAILY_OHLCV_CACHE[cache_key] = sliced.copy()
+            return sliced
+    disk_cached = _load_history_from_disk_cache(cache_key[0], cache_key[1])
+    if disk_cached is not None:
+        if ENABLE_HISTORY_CACHE:
+            _DAILY_OHLCV_CACHE[cache_key] = disk_cached.copy()
+        return disk_cached
+    _CACHE_STATS["history_miss"] += 1
+
+    errors: list[str] = []
+    for provider in DAILY_PRICE_PROVIDERS:
+        try:
+            df = provider.download_daily_ohlcv(ticker, period)
+            if df.empty:
+                raise ValueError(f"No data returned for {ticker}")
+            if len(df) < 250:
+                raise ValueError(f"Insufficient history for {ticker}: {len(df)} rows")
+            if provider.name != PRIMARY_DAILY_PROVIDER.name:
+                logger.warning("Data provider fallback: %s via %s", ticker, provider.name)
+            if ENABLE_HISTORY_CACHE:
+                _DAILY_OHLCV_CACHE[cache_key] = df.copy()
+            if ENABLE_DISK_HISTORY_CACHE:
+                _write_history_cache(_history_cache_path(cache_key[0], cache_key[1]), df)
+            return df.copy()
+        except Exception as exc:
+            errors.append(f"{provider.name}: {exc}")
+    raise ValueError("; ".join(errors) if errors else f"No data returned for {ticker}")
 
 
 @contextlib.contextmanager
@@ -593,64 +832,51 @@ def fetch_realtime_last_close(tickers: list[str]) -> dict[str, float]:
 
 
 def add_indicators(df: pd.DataFrame, ma_period: int = 20) -> pd.DataFrame:
-    out = df.copy()
-    for n in [5, 10, 20, 60, 120, 250]:
-        out[f"MA{n}"] = out["Close"].rolling(n).mean()
+    return add_indicators_impl(df, ma_period=ma_period)
 
-    out["AvgVol20"] = out["Volume"].rolling(20).mean()
-    out["Ret1D"] = out["Close"].pct_change(1)
-    out["Ret5D"] = out["Close"].pct_change(5)
-    out["Ret10D"] = out["Close"].pct_change(10)
-    out["Ret20D"] = out["Close"].pct_change(20)
 
-    out["High120D"] = out["Close"].rolling(120).max()
-    out["High250D"] = out["Close"].rolling(250).max()
-    out["Low250D"] = out["Close"].rolling(250).min()
+def get_indicator_frame(ticker: str, period: str, ma_period: int = 20) -> pd.DataFrame:
+    cache_key = (str(ticker).strip().upper(), str(period).strip(), int(ma_period))
+    if ENABLE_HISTORY_CACHE and cache_key in _INDICATOR_FRAME_CACHE:
+        _CACHE_STATS["indicator_hit"] += 1
+        return _INDICATOR_FRAME_CACHE[cache_key].copy()
+    if ENABLE_HISTORY_CACHE:
+        superset = _lookup_superset_cache(_INDICATOR_FRAME_CACHE, ticker, period, suffix=(int(ma_period),))
+        if superset is not None:
+            _CACHE_STATS["indicator_superset_hit"] += 1
+            sliced = _slice_frame_to_period(superset, period)
+            _INDICATOR_FRAME_CACHE[cache_key] = sliced.copy()
+            return sliced
+    _CACHE_STATS["indicator_miss"] += 1
 
-    out["Drawdown120D"] = out["Close"] / out["High120D"] - 1.0
-    out["Range20"] = (
-        out["High"].rolling(20).max() - out["Low"].rolling(20).min()
-    ) / out["Close"]
-    out["DistToLow250"] = out["Close"] / out["Low250D"] - 1.0
-    out["VolumeRatio20"] = out["Volume"] / out["AvgVol20"]
+    frame = add_indicators(yf_download_one(ticker, period), ma_period=ma_period)
+    if ENABLE_HISTORY_CACHE:
+        _INDICATOR_FRAME_CACHE[cache_key] = frame.copy()
+    return frame.copy()
 
-    tr = pd.concat(
-        [
-            out["High"] - out["Low"],
-            (out["High"] - out["Close"].shift(1)).abs(),
-            (out["Low"] - out["Close"].shift(1)).abs(),
-        ],
-        axis=1,
-    ).max(axis=1)
-    out["ATR14"] = tr.rolling(14).mean()
-    out["ATR_Pct"] = out["ATR14"] / out["Close"]
 
-    if ma_period not in [5, 10, 20, 60, 120, 250]:
-        out[f"MA{ma_period}"] = out["Close"].rolling(ma_period).mean()
-    return out
+def prewarm_watchlist_indicator_cache() -> None:
+    if not ENABLE_HISTORY_CACHE or not WATCHLIST:
+        return
+    shared_period = _preferred_shared_period()
+    if not shared_period:
+        return
+    for item in WATCHLIST:
+        ticker = str(item.get("ticker", "") or "").strip()
+        if not ticker:
+            continue
+        try:
+            get_indicator_frame(ticker, shared_period)
+        except Exception as exc:
+            logger.warning("Cache warmup skipped for %s: %s", ticker, exc)
 
 
 def apply_group_weight(base_score: int, group: str) -> int:
-    score = base_score
-    if group == "theme":
-        score += CONFIG.group_weights.theme_bonus
-    elif group == "core":
-        score -= CONFIG.group_weights.core_penalty
-    elif group == "etf":
-        score -= CONFIG.group_weights.etf_penalty
-    return max(score, 0)
+    return apply_group_weight_impl(base_score, group, CONFIG.group_weights)
 
 
 def score_band(setup_score: int, risk_score: int) -> str:
-    if risk_score >= 6:
-        return "高風險追價區"
-    if setup_score >= 8:
-        return "進攻優勢區"
-    if setup_score >= 6:
-        return "偏強可追蹤"
-    if setup_score >= 4:
-        return "開始轉強"
-    return "一般觀察"
+    return score_band_impl(setup_score, risk_score)
 
 
 def layer_label(layer: str) -> str:
@@ -671,52 +897,23 @@ def speculative_risk_score(
     signals: str,
     group: str,
 ) -> int:
-    score = 0
-    if ret5_pct >= 15:
-        score += 2
-    if ret5_pct >= 25:
-        score += 1
-    if ret20_pct >= 30:
-        score += 2
-    if volume_ratio20 >= 1.8:
-        score += 1
-    if volume_ratio20 >= 2.5:
-        score += 1
-    if bias20_pct >= 12:
-        score += 2
-    if risk_score >= 5:
-        score += 1
-    if "TREND" not in signals and "REBREAK" not in signals and ret5_pct >= 15:
-        score += 1
-
-    if "TREND" in signals:
-        score -= 1
-    if "REBREAK" in signals:
-        score -= 1
-    if group in {"core", "etf"}:
-        score -= 1
-
-    return max(score, 0)
+    return speculative_risk_score_impl(
+        ret5_pct=ret5_pct,
+        ret20_pct=ret20_pct,
+        volume_ratio20=volume_ratio20,
+        bias20_pct=bias20_pct,
+        risk_score=risk_score,
+        signals=signals,
+        group=group,
+    )
 
 
 def speculative_risk_label(score: int) -> str:
-    if score >= 6:
-        return "疑似炒作風險高"
-    if score >= 3:
-        return "投機偏高"
-    return "正常"
+    return speculative_risk_label_impl(score)
 
 
 def volatility_label(atr_pct: float) -> str:
-    if atr_pct <= 0:
-        return "未知"
-    if atr_pct < 2.0:
-        return "穩健"
-    if atr_pct < 4.0:
-        return "標準"
-    if atr_pct < 6.5:
-        return "活潑"
-    return "劇烈"
+    return volatility_label_impl(atr_pct)
 
 
 def volatility_emoji(tag: str) -> str:
@@ -845,213 +1042,19 @@ def detect_row(
 ) -> dict:
     if strat is None:
         strat = CONFIG.strategy
-    x = df.iloc[-1]
-    prev = df.iloc[-2] if len(df) >= 2 else x
-
-    close_ = float(x["Close"])
-    volume = float(x["Volume"])
-    avg_vol20 = float(x["AvgVol20"]) if pd.notna(x["AvgVol20"]) else 0.0
-    vol_ratio20 = float(x["VolumeRatio20"]) if pd.notna(x["VolumeRatio20"]) else 0.0
-
-    ma20 = float(x["MA20"]) if pd.notna(x["MA20"]) else None
-    ma60 = float(x["MA60"]) if pd.notna(x["MA60"]) else None
-    ma120 = float(x["MA120"]) if pd.notna(x["MA120"]) else None
-    low250 = float(x["Low250D"]) if pd.notna(x["Low250D"]) else None
-
-    ret1 = float(x["Ret1D"]) if pd.notna(x["Ret1D"]) else 0.0
-    ret5 = float(x["Ret5D"]) if pd.notna(x["Ret5D"]) else 0.0
-    ret10 = float(x["Ret10D"]) if pd.notna(x["Ret10D"]) else 0.0
-    ret20 = float(x["Ret20D"]) if pd.notna(x["Ret20D"]) else 0.0
-
-    drawdown120 = float(x["Drawdown120D"]) if pd.notna(x["Drawdown120D"]) else 0.0
-    range20 = float(x["Range20"]) if pd.notna(x["Range20"]) else 999.0
-    dist_low250 = float(x["DistToLow250"]) if pd.notna(x["DistToLow250"]) else 999.0
-
-    base_signal = bool(
-        low250 is not None
-        and close_ <= low250 * strat.base_low250_mult
-        and avg_vol20 > 0
-        and volume < avg_vol20
-        and range20 < strat.base_range20_max
-    )
-    rebreak_signal = bool(
-        ma20 is not None and ma60 is not None and avg_vol20 > 0
-        and close_ > ma20 and close_ > ma60
-        and vol_ratio20 > strat.rebreak_vol_ratio
-        and pd.notna(prev.get("MA20"))
-        and float(prev["Close"]) <= float(prev["MA20"])
-    )
-    surge_signal = bool(ret20 > strat.surge_ret20 and vol_ratio20 > strat.surge_vol_ratio)
-    trend_signal = bool(
-        ma20 is not None and ma60 is not None
-        and close_ > ma20 and ma20 > ma60 and ret20 > strat.trend_ret20
-    )
-    accel_signal = bool(
-        (ret5 > strat.accel_ret5 and vol_ratio20 > strat.accel_vol_ratio_fast and ret20 > 0)
-        or (ret10 > strat.accel_ret10 and vol_ratio20 > strat.accel_vol_ratio_slow and ret20 > 0)
-    )
-    pullback_signal = bool(drawdown120 <= -0.20)
-
-    setup_score = 0
-    if low250 is not None and close_ <= low250 * strat.base_low250_mult:
-        setup_score += 2
-    elif low250 is not None and close_ <= low250 * (strat.base_low250_mult + 0.15):
-        setup_score += 1
-
-    if avg_vol20 > 0 and volume < avg_vol20:
-        setup_score += 1
-    if range20 < strat.base_range20_max:
-        setup_score += 1
-    if range20 < max(strat.base_range20_max - 0.05, 0.0):
-        setup_score += 1
-    if ma20 is not None and close_ > ma20:
-        setup_score += 1
-    if ma60 is not None and close_ > ma60:
-        setup_score += 2
-
-    if vol_ratio20 > 1.5:
-        setup_score += 2
-    elif vol_ratio20 > 1.2:
-        setup_score += 1
-
-    if dist_low250 < 0.25 and ret20 > 0.10:
-        setup_score += 1
-    if ret20 > 0.12:
-        setup_score += 1
-    if rebreak_signal:
-        setup_score += 1
-    if surge_signal:
-        setup_score += 1
-    if trend_signal:
-        setup_score += 1
-
-    # v2.2: 進攻優化
-    if ret5 > 0.08:
-        setup_score += 2
-    elif ret5 > 0.04:
-        setup_score += 1
-
-    if vol_ratio20 > 1.5:
-        setup_score += 1
-
-    if group == "theme" and ret5 > 0.06:
-        setup_score += 2
-    elif group == "satellite" and ret5 > 0.06:
-        setup_score += 1
-
-    risk_score = 0
-    if ret5 > 0.18:
-        risk_score += 2
-    if ret20 > 0.30:
-        risk_score += 2
-    if ret20 > 0.50:
-        risk_score += 2
-    if vol_ratio20 > 2.5:
-        risk_score += 2
-    elif vol_ratio20 > 1.8:
-        risk_score += 1
-    if drawdown120 > -0.05:
-        risk_score += 1
-
-    if ma20 is not None and ma20 > 0:
-        bias20 = close_ / ma20 - 1.0
-        if bias20 > 0.15:
-            risk_score += 2
-        elif bias20 > 0.08:
-            risk_score += 1
-    else:
-        bias20 = 0.0
-
-    setup_score = apply_group_weight(setup_score, group)
-
-    signals = []
-    if base_signal:
-        signals.append("BASE")
-    if rebreak_signal:
-        signals.append("REBREAK")
-    if surge_signal:
-        signals.append("SURGE")
-    if trend_signal:
-        signals.append("TREND")
-    if accel_signal:
-        signals.append("ACCEL")
-    if pullback_signal:
-        signals.append("PULLBACK")
-
-    if risk_score >= 6:
-        regime = "有點過熱，別硬追"
-    elif surge_signal:
-        regime = "題材正在發酵"
-    elif rebreak_signal:
-        regime = "重新站上來了"
-    elif accel_signal:
-        regime = "轉強速度有出來"
-    elif trend_signal:
-        regime = "中段延續中"
-    elif base_signal:
-        regime = "低檔慢慢墊高"
-    elif pullback_signal:
-        regime = "高檔拉回整理"
-    else:
-        regime = "還在觀察"
-
-    spec_score = speculative_risk_score(
-        ret5_pct=ret5 * 100,
-        ret20_pct=ret20 * 100,
-        volume_ratio20=vol_ratio20,
-        bias20_pct=bias20 * 100,
-        risk_score=risk_score,
-        signals=",".join(signals) if signals else "NONE",
+    return detect_row_impl(
+        df=df,
+        ticker=ticker,
+        name=name,
         group=group,
+        layer=layer,
+        strat=strat,
+        group_weights=CONFIG.group_weights,
     )
-    atr_pct = round(float(x["ATR_Pct"]) * 100, 2) if pd.notna(x.get("ATR_Pct")) else 0.0
-
-    return {
-        "date": df.index[-1].strftime("%Y-%m-%d"),
-        "ticker": ticker,
-        "name": name,
-        "group": group,
-        "layer": layer,
-        "close": round(close_, 2),
-        "ret1_pct": round(ret1 * 100, 2),
-        "ret5_pct": round(ret5 * 100, 2),
-        "ret10_pct": round(ret10 * 100, 2),
-        "ret20_pct": round(ret20 * 100, 2),
-        "volume": int(volume),
-        "avg_vol20": int(avg_vol20) if avg_vol20 else 0,
-        "volume_ratio20": round(vol_ratio20, 2),
-        "ma20": round(ma20, 2) if ma20 is not None else None,
-        "ma60": round(ma60, 2) if ma60 is not None else None,
-        "ma120": round(ma120, 2) if ma120 is not None else None,
-        "drawdown120_pct": round(drawdown120 * 100, 2),
-        "bias20_pct": round(bias20 * 100, 2),
-        "setup_score": int(setup_score),
-        "risk_score": int(risk_score),
-        "signals": ",".join(signals) if signals else "NONE",
-        "score_band": score_band(setup_score, risk_score),
-        "regime": regime,
-        "spec_risk_score": int(spec_score),
-        "spec_risk_label": speculative_risk_label(spec_score),
-        "atr_pct": atr_pct,
-        "volatility_tag": volatility_label(atr_pct),
-    }
 
 
 def grade_signal(row: dict) -> str:
-    setup = row["setup_score"]
-    risk = row["risk_score"]
-    signals = row["signals"]
-    ret5 = row["ret5_pct"]
-    vol_ratio20 = row["volume_ratio20"]
-    ret20 = row["ret20_pct"]
-
-    if setup >= 7 and risk <= 4 and (("ACCEL" in signals) or ("REBREAK" in signals) or ("SURGE" in signals)) and ret20 > 0:
-        return "A"
-    if setup >= 5 and risk <= 4 and (ret5 >= 5 or vol_ratio20 >= 1.3):
-        return "B"
-    if risk >= 6:
-        return "C"
-    return "X"
+    return grade_signal_impl(row)
 
 
 def append_stock_log(row: dict) -> None:
@@ -1077,48 +1080,11 @@ def load_previous_rank() -> Optional[pd.DataFrame]:
 
 
 def enrich_rank_changes(df_rank: pd.DataFrame, prev_rank: Optional[pd.DataFrame]) -> pd.DataFrame:
-    df = df_rank.copy()
-    df["rank_change"] = 0
-    df["setup_change"] = 0
-    df["risk_change"] = 0
-    df["status_change"] = "NEW"
-
-    if prev_rank is None or prev_rank.empty:
-        return df
-
-    prev = prev_rank.copy()
-    prev["ticker"] = prev["ticker"].astype(str)
-    prev = prev.set_index("ticker")
-
-    for i, row in df.iterrows():
-        ticker = str(row["ticker"])
-        if ticker in prev.index:
-            old = prev.loc[ticker]
-            old_rank = int(old["rank"]) if pd.notna(old["rank"]) else 0
-            old_setup = int(old["setup_score"]) if pd.notna(old["setup_score"]) else 0
-            old_risk = int(old["risk_score"]) if pd.notna(old["risk_score"]) else 0
-            df.at[i, "rank_change"] = old_rank - int(row["rank"])
-            df.at[i, "setup_change"] = int(row["setup_score"]) - old_setup
-            df.at[i, "risk_change"] = int(row["risk_score"]) - old_risk
-            if df.at[i, "setup_change"] > 0 or df.at[i, "rank_change"] > 0:
-                df.at[i, "status_change"] = "UP"
-            elif df.at[i, "setup_change"] < 0 or df.at[i, "rank_change"] < 0:
-                df.at[i, "status_change"] = "DOWN"
-            else:
-                df.at[i, "status_change"] = "FLAT"
-    return df
+    return enrich_rank_changes_impl(df_rank, prev_rank)
 
 
 def save_daily_rank(rows: List[dict], prev_rank: Optional[pd.DataFrame]) -> pd.DataFrame:
-    df = pd.DataFrame(rows)
-    df["grade"] = df.apply(lambda r: grade_signal(r.to_dict()), axis=1)
-    # v2.2 排名更偏動能
-    df = df.sort_values(
-        by=["setup_score", "ret5_pct", "volume_ratio20", "ret20_pct", "risk_score"],
-        ascending=[False, False, False, False, True],
-    ).reset_index(drop=True)
-    df.insert(0, "rank", range(1, len(df) + 1))
-    df = enrich_rank_changes(df, prev_rank)
+    df = build_rank_table(rows, prev_rank)
     if RANK_CSV.exists():
         RANK_CSV.replace(PREV_RANK_CSV)
     df.to_csv(RANK_CSV, index=False, encoding="utf-8-sig")
@@ -1227,6 +1193,115 @@ def save_last_success_date(success_date: str) -> None:
     )
 
 
+def _timed_call(step_timings: dict[str, float], name: str, func, *args, **kwargs):
+    started = time.perf_counter()
+    try:
+        return func(*args, **kwargs)
+    finally:
+        step_timings[name] = time.perf_counter() - started
+
+
+def build_runtime_metrics_markdown(
+    *,
+    generated_at: str,
+    status: str,
+    step_timings: dict[str, float],
+    warnings: list[str],
+    cache_stats: dict[str, int],
+    backtest_meta: dict[str, object],
+    wall_seconds: float | None = None,
+) -> str:
+    lines = [
+        "# Runtime Metrics",
+        f"- Generated: {generated_at}",
+        f"- Status: `{status}`",
+        "",
+        "## Steps",
+        "",
+        "| Step | Seconds |",
+        "| --- | --- |",
+    ]
+    for name, seconds in step_timings.items():
+        lines.append(f"| {name} | {seconds:.4f} |")
+    total = sum(step_timings.values())
+    lines.extend(["", f"- Total tracked seconds: `{total:.3f}`"])
+    if wall_seconds is not None:
+        lines.append(f"- Wall-clock seconds: `{wall_seconds:.3f}`")
+    lines.extend(
+        [
+            "",
+            "## Cache",
+            "",
+            (
+                f"- History cache: `{cache_stats.get('history_hit', 0)}` exact hit / "
+                f"`{cache_stats.get('history_disk_hit', 0)}` disk hit / "
+                f"`{cache_stats.get('history_superset_hit', 0)}` superset hit / "
+                f"`{cache_stats.get('history_miss', 0)}` miss"
+            ),
+            (
+                f"- Indicator cache: `{cache_stats.get('indicator_hit', 0)}` exact hit / "
+                f"`{cache_stats.get('indicator_superset_hit', 0)}` superset hit / "
+                f"`{cache_stats.get('indicator_miss', 0)}` miss"
+            ),
+        ]
+    )
+    if backtest_meta:
+        lines.extend(
+            [
+                "",
+                "## Backtest",
+                "",
+                f"- Mode: `{backtest_meta.get('last_run_mode', 'unknown')}`",
+                f"- Scanned cutoffs: `{backtest_meta.get('last_run_scanned_cutoffs', 0)}`",
+            ]
+        )
+    if warnings:
+        lines.extend(["", "## Warnings", ""])
+        for warning in warnings:
+            lines.append(f"- {warning}")
+    return "\n".join(lines)
+
+
+def write_runtime_metrics(
+    *,
+    status: str,
+    step_timings: dict[str, float],
+    warnings: list[str],
+    wall_seconds: float | None = None,
+) -> None:
+    generated_at = datetime.now(LOCAL_TZ).strftime("%Y-%m-%d %H:%M:%S")
+    backtest_meta: dict[str, object] = {}
+    backtest_state_path = OUTDIR / "backtest_state.json"
+    if backtest_state_path.exists():
+        try:
+            backtest_meta = json.loads(backtest_state_path.read_text(encoding="utf-8"))
+        except Exception:
+            backtest_meta = {}
+    payload = {
+        "generated_at": generated_at,
+        "status": status,
+        "step_timings": step_timings,
+        "warnings": warnings,
+        "total_seconds": round(sum(step_timings.values()), 3),
+        "wall_seconds": round(wall_seconds, 3) if wall_seconds is not None else None,
+        "cache_stats": dict(_CACHE_STATS),
+        "backtest_meta": backtest_meta,
+    }
+    RUNTIME_METRICS_JSON.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    RUNTIME_METRICS_MD.write_text(
+        build_runtime_metrics_markdown(
+            generated_at=generated_at,
+            status=status,
+            step_timings=step_timings,
+            warnings=warnings,
+            cache_stats=dict(_CACHE_STATS),
+            backtest_meta=backtest_meta,
+            wall_seconds=wall_seconds,
+        ),
+        encoding="utf-8",
+    )
+
+
 def market_session_phase(now_local: Optional[datetime] = None) -> str:
     current = now_local or datetime.now(LOCAL_TZ)
     minutes = current.hour * 60 + current.minute
@@ -1241,8 +1316,7 @@ def get_market_regime() -> dict:
     if not CONFIG.market_filter.enabled:
         return {"enabled": False, "is_bullish": True, "comment": "大盤濾網關掉"}
 
-    df = yf_download_one(CONFIG.market_filter.ticker, CONFIG.yf_period)
-    df = add_indicators(df, CONFIG.market_filter.ma_period)
+    df = get_indicator_frame(CONFIG.market_filter.ticker, CONFIG.yf_period, CONFIG.market_filter.ma_period)
     x = df.iloc[-1]
     close_ = float(x["Close"])
     ma = float(x[f"MA{CONFIG.market_filter.ma_period}"])
@@ -1290,8 +1364,7 @@ def get_us_market_reference() -> dict:
     rows = []
     for ticker, name in refs:
         try:
-            df = yf_download_one(ticker, CONFIG.yf_period)
-            df = add_indicators(df)
+            df = get_indicator_frame(ticker, CONFIG.yf_period)
             x = df.iloc[-1]
             rows.append(
                 {
@@ -2096,8 +2169,6 @@ def should_alert(
         market_regime,
         us_market,
     )
-    feedback_summary = build_feedback_summary()
-    feedback_summary = build_feedback_summary()
     candidates = pd.concat([short_candidates, short_backups, midlong_candidates, midlong_backups], ignore_index=True)
     if candidates.empty:
         return False
@@ -2631,24 +2702,11 @@ def apply_feedback_adjustment(df: pd.DataFrame, watch_type: str) -> pd.DataFrame
 
 
 def dataframe_to_html(df: pd.DataFrame) -> str:
-    return df.to_html(index=False, border=0, justify="center")
+    return dataframe_to_html_impl(df)
 
 
 def summarize_events(events_df: pd.DataFrame, horizons: List[int]) -> pd.DataFrame:
-    rows = []
-    for horizon in horizons:
-        col = f"ret_{horizon}d"
-        s = events_df[col].dropna()
-        if s.empty:
-            continue
-        rows.append({
-            "horizon": horizon,
-            "trades": int(s.shape[0]),
-            "win_rate_pct": round((s.gt(0).mean()) * 100, 2),
-            "avg_return_pct": round(s.mean(), 2),
-            "median_return_pct": round(s.median(), 2),
-        })
-    return pd.DataFrame(rows)
+    return summarize_events_impl(events_df, horizons)
 
 
 
@@ -2657,96 +2715,16 @@ def upsert_alert_tracking(
     midlong_candidates: pd.DataFrame,
     market_scenario: Optional[dict] = None,
 ) -> None:
-    cols = [
-        "alert_date", "watch_type", "ticker", "name", "group", "grade", "rank", "setup_score", "risk_score",
-        "layer", "signals", "regime", "action_label", "feedback_score", "feedback_label",
-        "scenario_label",
-        "add_price", "trim_price", "stop_price",
-        "alert_close", "ret1_future_pct", "ret5_future_pct", "ret20_future_pct", "status"
-    ]
-
-    if ALERT_TRACK_CSV.exists():
-        try:
-            hist = pd.read_csv(ALERT_TRACK_CSV)
-        except Exception:
-            hist = pd.DataFrame(columns=cols)
-    else:
-        hist = pd.DataFrame(columns=cols)
-
-    candidate_groups = [
-        ("short", short_candidates),
-        ("midlong", midlong_candidates),
-    ]
-    scenario_label = str((market_scenario or {}).get("label", "") or "")
-
-    for watch_type, candidates in candidate_groups:
-        if candidates is None or candidates.empty:
-            continue
-        for _, r in candidates.iterrows():
-            alert_date = str(r["date"])
-            mask = (
-                (hist.get("alert_date", pd.Series(dtype=str)).astype(str) == alert_date)
-                & (hist.get("watch_type", pd.Series(dtype=str)).astype(str) == watch_type)
-                & (hist.get("ticker", pd.Series(dtype=str)).astype(str) == str(r["ticker"]))
-            )
-            row = {
-                "alert_date": alert_date,
-                "watch_type": watch_type,
-                "ticker": r["ticker"],
-                "name": r["name"],
-                "group": r["group"],
-                "layer": r.get("layer", ""),
-                "grade": r["grade"],
-                "rank": int(r["rank"]),
-                "setup_score": int(r["setup_score"]),
-                "risk_score": int(r["risk_score"]),
-                "signals": r["signals"],
-                "regime": r["regime"],
-                "action_label": feedback_action_label(r, watch_type),
-                "feedback_score": float(r.get("feedback_score", 0.0)),
-                "feedback_label": str(r.get("feedback_label", "樣本不足")),
-                "scenario_label": scenario_label,
-                "add_price": watch_price_plan(r, watch_type).get("add_price"),
-                "trim_price": watch_price_plan(r, watch_type).get("trim_price"),
-                "stop_price": watch_price_plan(r, watch_type).get("stop_price"),
-                "alert_close": float(r["close"]),
-                "ret1_future_pct": None,
-                "ret5_future_pct": None,
-                "ret20_future_pct": None,
-                "status": "OPEN",
-            }
-            if mask.any():
-                hist.loc[mask, list(row.keys())] = list(row.values())
-            else:
-                hist.loc[len(hist), list(row.keys())] = list(row.values())
-
-    if not hist.empty:
-        for i, row in hist.iterrows():
-            if row.get("status") == "CLOSED":
-                continue
-            try:
-                df = yf_download_one(str(row["ticker"]), CONFIG.yf_period)
-            except Exception:
-                continue
-            if df.empty:
-                continue
-            closes = df["Close"].reset_index(drop=True)
-            # find alert date row by matching date index string
-            idx_matches = [j for j, dt in enumerate(df.index.strftime("%Y-%m-%d")) if dt == str(row["alert_date"])]
-            if not idx_matches:
-                continue
-            idx = idx_matches[-1]
-            entry = float(closes.iloc[idx])
-
-            if pd.isna(row.get("ret1_future_pct")) and idx + 1 < len(closes):
-                hist.at[i, "ret1_future_pct"] = round((float(closes.iloc[idx + 1]) / entry - 1.0) * 100, 2)
-            if pd.isna(row.get("ret5_future_pct")) and idx + 5 < len(closes):
-                hist.at[i, "ret5_future_pct"] = round((float(closes.iloc[idx + 5]) / entry - 1.0) * 100, 2)
-            if pd.isna(row.get("ret20_future_pct")) and idx + 20 < len(closes):
-                hist.at[i, "ret20_future_pct"] = round((float(closes.iloc[idx + 20]) / entry - 1.0) * 100, 2)
-                hist.at[i, "status"] = "CLOSED"
-
-    hist.to_csv(ALERT_TRACK_CSV, index=False, encoding="utf-8-sig")
+    upsert_alert_tracking_impl(
+        short_candidates,
+        midlong_candidates,
+        alert_track_csv=ALERT_TRACK_CSV,
+        market_scenario=market_scenario,
+        yf_period=CONFIG.yf_period,
+        feedback_action_label=feedback_action_label,
+        watch_price_plan=watch_price_plan,
+        yf_download_one=yf_download_one,
+    )
 
 
 def run_watchlist(strat: Optional[StrategyConfig] = None) -> pd.DataFrame:
@@ -2755,8 +2733,7 @@ def run_watchlist(strat: Optional[StrategyConfig] = None) -> pd.DataFrame:
     for item in WATCHLIST:
         ticker, name, group = item["ticker"], item["name"], item["group"]
         try:
-            df = yf_download_one(ticker, CONFIG.yf_period)
-            df = add_indicators(df)
+            df = get_indicator_frame(ticker, CONFIG.yf_period)
             row = detect_row(df, ticker, name, group, item["layer"], strat=strat)
             rows.append(row)
             append_stock_log(row)
@@ -2779,67 +2756,17 @@ def run_watchlist(strat: Optional[StrategyConfig] = None) -> pd.DataFrame:
 
 
 def run_backtest_dual() -> tuple[Optional[pd.DataFrame], Optional[pd.DataFrame]]:
-    if not CONFIG.backtest.enabled:
-        return None, None
-
-    steady_events = []
-    attack_events = []
-    max_horizon = max(CONFIG.backtest.lookahead_days)
-
-    for item in WATCHLIST:
-        ticker, name, group, layer = item["ticker"], item["name"], item["group"], item["layer"]
-        try:
-            df = yf_download_one(ticker, CONFIG.backtest.period)
-            df = add_indicators(df)
-            for i in range(250, len(df) - max_horizon):
-                cut = df.iloc[: i + 1].copy()
-                row = detect_row(cut, ticker, name, group, layer)
-                entry = float(df.iloc[i]["Close"])
-
-                event = {
-                    "ticker": ticker,
-                    "date": cut.index[-1].strftime("%Y-%m-%d"),
-                    "group": group,
-                    "setup_score": row["setup_score"],
-                    "risk_score": row["risk_score"],
-                    "signals": row["signals"],
-                    "ret5_pct": row["ret5_pct"],
-                    "ret20_pct": row["ret20_pct"],
-                    "volume_ratio20": row["volume_ratio20"],
-                }
-                for horizon in CONFIG.backtest.lookahead_days:
-                    future = float(df.iloc[i + horizon]["Close"])
-                    event[f"ret_{horizon}d"] = round((future / entry - 1.0) * 100, 2)
-
-                if row["setup_score"] >= 5 and row["risk_score"] <= 4:
-                    steady_events.append(event.copy())
-
-                if (
-                    row["ret5_pct"] > 8
-                    and row["volume_ratio20"] > 1.3
-                    and row["ret20_pct"] > 0
-                ) or ("ACCEL" in row["signals"]):
-                    attack_events.append(event.copy())
-
-        except Exception as exc:
-            logger.exception("BACKTEST FAILED: %s %s -> %s", ticker, name, exc)
-
-    steady_df = pd.DataFrame(steady_events) if steady_events else None
-    attack_df = pd.DataFrame(attack_events) if attack_events else None
-
-    steady_summary = summarize_events(steady_df, CONFIG.backtest.lookahead_days) if steady_df is not None else None
-    attack_summary = summarize_events(attack_df, CONFIG.backtest.lookahead_days) if attack_df is not None else None
-
-    if steady_df is not None:
-        steady_df.to_csv(OUTDIR / "backtest_events_steady.csv", index=False, encoding="utf-8-sig")
-    if attack_df is not None:
-        attack_df.to_csv(OUTDIR / "backtest_events_attack.csv", index=False, encoding="utf-8-sig")
-    if steady_summary is not None:
-        steady_summary.to_csv(OUTDIR / "backtest_summary_steady.csv", index=False, encoding="utf-8-sig")
-    if attack_summary is not None:
-        attack_summary.to_csv(OUTDIR / "backtest_summary_attack.csv", index=False, encoding="utf-8-sig")
-
-    return steady_summary, attack_summary
+    return run_backtest_dual_impl(
+        backtest_enabled=CONFIG.backtest.enabled,
+        signature=current_run_signature(),
+        watchlist=WATCHLIST,
+        backtest_period=CONFIG.backtest.period,
+        lookahead_days=CONFIG.backtest.lookahead_days,
+        outdir=OUTDIR,
+        get_indicator_frame=get_indicator_frame,
+        detect_row=detect_row,
+        logger=logger,
+    )
 
 
 def build_daily_report_markdown(
@@ -2849,190 +2776,26 @@ def build_daily_report_markdown(
     bt_attack: Optional[pd.DataFrame],
     us_market: Optional[dict] = None,
 ) -> str:
-    today = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    scenario = build_market_scenario(market_regime, us_market or {}, df_rank)
-    lines = [
-        "# Daily 20D v2.2 Attack Report",
-        f"- Generated: {today}",
-        f"- Market Regime: {market_regime['comment']}",
-        "",
-        "## Top Ranking",
-        "",
-        "| 排名 | 等級 | 股票 | 分類 | 近況 | 5日 | 20日 | 波動 | 投機風險 | 重點 |",
-        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
-    ]
-    for _, r in df_rank.iterrows():
-        lines.append(
-            f"| {int(r['rank'])} | {r['grade']} | {r['name']} ({r['ticker']}) | "
-            f"{layer_label(r['layer'])} | {r['regime']} | "
-            f"{r['ret5_pct']}% | {r['ret20_pct']}% | {r.get('volatility_tag', '')} ({r.get('atr_pct', '')}%) | {r['spec_risk_label']} | "
-            f"{r['signals']} / 量比 {r['volume_ratio20']} |"
-        )
-
-    short_candidates, short_backups, midlong_candidates, midlong_backups = build_candidate_sets(
+    return build_daily_report_markdown_impl(
         df_rank,
         market_regime,
-        us_market or {},
+        bt_steady,
+        bt_attack,
+        us_market=us_market,
+        build_market_scenario=build_market_scenario,
+        layer_label=layer_label,
+        build_candidate_sets=build_candidate_sets,
+        build_feedback_summary=build_feedback_summary,
+        watch_price_plan_text=watch_price_plan_text,
+        select_special_etf_candidates=select_special_etf_candidates,
+        build_special_etf_summary=build_special_etf_summary,
+        special_etf_action_label=special_etf_action_label,
+        select_early_gem_candidates=select_early_gem_candidates,
+        early_gem_reason=early_gem_reason,
+        strategy_preview_lines=strategy_preview_lines,
+        config_strategy=CONFIG.strategy,
+        alert_track_csv=ALERT_TRACK_CSV,
     )
-    feedback_summary = build_feedback_summary()
-
-    lines.extend(["", "## Short-Term Candidates", ""])
-    if short_candidates.empty:
-        lines.append("- None")
-    else:
-        for _, r in short_candidates.iterrows():
-            lines.append(
-                f"- #{int(r['rank'])} {r['name']} {r['ticker']} [{r['group']}/{layer_label(r['layer'])}] | "
-                f"setup {r['setup_score']} risk {r['risk_score']} | "
-                f"5D {r['ret5_pct']}% 10D {r['ret10_pct']}% 20D {r['ret20_pct']}% | 投機 {r['spec_risk_label']} | "
-                f"{r['signals']} | rankΔ {int(r['rank_change']):+d} setupΔ {int(r['setup_change']):+d}"
-            )
-
-    lines.extend(["", "## Short-Term Backups", ""])
-    if short_backups.empty:
-        lines.append("- None")
-    else:
-        for _, r in short_backups.iterrows():
-            lines.append(
-                f"- #{int(r['rank'])} {r['name']} {r['ticker']} [{r['group']}/{layer_label(r['layer'])}] | "
-                f"setup {r['setup_score']} risk {r['risk_score']} | "
-                f"5D {r['ret5_pct']}% 10D {r['ret10_pct']}% 20D {r['ret20_pct']}% | 投機 {r['spec_risk_label']} | "
-                f"{r['signals']} | rankΔ {int(r['rank_change']):+d} setupΔ {int(r['setup_change']):+d} | "
-                f"{watch_price_plan_text(r, 'short')}"
-            )
-
-    lines.extend(["", "## Mid-Long Candidates", ""])
-    if midlong_candidates.empty:
-        lines.append("- None")
-    else:
-        for _, r in midlong_candidates.iterrows():
-            lines.append(
-                f"- #{int(r['rank'])} {r['name']} {r['ticker']} [{r['group']}/{layer_label(r['layer'])}] | "
-                f"setup {r['setup_score']} risk {r['risk_score']} | "
-                f"10D {r['ret10_pct']}% 20D {r['ret20_pct']}% | 投機 {r['spec_risk_label']} | "
-                f"{r['signals']} | rankΔ {int(r['rank_change']):+d} setupΔ {int(r['setup_change']):+d}"
-            )
-
-    lines.extend(["", "## Mid-Long Backups", ""])
-    if midlong_backups.empty:
-        lines.append("- None")
-    else:
-        for _, r in midlong_backups.iterrows():
-            lines.append(
-                f"- #{int(r['rank'])} {r['name']} {r['ticker']} [{r['group']}/{layer_label(r['layer'])}] | "
-                f"setup {r['setup_score']} risk {r['risk_score']} | "
-                f"10D {r['ret10_pct']}% 20D {r['ret20_pct']}% | 投機 {r['spec_risk_label']} | "
-                f"{r['signals']} | rankΔ {int(r['rank_change']):+d} setupΔ {int(r['setup_change']):+d} | "
-                f"{watch_price_plan_text(r, 'midlong')}"
-            )
-
-    special_etf_candidates = select_special_etf_candidates(df_rank)
-    gem_candidates = select_early_gem_candidates(df_rank)
-    lines.extend(["", "## ETF / 債券觀察", ""])
-    if special_etf_candidates.empty:
-        lines.append("- None")
-    else:
-        for summary in build_special_etf_summary(special_etf_candidates):
-            lines.append(f"- {summary}")
-        lines.append("")
-        for _, r in special_etf_candidates.iterrows():
-            lines.append(
-                f"- #{int(r['rank'])} {r['name']} {r['ticker']} [{r['group']}/{layer_label(r['layer'])}] | "
-                f"setup {r['setup_score']} risk {r['risk_score']} | "
-                f"5D {r['ret5_pct']}% 20D {r['ret20_pct']}% | 投機 {r['spec_risk_label']} | "
-                f"{r['signals']} | 操作 {special_etf_action_label(r)}"
-            )
-
-    lines.extend(["", "## Early Gem Watch", ""])
-    if gem_candidates.empty:
-        lines.append("- None")
-    else:
-        for _, r in gem_candidates.iterrows():
-            lines.append(
-                f"- #{int(r['rank'])} {r['name']} {r['ticker']} [{r['group']}/{layer_label(r['layer'])}] | "
-                f"setup {r['setup_score']} risk {r['risk_score']} | "
-                f"5D {r['ret5_pct']}% 20D {r['ret20_pct']}% | 投機 {r['spec_risk_label']} | "
-                f"{r['signals']} | 理由 {early_gem_reason(r)} | {watch_price_plan_text(r, 'short')}"
-            )
-
-    lines.extend(["", "## Prediction Feedback", ""])
-    if feedback_summary.empty:
-        lines.append("- None")
-    else:
-        lines.append("| 類型 | 操作 | 樣本 | 勝率 | 平均報酬 | 盈虧比 | 回饋分數 | 判讀 |")
-        lines.append("| --- | --- | --- | --- | --- | --- | --- | --- |")
-        for _, r in feedback_summary.iterrows():
-            action_label = "整體" if str(r["action_label"]) == "__all__" else str(r["action_label"])
-            watch_type = "短線" if str(r["watch_type"]) == "short" else "中長線"
-            lines.append(
-                f"| {watch_type} | {action_label} | {int(r['samples'])} | {r['win_rate_pct']}% | "
-                f"{r['avg_return_pct']}% | {r['pl_ratio']} | {r['feedback_score']} | {r['feedback_label']} |"
-            )
-
-    lines.extend(["", "## Adaptive Strategy Adjustments", ""])
-    lines.append(f"- 情境：{scenario['label']} | 目前節奏：{scenario['stance']}")
-    lines.extend(strategy_preview_lines(CONFIG.strategy, scenario))
-
-    lines.extend([
-        "",
-        "## Grade 對照表",
-        "",
-        "- `A`：這檔現在最值得看，通常代表結構、量能、動能都有對上。",
-        "- `B`：有在轉強，但還沒有強到非看不可，適合放進追蹤名單。",
-        "- `C`：不是不能漲，而是現在風險偏高，容易追在不舒服的位置。",
-        "- `X`：目前沒有足夠清楚的優勢，先觀察就好。",
-        "",
-        "## Signals 對照表",
-        "",
-        "- `BASE`：低檔整理後，股價還沒真正噴出，但看起來有在慢慢打底。",
-        "- `REBREAK`：前面壓著的均線重新站上去，而且量也開始放大，常見在第二波重新轉強。",
-        "- `SURGE`：這段時間漲幅已經很明顯，量也大，代表市場資金真的有在追。",
-        "- `TREND`：不是突然暴衝，而是沿著趨勢穩穩往上走，比較像中段延續。",
-        "- `ACCEL`：最近 5 天或 10 天速度變快，通常是剛開始被市場注意到的加速段。",
-        "- `PULLBACK`：前面漲過一段後，現在在拉回整理，不一定壞，但短線不是最舒服的位置。",
-        "",
-        "## Regime 解釋",
-        "",
-        "- `有點過熱，別硬追`：漲太快、乖離太大，容易追在短線高點。",
-        "- `題材正在發酵`：市場開始聚焦這檔，量價有一起上來，屬於比較有熱度的階段。",
-        "- `重新站上來了`：整理過後再次轉強，這種型態常常是比較漂亮的重新發動。",
-        "- `轉強速度有出來`：還不一定是最強主升段，但動能有在加速，值得盯。",
-        "- `中段延續中`：這檔不是剛起漲，而是已經走在趨勢裡，偏中波段續強。",
-        "- `低檔慢慢墊高`：還在打底或剛離開底部，適合先放觀察名單，不一定要急著追。",
-        "- `高檔拉回整理`：先前強過，但現在進入整理區，重點是看能不能整理完再上。",
-        "- `還在觀察`：目前沒有特別明確的訊號，先不用太急。",
-    ])
-
-    for title, bt in [("Steady Backtest", bt_steady), ("Attack Backtest", bt_attack)]:
-        lines.extend(["", f"## {title}", ""])
-        if bt is None or bt.empty:
-            lines.append("- None")
-        else:
-            lines.append("| Horizon | Trades | Win Rate | Avg Return | Median Return |")
-            lines.append("| --- | --- | --- | --- | --- |")
-            for _, r in bt.iterrows():
-                lines.append(
-                    f"| {int(r['horizon'])}D | {int(r['trades'])} | {r['win_rate_pct']}% | "
-                    f"{r['avg_return_pct']}% | {r['median_return_pct']}% |"
-                )
-
-    if ALERT_TRACK_CSV.exists():
-        try:
-            alert_df = pd.read_csv(ALERT_TRACK_CSV)
-            if not alert_df.empty:
-                recent = alert_df.tail(10)
-                lines.extend(["", "## Recent Alert Tracking", ""])
-                lines.append("| Alert Date | Type | Ticker | Name | Grade | 1D% | 5D% | 20D% | Status |")
-                lines.append("| --- | --- | --- | --- | --- | --- | --- | --- | --- |")
-                for _, r in recent.iterrows():
-                    lines.append(
-                        f"| {r.get('alert_date','')} | {r.get('watch_type','')} | {r.get('ticker','')} | {r.get('name','')} | {r.get('grade','')} | "
-                        f"{r.get('ret1_future_pct','')} | {r.get('ret5_future_pct','')} | {r.get('ret20_future_pct','')} | {r.get('status','')} |"
-                    )
-        except Exception:
-            pass
-
-    return "\n".join(lines)
 
 
 def build_daily_report_html(
@@ -3042,49 +2805,20 @@ def build_daily_report_html(
     bt_attack: Optional[pd.DataFrame],
     us_market: Optional[dict] = None,
 ) -> str:
-    steady_html = "<p>None</p>" if bt_steady is None or bt_steady.empty else dataframe_to_html(bt_steady)
-    attack_html = "<p>None</p>" if bt_attack is None or bt_attack.empty else dataframe_to_html(bt_attack)
-    short_candidates, short_backups, midlong_candidates, midlong_backups = build_candidate_sets(
+    return build_daily_report_html_impl(
         df_rank,
         market_regime,
-        us_market or {},
+        bt_steady,
+        bt_attack,
+        us_market=us_market,
+        build_market_scenario=build_market_scenario,
+        build_candidate_sets=build_candidate_sets,
+        select_special_etf_candidates=select_special_etf_candidates,
+        select_early_gem_candidates=select_early_gem_candidates,
+        build_feedback_summary=build_feedback_summary,
+        strategy_preview_lines=strategy_preview_lines,
+        config_strategy=CONFIG.strategy,
     )
-    short_html = "<p>None</p>" if short_candidates.empty else dataframe_to_html(short_candidates)
-    short_backup_html = "<p>None</p>" if short_backups.empty else dataframe_to_html(short_backups)
-    midlong_html = "<p>None</p>" if midlong_candidates.empty else dataframe_to_html(midlong_candidates)
-    midlong_backup_html = "<p>None</p>" if midlong_backups.empty else dataframe_to_html(midlong_backups)
-    special_etf_candidates = select_special_etf_candidates(df_rank)
-    special_etf_html = "<p>None</p>" if special_etf_candidates.empty else dataframe_to_html(special_etf_candidates)
-    gem_candidates = select_early_gem_candidates(df_rank)
-    gem_html = "<p>None</p>" if gem_candidates.empty else dataframe_to_html(gem_candidates)
-    feedback_summary = build_feedback_summary()
-    feedback_html = "<p>None</p>" if feedback_summary.empty else dataframe_to_html(feedback_summary)
-    scenario = build_market_scenario(market_regime, us_market or {}, df_rank)
-    adaptive_preview_html = "<br>".join(
-        [f"情境：{scenario['label']} | 目前節奏：{scenario['stance']}"] + strategy_preview_lines(CONFIG.strategy, scenario)
-    )
-    return f"""<!doctype html>
-<html><head><meta charset="utf-8"><title>Daily 20D v2.2 Attack Report</title>
-<style>
-body {{ font-family: Arial, sans-serif; margin: 24px; }}
-table {{ border-collapse: collapse; width: 100%; margin-bottom: 24px; }}
-th, td {{ border: 1px solid #ddd; padding: 8px; font-size: 14px; }}
-th {{ background: #f4f4f4; }}
-</style></head><body>
-<h1>Daily 20D v2.2 Attack Report</h1>
-<p><strong>Market:</strong> {market_regime['comment']}</p>
-<h2>Top Ranking</h2>{dataframe_to_html(df_rank)}
-<h2>Short-Term Candidates</h2>{short_html}
-<h2>Short-Term Backups</h2>{short_backup_html}
-<h2>Mid-Long Candidates</h2>{midlong_html}
-<h2>Mid-Long Backups</h2>{midlong_backup_html}
-<h2>ETF / 債券觀察</h2>{special_etf_html}
-<h2>Early Gem Watch</h2>{gem_html}
-<h2>Prediction Feedback</h2>{feedback_html}
-<h2>Adaptive Strategy Adjustments</h2><p>{adaptive_preview_html}</p>
-<h2>Steady Backtest</h2>{steady_html}
-<h2>Attack Backtest</h2>{attack_html}
-</body></html>"""
 
 
 def save_reports(
@@ -3094,77 +2828,69 @@ def save_reports(
     bt_attack: Optional[pd.DataFrame],
     us_market: Optional[dict] = None,
 ) -> None:
-    REPORT_MD.write_text(build_daily_report_markdown(df_rank, market_regime, bt_steady, bt_attack, us_market), encoding="utf-8")
-    REPORT_HTML.write_text(build_daily_report_html(df_rank, market_regime, bt_steady, bt_attack, us_market), encoding="utf-8")
+    save_reports_impl(
+        df_rank,
+        market_regime,
+        bt_steady,
+        bt_attack,
+        markdown_path=REPORT_MD,
+        html_path=REPORT_HTML,
+        us_market=us_market,
+        build_market_scenario=build_market_scenario,
+        layer_label=layer_label,
+        build_candidate_sets=build_candidate_sets,
+        build_feedback_summary=build_feedback_summary,
+        watch_price_plan_text=watch_price_plan_text,
+        select_special_etf_candidates=select_special_etf_candidates,
+        build_special_etf_summary=build_special_etf_summary,
+        special_etf_action_label=special_etf_action_label,
+        select_early_gem_candidates=select_early_gem_candidates,
+        early_gem_reason=early_gem_reason,
+        strategy_preview_lines=strategy_preview_lines,
+        config_strategy=CONFIG.strategy,
+        alert_track_csv=ALERT_TRACK_CSV,
+    )
 
 
 def build_portfolio_report_markdown(df_rank: pd.DataFrame, market_regime: dict, us_market: dict) -> str:
-    review = build_portfolio_review_df(df_rank, market_regime, us_market)
-    scenario = build_market_scenario(market_regime, us_market, df_rank)
-    today = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    quote_line = f"- Quote: realtime({REALTIME_QUOTE_INTERVAL}) if available, else daily close"
-    if not realtime_quotes_enabled():
-        quote_line = "- Quote: daily close (realtime disabled)"
-    lines = [
-        "# Portfolio Review",
-        f"- Generated: {today}",
-        f"- Market Regime: {market_regime['comment']}",
-        f"- US Summary: {us_market['summary']}",
-        f"- Market Scenario: {scenario['label']} | {scenario['stance']}",
-        f"- Exit Focus: {scenario['exit_note']}",
-        quote_line,
-        "",
-    ]
-    if AUTO_ADDED_TICKERS:
-        lines.append(f"- Auto-added to watchlist: {', '.join(AUTO_ADDED_TICKERS)}")
-        lines.append("")
-
-    lines.extend(["## Holdings", ""])
-    if review.empty:
-        lines.append("- None")
-        return "\n".join(lines)
-
-    for _, r in review.iterrows():
-        current_close = r.get("current_close")
-        if pd.isna(current_close):
-            lines.append(f"- {r['ticker'].split('.')[0]} | {r['advice']} | 尚未抓到行情，已同步加入觀察清單")
-            continue
-        lines.append(
-            f"- {r['name']} ({r['ticker'].split('.')[0]}) | {r['holding_style']} | 現價 {round(float(current_close), 2)} | "
-            f"成本 {round(float(r['avg_cost']), 2)} | 報酬 {r['unrealized_pnl_pct']}% | "
-            f"目標 {r['target_profit_pct']}% | 波動 {volatility_badge_text(r)} | 建議 {r['advice']}"
-        )
-    return "\n".join(lines)
+    return build_portfolio_report_markdown_impl(
+        df_rank,
+        market_regime,
+        us_market,
+        build_portfolio_review_df=build_portfolio_review_df,
+        build_market_scenario=build_market_scenario,
+        realtime_quote_interval=REALTIME_QUOTE_INTERVAL,
+        realtime_quotes_enabled=realtime_quotes_enabled(),
+        auto_added_tickers=AUTO_ADDED_TICKERS,
+        volatility_badge_text=volatility_badge_text,
+    )
 
 
 def build_portfolio_report_html(df_rank: pd.DataFrame, market_regime: dict, us_market: dict) -> str:
-    review = build_portfolio_review_df(df_rank, market_regime, us_market)
-    scenario = build_market_scenario(market_regime, us_market, df_rank)
-    review_html = "<p>None</p>" if review.empty else dataframe_to_html(review)
-    auto_added_html = ""
-    if AUTO_ADDED_TICKERS:
-        auto_added_html = f"<p><strong>Auto-added to watchlist:</strong> {', '.join(AUTO_ADDED_TICKERS)}</p>"
-    return f"""<!doctype html>
-<html><head><meta charset="utf-8"><title>Portfolio Review</title>
-<style>
-body {{ font-family: Arial, sans-serif; margin: 24px; }}
-table {{ border-collapse: collapse; width: 100%; margin-bottom: 24px; }}
-th, td {{ border: 1px solid #ddd; padding: 8px; font-size: 14px; }}
-th {{ background: #f4f4f4; }}
-</style></head><body>
-<h1>Portfolio Review</h1>
-<p><strong>Market:</strong> {market_regime['comment']}</p>
-<p><strong>US Summary:</strong> {us_market['summary']}</p>
-<p><strong>Scenario:</strong> {scenario['label']} | {scenario['stance']}</p>
-<p><strong>Exit Focus:</strong> {scenario['exit_note']}</p>
-{auto_added_html}
-<h2>Holdings</h2>{review_html}
-</body></html>"""
+    return build_portfolio_report_html_impl(
+        df_rank,
+        market_regime,
+        us_market,
+        build_portfolio_review_df=build_portfolio_review_df,
+        build_market_scenario=build_market_scenario,
+        auto_added_tickers=AUTO_ADDED_TICKERS,
+    )
 
 
 def save_portfolio_reports(df_rank: pd.DataFrame, market_regime: dict, us_market: dict) -> None:
-    PORTFOLIO_REPORT_MD.write_text(build_portfolio_report_markdown(df_rank, market_regime, us_market), encoding="utf-8")
-    PORTFOLIO_REPORT_HTML.write_text(build_portfolio_report_html(df_rank, market_regime, us_market), encoding="utf-8")
+    save_portfolio_reports_impl(
+        df_rank,
+        market_regime,
+        us_market,
+        markdown_path=PORTFOLIO_REPORT_MD,
+        html_path=PORTFOLIO_REPORT_HTML,
+        build_portfolio_review_df=build_portfolio_review_df,
+        build_market_scenario=build_market_scenario,
+        realtime_quote_interval=REALTIME_QUOTE_INTERVAL,
+        realtime_quotes_enabled=realtime_quotes_enabled(),
+        auto_added_tickers=AUTO_ADDED_TICKERS,
+        volatility_badge_text=volatility_badge_text,
+    )
 
 
 def split_message(text: str, limit: int) -> List[str]:
@@ -3195,29 +2921,40 @@ def send_telegram_message(message: str) -> None:
                 if not resp.ok:
                     logger.error("Telegram send failed. chat_id=%s status=%s body=%s", chat_id, resp.status_code, resp.text[:500])
             except Exception as exc:
-                logger.exception("Telegram send exception for chat_id=%s: %s", chat_id, exc)
+                    logger.exception("Telegram send exception for chat_id=%s: %s", chat_id, exc)
 
 
-def main() -> int:
+def parse_cli_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Run the daily stock watch workflow.")
+    parser.add_argument("--force", action="store_true", help="Ignore same-day duplicate guard and force a rerun.")
+    return parser.parse_args(argv)
+
+
+def main(*, force_run: bool | None = None) -> int:
+    main_started = time.perf_counter()
+    effective_force_run = FORCE_RUN if force_run is None else bool(force_run)
+    for key in _CACHE_STATS:
+        _CACHE_STATS[key] = 0
+    step_timings: dict[str, float] = {}
+    warnings: list[str] = []
     try:
         if (
-            not FORCE_RUN
+            not effective_force_run
             and load_last_success_date() == today_local_str()
             and load_last_success_signature() == current_run_signature()
         ):
             logger.info("Already completed successfully for %s with same code/config. Skip duplicate run.", today_local_str())
             return 0
 
-        warnings: list[str] = []
         try:
-            market_regime = get_market_regime()
+            market_regime = _timed_call(step_timings, "market_regime", get_market_regime)
         except Exception as exc:
             warnings.append(f"market_regime: {exc}")
             logger.exception("Market regime fetch failed (best effort): %s", exc)
             market_regime = {"comment": "加權指數資料抓不到（best effort）", "is_bullish": True}
 
         try:
-            us_market = get_us_market_reference()
+            us_market = _timed_call(step_timings, "us_market", get_us_market_reference)
         except Exception as exc:
             warnings.append(f"us_market: {exc}")
             logger.exception("US market reference failed (best effort): %s", exc)
@@ -3225,20 +2962,35 @@ def main() -> int:
 
         initial_scenario = build_market_scenario(market_regime, us_market)
         adjusted_strat = adjust_strategy_by_scenario(CONFIG.strategy, initial_scenario)
-        df_rank = run_watchlist(strat=adjusted_strat)
-        bt_steady, bt_attack = run_backtest_dual()
+        _timed_call(step_timings, "cache_warmup", prewarm_watchlist_indicator_cache)
+        df_rank = _timed_call(step_timings, "watchlist", run_watchlist, strat=adjusted_strat)
+        bt_steady, bt_attack = _timed_call(step_timings, "backtest", run_backtest_dual)
 
         logger.info("=== 今日排行榜 ===\n%s", df_rank.to_string(index=False))
         logger.info("Market regime: %s", market_regime["comment"])
 
-        short_candidates, short_backups, midlong_candidates, _ = build_candidate_sets(
+        short_candidates, short_backups, midlong_candidates, _ = _timed_call(
+            step_timings,
+            "candidate_sets",
+            build_candidate_sets,
             df_rank,
             market_regime,
             us_market,
         )
         market_scenario = build_market_scenario(market_regime, us_market, df_rank)
-        upsert_alert_tracking(short_candidates, midlong_candidates, market_scenario)
-        save_reports(df_rank, market_regime, bt_steady, bt_attack, us_market)
+        _timed_call(step_timings, "reports", save_reports, df_rank, market_regime, bt_steady, bt_attack, us_market)
+        try:
+            _timed_call(
+                step_timings,
+                "alert_tracking",
+                upsert_alert_tracking,
+                short_candidates,
+                midlong_candidates,
+                market_scenario,
+            )
+        except Exception as exc:
+            warnings.append(f"alert_tracking: {exc}")
+            logger.exception("Alert tracking update failed (best effort): %s", exc)
         logger.info(
             "Adaptive strategy applied (%s): %s",
             initial_scenario["label"],
@@ -3248,17 +3000,37 @@ def main() -> int:
         current_state = build_state(df_rank, market_regime)
         last_state = load_last_state()
 
-        if should_alert(df_rank, current_state, last_state, market_regime, us_market):
-            send_telegram_message(build_macro_message(market_regime, us_market, df_rank))
-            send_telegram_message(build_short_term_message(df_rank, market_regime, us_market))
-            send_telegram_message(build_early_gem_message(df_rank, market_regime, us_market))
-            send_telegram_message(build_midlong_message(df_rank, market_regime, us_market))
+        should_send = _timed_call(
+            step_timings,
+            "should_alert",
+            should_alert,
+            df_rank,
+            current_state,
+            last_state,
+            market_regime,
+            us_market,
+        )
+        if should_send:
+            def _send_notifications() -> None:
+                send_telegram_message(build_macro_message(market_regime, us_market, df_rank))
+                send_telegram_message(build_short_term_message(df_rank, market_regime, us_market))
+                send_telegram_message(build_early_gem_message(df_rank, market_regime, us_market))
+                send_telegram_message(build_midlong_message(df_rank, market_regime, us_market))
+
+            _timed_call(step_timings, "notifications", _send_notifications)
             logger.info("Notification sent.")
         else:
             logger.info("No notification sent.")
 
-        save_last_state(current_state)
-        save_last_success_date(today_local_str())
+        _timed_call(step_timings, "persist_state", save_last_state, current_state)
+        _timed_call(step_timings, "persist_success", save_last_success_date, today_local_str())
+        write_runtime_metrics(
+            status="ok",
+            step_timings=step_timings,
+            warnings=warnings,
+            wall_seconds=time.perf_counter() - main_started,
+        )
+        logger.info("Runtime timings: %s", ", ".join(f"{name}={seconds:.3f}s" for name, seconds in step_timings.items()))
 
         if warnings:
             logger.warning("Best effort warnings: %s", " | ".join(warnings))
@@ -3266,9 +3038,17 @@ def main() -> int:
     except Exception as exc:
         err_msg = f"Watchlist job failed: {exc}"
         logger.exception(err_msg)
+        warnings.append(err_msg)
+        write_runtime_metrics(
+            status="failed",
+            step_timings=step_timings,
+            warnings=warnings,
+            wall_seconds=time.perf_counter() - main_started,
+        )
         send_telegram_message(err_msg)
         return 1
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    cli_args = parse_cli_args()
+    sys.exit(main(force_run=cli_args.force if cli_args.force else None))

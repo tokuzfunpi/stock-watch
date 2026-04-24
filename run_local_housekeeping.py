@@ -29,6 +29,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Prune older local verification artifacts and caches.")
     parser.add_argument("--apply", action="store_true", help="Actually delete the selected files. Default is dry-run.")
     parser.add_argument(
+        "--theme-outdir",
+        default=str(THEME_OUTDIR),
+        help="Theme watch output directory that contains local runtime outputs and history cache files.",
+    )
+    parser.add_argument(
         "--verification-outdir",
         default=str(VERIFICATION_OUTDIR),
         help="Verification output directory that contains contexts, backfill_reports, backups, and cache files.",
@@ -46,6 +51,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=int,
         default=14,
         help="Delete verification yfinance cache CSV files older than this many days.",
+    )
+    parser.add_argument(
+        "--history-cache-max-age-days",
+        type=int,
+        default=30,
+        help="Delete theme history cache CSV files older than this many days.",
     )
     parser.add_argument("--out", default=str(HOUSEKEEPING_MD))
     parser.add_argument("--json-out", default=str(HOUSEKEEPING_JSON))
@@ -102,11 +113,13 @@ def _backup_group_name(path: Path) -> str:
 
 def collect_housekeeping_actions(
     *,
+    theme_outdir: Path = THEME_OUTDIR,
     verification_outdir: Path = VERIFICATION_OUTDIR,
     keep_contexts: int,
     keep_backfill_reports: int,
     keep_backups: int,
     cache_max_age_days: int,
+    history_cache_max_age_days: int,
     now: datetime | None = None,
 ) -> list[HousekeepingAction]:
     actions: list[HousekeepingAction] = []
@@ -170,6 +183,31 @@ def collect_housekeeping_actions(
                         action="keep",
                         status="kept",
                         detail=f"verification cache within {cache_max_age_days} day(s)",
+                    )
+                )
+
+    history_cache_dir = theme_outdir / "history_cache"
+    if history_cache_dir.exists():
+        cutoff = now.timestamp() - max(int(history_cache_max_age_days), 0) * 86400
+        for path in _sort_newest([path for path in history_cache_dir.glob("*.csv") if path.is_file()]):
+            if path.stat().st_mtime < cutoff:
+                actions.append(
+                    _build_action(
+                        category="history_cache",
+                        path=path,
+                        action="delete",
+                        status="planned",
+                        detail=f"theme history cache older than {history_cache_max_age_days} day(s)",
+                    )
+                )
+            else:
+                actions.append(
+                    _build_action(
+                        category="history_cache",
+                        path=path,
+                        action="keep",
+                        status="kept",
+                        detail=f"theme history cache within {history_cache_max_age_days} day(s)",
                     )
                 )
     return actions
@@ -283,11 +321,13 @@ def write_outputs(
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     actions = collect_housekeeping_actions(
+        theme_outdir=Path(args.theme_outdir),
         verification_outdir=Path(args.verification_outdir),
         keep_contexts=args.keep_contexts,
         keep_backfill_reports=args.keep_backfill_reports,
         keep_backups=args.keep_backups,
         cache_max_age_days=args.cache_max_age_days,
+        history_cache_max_age_days=args.history_cache_max_age_days,
     )
     actions = apply_housekeeping_actions(actions, apply=args.apply)
     summary = build_summary(actions, apply=args.apply)

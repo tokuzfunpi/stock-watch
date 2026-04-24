@@ -1,0 +1,2 @@
+"""Shared stock watch modules."""
+

@@ -73,6 +73,14 @@ class RunLocalDailyTests(unittest.TestCase):
                     {"signal_date": "2026-04-23", "status": "insufficient_forward_data"},
                 ]
             ).to_csv(verification_outdir / "reco_outcomes.csv", index=False)
+            (theme_outdir / "runtime_metrics.json").write_text(
+                json.dumps({"status": "ok", "wall_seconds": 1.234}),
+                encoding="utf-8",
+            )
+            (theme_outdir / "portfolio_runtime_metrics.json").write_text(
+                json.dumps({"status": "ok", "wall_seconds": 0.456}),
+                encoding="utf-8",
+            )
 
             metrics = collect_status_metrics(theme_outdir, verification_outdir)
 
@@ -83,6 +91,10 @@ class RunLocalDailyTests(unittest.TestCase):
         self.assertEqual(metrics["outcome_rows"], 2)
         self.assertEqual(metrics["outcome_ok_rows"], 1)
         self.assertEqual(metrics["outcome_pending_rows"], 1)
+        self.assertEqual(metrics["watchlist_runtime_status"], "ok")
+        self.assertEqual(metrics["portfolio_runtime_status"], "ok")
+        self.assertAlmostEqual(metrics["watchlist_runtime_seconds"], 1.234)
+        self.assertAlmostEqual(metrics["portfolio_runtime_seconds"], 0.456)
 
     def test_write_local_status_dashboard_writes_markdown_and_json(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -112,9 +124,12 @@ class RunLocalDailyTests(unittest.TestCase):
 
         self.assertIn("Local Run Status", markdown)
         self.assertIn("Watchlist", markdown)
+        self.assertIn("Watchlist runtime", markdown)
         self.assertEqual(payload["mode"], "preopen")
         self.assertEqual(payload["overall_status"], "ok")
         self.assertEqual(payload["steps"][0]["status"], "completed")
+        self.assertIn("watchlist_runtime", payload["outputs"])
+        self.assertIn("portfolio_runtime", payload["outputs"])
 
     def test_main_runs_preopen_steps_in_order(self) -> None:
         calls: list[str] = []

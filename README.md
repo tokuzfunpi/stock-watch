@@ -24,6 +24,8 @@
 - `watchlist.csv`
 - `portfolio.csv.example`
 - `.github/workflows/stock-watch.yml`
+- `SIGNAL_GLOSSARY.md`
+  - 訊號規則與報表語意對照
 
 安裝與執行：
 - `python3 -m venv .venv`
@@ -31,6 +33,8 @@
 - `pip install -r requirements.txt`
 - `python3 -m unittest discover -s tests`
 - `python3 daily_theme_watchlist.py`
+- 同一天需要強制重跑時：
+  - `python3 daily_theme_watchlist.py --force`
 
 本機日常流程也可以直接用單一入口：
 - `python3 run_local_daily.py --mode preopen`
@@ -56,11 +60,12 @@
 - 每次執行後會更新：
   - `theme_watchlist_daily/local_run_status.md`
   - `theme_watchlist_daily/local_run_status.json`
-  - 用來快速看本次哪些 step 有跑、成功與否、以及最新 verification row 狀態
+  - 用來快速看本次哪些 step 有跑、成功與否、最新 verification row 狀態，以及 watchlist / portfolio runtime
 - `run_local_doctor.py` 會更新：
   - `theme_watchlist_daily/local_doctor.md`
   - `theme_watchlist_daily/local_doctor.json`
   - 用來檢查 Python / 本機設定檔 / Telegram / cache / Yahoo DNS readiness
+  - 也會列出 `history_cache` 的檔案數與總容量
 - `run_weekly_review.py` 會更新：
   - `theme_watchlist_daily/weekly_review.md`
   - `theme_watchlist_daily/weekly_review.json`
@@ -68,7 +73,7 @@
 - `run_local_housekeeping.py` 會更新：
   - `theme_watchlist_daily/local_housekeeping.md`
   - `theme_watchlist_daily/local_housekeeping.json`
-  - 預設是 dry-run，先列出會刪掉哪些舊 `contexts`、`backfill_reports`、`*.bak*`、舊 cache；加 `--apply` 才會真的刪
+  - 預設是 dry-run，先列出會刪掉哪些舊 `contexts`、`backfill_reports`、`*.bak*`、verification cache、`history_cache`；加 `--apply` 才會真的刪
 
 如果要跑持股檢查：
 - 複製 `portfolio.csv.example` 成本機的 `portfolio.csv`
@@ -104,6 +109,28 @@ Telegram chat id 也支援本機 fallback：
 - `daily_report.md` 會包含 Signals 對照表與 Regime 解釋，方便直接看報表判讀
 - `portfolio.csv` 是本機私有檔，不進 git
 - `theme_watchlist_daily/portfolio_report.md` 與 `portfolio_report.html` 由 `portfolio_check.py` 產生
+- 資料抓取目前支援 provider fallback：
+  - 預設主來源：`yahoo`
+  - 預設備援：`finmind`
+  - 預設會開啟記憶體 cache 與磁碟 history cache
+  - 磁碟 history cache 會依台股 / 美股各自的 market close 節奏判斷是否可重用；遇到不確定的 weekday 會保守地重抓
+  - 可用 env 覆寫：
+    - `STOCK_DATA_PROVIDER`
+    - `STOCK_DATA_FALLBACKS`
+    - `FINMIND_TOKEN`（可選）
+    - `ENABLE_HISTORY_CACHE`
+    - `ENABLE_DISK_HISTORY_CACHE`
+
+- 每次 `daily_theme_watchlist.py` 執行後也會更新：
+  - `theme_watchlist_daily/runtime_metrics.md`
+  - `theme_watchlist_daily/runtime_metrics.json`
+  - 可快速看 warmup / watchlist / backtest / notifications 各階段耗時
+  - 也會顯示 history cache、disk cache、superset cache 命中情況
+  - `backtest_state.json` 會記錄 incremental backtest 的模式與掃描範圍
+- 每次 `portfolio_check.py` 執行後也會更新：
+  - `theme_watchlist_daily/portfolio_runtime_metrics.md`
+  - `theme_watchlist_daily/portfolio_runtime_metrics.json`
+  - 用來看持股檢查的 market / watchlist / report / print 各階段耗時
 
 新增：
 - daily_report.md 內含 Grade 對照表

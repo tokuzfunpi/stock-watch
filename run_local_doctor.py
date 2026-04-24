@@ -50,6 +50,28 @@ def _safe_count_csv_rows(path: Path) -> int:
         return 0
 
 
+def _safe_dir_file_count(path: Path, pattern: str = "*") -> int:
+    if not path.exists() or not path.is_dir():
+        return 0
+    try:
+        return sum(1 for item in path.glob(pattern) if item.is_file())
+    except Exception:
+        return 0
+
+
+def _safe_dir_total_bytes(path: Path, pattern: str = "*") -> int:
+    if not path.exists() or not path.is_dir():
+        return 0
+    total = 0
+    try:
+        for item in path.glob(pattern):
+            if item.is_file():
+                total += int(item.stat().st_size)
+    except Exception:
+        return 0
+    return total
+
+
 def _check_python_runtime() -> DoctorCheck:
     version = sys.version_info
     status = "ok" if version >= (3, 11) else "warn"
@@ -184,6 +206,7 @@ def run_doctor_checks(args: argparse.Namespace) -> list[DoctorCheck]:
         _check_output_dir(THEME_OUTDIR, label="theme_outdir"),
         _check_output_dir(VERIFICATION_OUTDIR, label="verification_outdir"),
         _check_cache_dir(THEME_OUTDIR / ".yfinance_cache", label="theme_cache_dir"),
+        _check_cache_dir(THEME_OUTDIR / "history_cache", label="history_cache_dir"),
         _check_cache_dir(VERIFICATION_OUTDIR / "yfinance_cache", label="verification_cache_dir"),
         _check_examples(
             {
@@ -199,11 +222,14 @@ def run_doctor_checks(args: argparse.Namespace) -> list[DoctorCheck]:
 
 
 def collect_doctor_metrics() -> dict[str, int]:
+    history_cache_dir = THEME_OUTDIR / "history_cache"
     return {
         "daily_rank_rows": _safe_count_csv_rows(THEME_OUTDIR / "daily_rank.csv"),
         "alert_tracking_rows": _safe_count_csv_rows(THEME_OUTDIR / "alert_tracking.csv"),
         "snapshot_rows": _safe_count_csv_rows(VERIFICATION_OUTDIR / "reco_snapshots.csv"),
         "outcome_rows": _safe_count_csv_rows(VERIFICATION_OUTDIR / "reco_outcomes.csv"),
+        "history_cache_files": _safe_dir_file_count(history_cache_dir, "*.csv"),
+        "history_cache_bytes": _safe_dir_total_bytes(history_cache_dir, "*.csv"),
     }
 
 
@@ -238,6 +264,8 @@ def render_doctor_markdown(*, generated_at: str, checks: list[DoctorCheck], metr
             f"- Alert tracking rows: `{metrics.get('alert_tracking_rows', 0)}`",
             f"- Verification snapshot rows: `{metrics.get('snapshot_rows', 0)}`",
             f"- Verification outcome rows: `{metrics.get('outcome_rows', 0)}`",
+            f"- History cache files: `{metrics.get('history_cache_files', 0)}`",
+            f"- History cache bytes: `{metrics.get('history_cache_bytes', 0)}`",
         ]
     )
     return "\n".join(lines)
