@@ -1,34 +1,34 @@
 {
-  "generated_at": "2026-04-24 12:15:00",
+  "generated_at": "2026-04-24 12:19:50",
   "status": "ok",
   "step_timings": {
-    "market_regime": 4.458939656615257e-06,
-    "us_market": 3.6249402910470963e-06,
-    "cache_warmup": 0.0005521660204976797,
-    "watchlist": 5.417037755250931e-06,
-    "backtest": 3.291061148047447e-06,
-    "candidate_sets": 0.015562916873022914,
-    "reports": 0.00010954216122627258,
-    "alert_tracking": 5.766702815890312e-05,
-    "should_alert": 3.708992153406143e-06,
-    "notifications": 0.036231332924216986,
-    "persist_state": 0.00011058407835662365,
-    "persist_success": 5.487515591084957e-05
+    "market_regime": 0.26720895700000824,
+    "us_market": 0.6658480500000081,
+    "cache_warmup": 0.6049169069999891,
+    "watchlist": 0.13809682000000123,
+    "backtest": 11.591219918999997,
+    "candidate_sets": 0.2272627259999922,
+    "reports": 0.34111780599999975,
+    "alert_tracking": 0.04428071600000294,
+    "should_alert": 1.542000006793387e-06,
+    "notifications": 9.340998933999998,
+    "persist_state": 0.00015510399998674984,
+    "persist_success": 0.0002544029999853592
   },
   "warnings": [],
-  "total_seconds": 0.053,
-  "wall_seconds": 0.054,
+  "total_seconds": 23.221,
+  "wall_seconds": 23.235,
   "cache_stats": {
     "history_hit": 0,
-    "history_disk_hit": 0,
-    "history_superset_hit": 0,
-    "history_miss": 0,
+    "history_disk_hit": 44,
+    "history_superset_hit": 37,
+    "history_miss": 6,
     "indicator_hit": 45,
-    "indicator_superset_hit": 0,
-    "indicator_miss": 0
+    "indicator_superset_hit": 45,
+    "indicator_miss": 50
   },
   "backtest_meta": {
-    "signature": "b16a77c3a0cf34c9",
+    "signature": "347b1d08447ce184",
     "backtest_period": "5y",
     "lookahead_days": [
       1,
@@ -82,7 +82,7 @@
       "00773B.TWO": "2026-03-25",
       "2412.TW": "2026-03-25"
     },
-    "last_run_mode": "incremental_noop",
-    "last_run_scanned_cutoffs": 0
+    "last_run_mode": "full_rebuild",
+    "last_run_scanned_cutoffs": 42484
   }
 }
