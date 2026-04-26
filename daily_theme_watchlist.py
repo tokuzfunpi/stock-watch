@@ -1987,6 +1987,221 @@ def early_gem_reason(row: pd.Series) -> str:
     return " + ".join(reasons[:3]) if reasons else "早期轉強觀察"
 
 
+def _format_ticker_name(row: pd.Series) -> str:
+    name = str(row.get("name", "") or "").strip()
+    ticker = str(row.get("ticker", "") or "").strip()
+    if name and ticker:
+        return f"{name} ({ticker})"
+    if ticker:
+        return ticker
+    if name:
+        return name
+    rank = row.get("rank")
+    if pd.notna(rank):
+        return f"rank#{int(rank)}"
+    return "未命名標的"
+
+
+def _primary_watch_summary(candidates: pd.DataFrame, *, watch_type: str) -> list[str]:
+    if candidates is None or candidates.empty:
+        return []
+    top = candidates.head(min(len(candidates), 3)).copy()
+    names = "、".join(_format_ticker_name(row) for _, row in top.iterrows())
+    if watch_type == "short":
+        actions = top.apply(short_term_action_label, axis=1).value_counts().to_dict()
+        if actions.get("等拉回", 0) >= 1:
+            stance = "以等拉回為主，不用急著追第一根。"
+        elif actions.get("開高不追", 0) >= 1 or actions.get("只觀察不追", 0) >= 1:
+            stance = "前排偏熱，重點是看強弱，不是直接追價。"
+        else:
+            stance = "有名單可看，但仍先看買點品質。"
+        return [f"先看：{names}", f"一句話：{stance}"]
+
+    actions = top.apply(midlong_action_label, axis=1).value_counts().to_dict()
+    if actions.get("續抱", 0) >= 1:
+        stance = "以結構穩、可續抱的趨勢股為主。"
+    elif actions.get("可分批", 0) >= 1:
+        stance = "可以布局，但偏向分批而不是一次買滿。"
+    else:
+        stance = "目前先看結構穩定度，不急著放大部位。"
+    return [f"先看：{names}", f"一句話：{stance}"]
+
+
+def _observation_summary(backups: pd.DataFrame, *, watch_type: str) -> list[str]:
+    if backups is None or backups.empty:
+        return []
+    high_spec = int((backups.get("spec_risk_label", pd.Series(index=backups.index, dtype=object)).astype(str) == "疑似炒作風險高").sum())
+    hot_names = "、".join(_format_ticker_name(row) for _, row in backups.head(min(len(backups), 2)).iterrows())
+    if watch_type == "short":
+        if high_spec >= 1:
+            return [f"觀察重點：{hot_names}", "提醒：觀察區比較像熱股/續看名單，不代表今天適合直接出手。"] 
+        return [f"觀察重點：{hot_names}", "提醒：觀察區是備選，不是主推；要等訊號再更完整一點。"] 
+    if high_spec >= 1:
+        return [f"觀察重點：{hot_names}", "提醒：中長線觀察區偏強但偏熱，先看能不能整理後再接。"] 
+    return [f"觀察重點：{hot_names}", "提醒：這區先看結構，不急著把每檔都當成可布局。"] 
+
+
+def _unique_by_ticker(df: Optional[pd.DataFrame]) -> pd.DataFrame:
+    if df is None or df.empty:
+        return pd.DataFrame()
+    ranked = df.sort_values(by=["rank"], ascending=[True]).copy()
+    if "ticker" in ranked.columns:
+        ranked = ranked.drop_duplicates(subset=["ticker"], keep="first")
+    return ranked.reset_index(drop=True)
+
+
+def _fill_rows_to_limit(
+    base: Optional[pd.DataFrame],
+    fallback: Optional[pd.DataFrame],
+    *,
+    limit: int,
+    exclude_tickers: Optional[set[str]] = None,
+) -> pd.DataFrame:
+    exclude = {str(t) for t in (exclude_tickers or set())}
+    frames: list[pd.DataFrame] = []
+    if base is not None and not base.empty:
+        frames.append(base.copy())
+        if "ticker" in base.columns:
+            exclude.update(base["ticker"].astype(str))
+    if fallback is not None and not fallback.empty:
+        filler = fallback.copy()
+        if "ticker" in filler.columns:
+            filler = filler[~filler["ticker"].astype(str).isin(exclude)].copy()
+        frames.append(filler)
+    if not frames:
+        return pd.DataFrame()
+    return _unique_by_ticker(pd.concat(frames, ignore_index=True)).head(limit).copy()
+
+
+def _compact_summary_line(row: pd.Series, *, watch_type: str) -> str:
+    action = short_term_action_label(row) if watch_type == "short" else midlong_action_label(row)
+    role = "短線" if watch_type == "short" else "中線"
+    return f"- {_format_ticker_name(row)}｜{role}｜{action}"
+
+
+def _no_chase_reason(row: pd.Series) -> str:
+    short_action = short_term_action_label(row)
+    midlong_action = midlong_action_label(row)
+    spec_label = str(row.get("spec_risk_label", "正常"))
+    if spec_label == "疑似炒作風險高":
+        return "疑似炒作風險高"
+    if short_action in {"只觀察不追", "開高不追", "分批落袋"}:
+        return short_action
+    if midlong_action in {"減碼觀察", "分批落袋"}:
+        return midlong_action
+    if float(row.get("ret5_pct", 0.0) or 0.0) >= 12:
+        return "短線過熱"
+    return "偏熱先別追"
+
+
+def _build_compact_briefing_lines(
+    df_rank: Optional[pd.DataFrame],
+    market_regime: dict,
+    us_market: dict,
+) -> list[str]:
+    if df_rank is None or df_rank.empty:
+        return []
+
+    required = {
+        "rank",
+        "ticker",
+        "name",
+        "group",
+        "layer",
+        "grade",
+        "setup_score",
+        "risk_score",
+        "ret5_pct",
+        "ret20_pct",
+        "volume_ratio20",
+        "signals",
+        "rank_change",
+        "setup_change",
+        "spec_risk_label",
+    }
+    if not required.issubset(df_rank.columns):
+        return []
+
+    short_candidates, short_backups, midlong_candidates, midlong_backups = build_candidate_sets(
+        df_rank,
+        market_regime,
+        us_market,
+    )
+    avoid_mask = df_rank.apply(
+        lambda row: (
+            str(row.get("spec_risk_label", "正常")) == "疑似炒作風險高"
+            or short_term_action_label(row) in {"只觀察不追", "開高不追", "分批落袋"}
+            or midlong_action_label(row) in {"減碼觀察", "分批落袋"}
+        ),
+        axis=1,
+    )
+    primary_base = _unique_by_ticker(pd.concat([short_candidates, midlong_candidates], ignore_index=True))
+    ranked_fallback = _unique_by_ticker(df_rank.copy())
+    safe_fallback = ranked_fallback[~ranked_fallback["ticker"].astype(str).isin(set(df_rank[avoid_mask]["ticker"].astype(str)))].copy()
+    primary = _fill_rows_to_limit(primary_base, safe_fallback, limit=5)
+
+    observation_base = _unique_by_ticker(pd.concat([short_backups, midlong_backups], ignore_index=True))
+    if not primary.empty and "ticker" in observation_base.columns:
+        observation_base = observation_base[
+            ~observation_base["ticker"].astype(str).isin(set(primary["ticker"].astype(str)))
+        ].copy()
+    observation = _fill_rows_to_limit(
+        observation_base,
+        ranked_fallback,
+        limit=5,
+        exclude_tickers=set(primary["ticker"].astype(str)) if not primary.empty else set(),
+    )
+
+    avoid_exclude = set(primary["ticker"].astype(str)) if not primary.empty else set()
+    avoid_seed = df_rank[avoid_mask].copy()
+    if avoid_exclude:
+        avoid_seed = avoid_seed[~avoid_seed["ticker"].astype(str).isin(avoid_exclude)].copy()
+    avoid_fallback = df_rank.sort_values(by=["risk_score", "ret5_pct", "rank"], ascending=[False, False, True]).copy()
+    existing_avoid = set(avoid_seed["ticker"].astype(str)) if not avoid_seed.empty else set()
+    avoid_fallback = avoid_fallback[
+        ~avoid_fallback["ticker"].astype(str).isin(avoid_exclude | existing_avoid)
+    ].copy()
+    avoid_frames = [frame for frame in [avoid_seed, avoid_fallback] if not frame.empty]
+    avoid = pd.concat(avoid_frames, ignore_index=True) if avoid_frames else pd.DataFrame()
+    if not avoid.empty:
+        avoid = (
+            avoid.drop_duplicates(subset=["ticker"], keep="first")
+            .sort_values(by=["risk_score", "ret5_pct", "rank"], ascending=[False, False, True])
+            .head(3)
+            .reset_index(drop=True)
+        )
+
+    lines: list[str] = []
+    if not primary.empty:
+        lines.append("")
+        lines.append("先看 5 檔")
+        for _, row in primary.head(5).iterrows():
+            lines.append(_compact_summary_line(row, watch_type="short" if str(row.get("layer", "")) == "short_attack" else "midlong"))
+    if not observation.empty:
+        lines.append("")
+        lines.append("觀察 5 檔")
+        for _, row in observation.head(5).iterrows():
+            lines.append(_compact_summary_line(row, watch_type="short" if str(row.get("layer", "")) == "short_attack" else "midlong"))
+    if not avoid.empty:
+        lines.append("")
+        lines.append("今天不要追的 3 檔")
+        for _, row in avoid.head(3).iterrows():
+            lines.append(f"- {_format_ticker_name(row)}｜{_no_chase_reason(row)}")
+    return lines
+
+
+def _candidate_line(row: pd.Series, *, watch_type: str) -> str:
+    action = short_term_action_label(row) if watch_type == "short" else midlong_action_label(row)
+    period_label = "5日" if watch_type == "short" else "20日"
+    period_value = row["ret5_pct"] if watch_type == "short" else row["ret20_pct"]
+    vol_text = volatility_badge_text(row)
+    return (
+        f"- #{int(row['rank'])} {_format_ticker_name(row)}｜{action}\n"
+        f"  {period_label} {period_value}% / 量比 {row['volume_ratio20']}｜{vol_text}｜{row['regime']}\n"
+        f"  {watch_price_plan_text(row, watch_type)}"
+    )
+
+
 def watch_price_plan(row: pd.Series, watch_type: str) -> dict[str, float | str]:
     close_ = float(row.get("close", 0.0) or 0.0)
     ma20 = float(row.get("ma20", close_) or close_)
@@ -2124,15 +2339,18 @@ def build_early_gem_message(df_rank: pd.DataFrame, market_regime: dict, us_marke
         lines.append("今天沒有特別像『還沒完全被市場定價，但已開始轉強』的標的。")
         return "\n".join(lines).strip()
 
+    top_names = "、".join(_format_ticker_name(row) for _, row in gem_candidates.head(min(len(gem_candidates), 3)).iterrows())
+    lines.append(f"先看：{top_names}")
+    lines.append("一句話：這區是『剛轉強、還沒太擁擠』的候選，不是追最熱。")
+    lines.append("")
     lines.append("解讀：這一區不是追最熱，而是找剛轉強、還沒太擁擠的候選。")
     lines.append("")
     for _, r in gem_candidates.iterrows():
         vol_text = volatility_badge_text(r)
         lines.append(
-            f"{int(r['rank'])}. {r['name']} ({r['ticker']}) | "
-            f"{layer_label(r['layer'])} | 5日 {r['ret5_pct']}% / 20日 {r['ret20_pct']}% | "
-            f"{vol_text} | "
-            f"{early_gem_reason(r)} | {watch_price_plan_text(r, 'short')}"
+            f"- #{int(r['rank'])} {_format_ticker_name(r)}｜{layer_label(r['layer'])}\n"
+            f"  5日 {r['ret5_pct']}% / 20日 {r['ret20_pct']}%｜{vol_text}\n"
+            f"  {early_gem_reason(r)}｜{watch_price_plan_text(r, 'short')}"
         )
     return "\n".join(lines).strip()
 
@@ -2203,28 +2421,20 @@ def build_short_term_message(df_rank: pd.DataFrame, market_regime: dict, us_mark
         return "\n".join(lines)
 
     lines.append("")
+    lines.extend(_primary_watch_summary(short_candidates, watch_type="short"))
+    lines.append("")
     lines.append("解讀：這一區只放今天相對可考慮出手的短線標的；太熱或只適合續看的，會放到短線觀察。")
     lines.append("短線主看 5 個交易日；1D 只當輔助參考。")
     lines.append("")
     for _, r in short_candidates.iterrows():
-        action = short_term_action_label(r)
-        vol_text = volatility_badge_text(r)
-        lines.append(
-            f"{int(r['rank'])}. {r['name']} ({r['ticker']}) {action} | "
-            f"5日 {r['ret5_pct']}% / 量比 {r['volume_ratio20']} | "
-            f"{vol_text} | {r['regime']} | {watch_price_plan_text(r, 'short')}"
-        )
+        lines.append(_candidate_line(r, watch_type="short"))
     if not short_backups.empty:
         lines.append("")
         lines.append("短線觀察 (最多5檔)")
+        lines.extend(_observation_summary(short_backups, watch_type="short"))
+        lines.append("")
         for _, r in short_backups.iterrows():
-            action = short_term_action_label(r)
-            vol_text = volatility_badge_text(r)
-            lines.append(
-                f"{int(r['rank'])}. {r['name']} ({r['ticker']}) {action} | "
-                f"5日 {r['ret5_pct']}% / 量比 {r['volume_ratio20']} | "
-                f"{vol_text} | {r['regime']} | {watch_price_plan_text(r, 'short')}"
-            )
+            lines.append(_candidate_line(r, watch_type="short"))
     return "\n".join(lines).strip()
 
 
@@ -2243,28 +2453,20 @@ def build_midlong_message(df_rank: pd.DataFrame, market_regime: dict, us_market:
         return "\n".join(lines)
 
     lines.append("")
+    lines.extend(_primary_watch_summary(midlong_candidates, watch_type="midlong"))
+    lines.append("")
     lines.append("解讀：這一區偏向可布局的趨勢股；強但不一定適合現在進場的，會放到中長線觀察。")
     lines.append("中線主看 20 個交易日；1D / 5D 只當輔助觀察。")
     lines.append("")
     for _, r in midlong_candidates.iterrows():
-        action = midlong_action_label(r)
-        vol_text = volatility_badge_text(r)
-        lines.append(
-            f"{int(r['rank'])}. {r['name']} ({r['ticker']}) {action} | "
-            f"20日 {r['ret20_pct']}% / 量比 {r['volume_ratio20']} | "
-            f"{vol_text} | {r['regime']} | {watch_price_plan_text(r, 'midlong')}"
-        )
+        lines.append(_candidate_line(r, watch_type="midlong"))
     if not midlong_backups.empty:
         lines.append("")
         lines.append("中長線觀察 (最多5檔)")
+        lines.extend(_observation_summary(midlong_backups, watch_type="midlong"))
+        lines.append("")
         for _, r in midlong_backups.iterrows():
-            action = midlong_action_label(r)
-            vol_text = volatility_badge_text(r)
-            lines.append(
-                f"{int(r['rank'])}. {r['name']} ({r['ticker']}) {action} | "
-                f"20日 {r['ret20_pct']}% / 量比 {r['volume_ratio20']} | "
-                f"{vol_text} | {r['regime']} | {watch_price_plan_text(r, 'midlong')}"
-            )
+            lines.append(_candidate_line(r, watch_type="midlong"))
     return "\n".join(lines).strip()
 
 
@@ -2279,13 +2481,13 @@ def new_watchlist_spotlight_lines(df_rank: Optional[pd.DataFrame]) -> list[str]:
     if fresh.empty:
         return []
 
-    lines = ["新加入追蹤觀察："]
+    lines = ["新加入追蹤觀察：", "先看這批新名單要落在哪一種角色，不是每檔都等同主推。"] 
     for _, row in fresh.iterrows():
         watch_type = "short" if str(row.get("layer", "")) == "short_attack" else "midlong"
         action = short_term_action_label(row) if watch_type == "short" else midlong_action_label(row)
         lines.append(
-            f"- {row['name']} ({row['ticker']}) | {layer_label(str(row.get('layer', '')))} | "
-            f"{volatility_badge_text(row)} | 初步看法：{action} | {row['regime']}"
+            f"- {_format_ticker_name(row)}｜{layer_label(str(row.get('layer', '')))}\n"
+            f"  {volatility_badge_text(row)}｜初步看法：{action}｜{row['regime']}"
         )
     return lines
 
@@ -2295,8 +2497,10 @@ def build_macro_message(market_regime: dict, us_market: dict, df_rank: Optional[
     lines = [
         "📣 大盤 / 美股摘要",
         *subscriber_scenario_lines(scenario),
+        "",
         market_regime["comment"],
         us_market["summary"],
+        "",
         f"盤勢情境：{scenario['label']} | 目前節奏：{scenario['stance']}",
         f"操作重點：{scenario['focus']}",
         f"出場提醒：{scenario['exit_note']}",
@@ -2312,6 +2516,10 @@ def build_macro_message(market_regime: dict, us_market: dict, df_rank: Optional[
         lines.append(us_market["tech_bias"])
     if AUTO_ADDED_TICKERS:
         lines.append(f"持股同步加入觀察清單：{', '.join(AUTO_ADDED_TICKERS)}")
+    if df_rank is not None and not df_rank.empty:
+        top_names = "、".join(_format_ticker_name(row) for _, row in df_rank.head(min(len(df_rank), 3)).iterrows())
+        lines.extend(["", f"快速判讀：今天前排先看 {top_names}，但是否能出手仍要回到短線 / 中長線名單判斷。"])
+        lines.extend(_build_compact_briefing_lines(df_rank, market_regime, us_market))
     lines.extend(new_watchlist_spotlight_lines(df_rank))
     return "\n".join(lines).strip()
 
