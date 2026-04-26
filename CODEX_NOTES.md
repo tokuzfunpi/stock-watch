@@ -1422,3 +1422,23 @@ layer 看起來則是：
   - 不再是 dedupe 問題。
   - 也還不是「直接放寬 short gate」。
   - 最值得優先研究的是 `開高不追` 這種 `below_threshold` action 是否應該做 action-level tuning。
+
+## 2026-04-26 補充：short gate tuning diagnostics v2
+- `verification/summarize_outcomes.py` 現在又多了兩層：
+  - `Short Gate Action Context`
+    - 會把短線 `ok / below_threshold` action 拆到 `scenario_label + market_heat + spec_risk_bucket`
+    - 目前可直接看到 `開高不追` 主要出現在 `強勢延伸盤 / hot` 和 `高檔震盪盤 / hot`
+  - `Short Gate Simulation`
+    - 只模擬升格 `watch_upgrade` action，不會直接改整體 short gate
+    - 目前全歷史 rerun 下，若只升格 `開高不追`，`1D short ok` 平均報酬約增加 `0.35%`
+- `Short Gate Promotion Watch` 現在也有明確 criteria：
+  - `criteria_min_n`
+  - `criteria_delta_avg`
+  - `criteria_not_single_day_extreme`
+  - `promotion_ready`
+- 目前的實際讀法：
+  - 全歷史：`開高不追` 在 `1D short` 是 `watch_upgrade`
+  - 近週 weekly：只剩 `below_n=2`，而且 `dominant_positive_share_pct=100%`，所以先留在 `mixed/hold`
+- 這表示下一個真正的規則決策點，不是「short gate 全放寬」，而是：
+  - 要不要只對 `開高不追` 做 action-level tuning
+  - 或者先繼續累積近週樣本，等 weekly 也轉成 `watch_upgrade` 再動

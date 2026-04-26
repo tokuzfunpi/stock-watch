@@ -97,6 +97,17 @@ class RunWeeklyReviewTests(unittest.TestCase):
                     }
                 ]
             ),
+            "short_gate_simulation": pd.DataFrame(
+                [
+                    {
+                        "horizon_days": 1,
+                        "watch_type": "short",
+                        "promoted_actions": "開高不追",
+                        "promoted_n": 5,
+                        "delta_avg_ret_simulated_minus_current": 0.9,
+                    }
+                ]
+            ),
         }
         band_parts = {
             "band_coverage": pd.DataFrame(
@@ -442,6 +453,7 @@ class RunWeeklyReviewTests(unittest.TestCase):
         self.assertIn("## Overall By Spec Subtype", markdown)
         self.assertIn("## Spec Risk Check", markdown)
         self.assertIn("## Short Gate Promotion Watch", markdown)
+        self.assertIn("## Short Gate Simulation", markdown)
         self.assertIn("## Current Rank Spec Risk By Group", markdown)
         self.assertIn("## Current Rank Spec Risk By Layer", markdown)
         self.assertIn("## Current Rank Spec Risk By Source", markdown)

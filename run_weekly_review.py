@@ -625,6 +625,7 @@ def build_decisions(
     heat_row = _find_single_row(parts.get("heat_bias_check", pd.DataFrame()), horizon_days=1, watch_type="midlong")
     spec_risk_row = _find_single_row(parts.get("spec_risk_check", pd.DataFrame()), horizon_days=1, watch_type="short")
     short_gate_watch = parts.get("short_gate_promotion_watch", pd.DataFrame())
+    short_gate_simulation = parts.get("short_gate_simulation", pd.DataFrame())
 
     if threshold_row is None:
         threshold_decision = {
@@ -753,6 +754,38 @@ def build_decisions(
                     ),
                 }
 
+    if not isinstance(short_gate_simulation, pd.DataFrame) or short_gate_simulation.empty:
+        pass
+    else:
+        sim = short_gate_simulation.copy()
+        sim = sim[pd.to_numeric(sim.get("horizon_days"), errors="coerce") == 1].copy()
+        if not sim.empty:
+            sim["delta_avg_ret_simulated_minus_current"] = pd.to_numeric(
+                sim.get("delta_avg_ret_simulated_minus_current"), errors="coerce"
+            ).fillna(0.0)
+            sim["promoted_n"] = pd.to_numeric(sim.get("promoted_n"), errors="coerce").fillna(0)
+            sim = sim.sort_values(
+                by=["delta_avg_ret_simulated_minus_current", "promoted_n"],
+                ascending=[False, False],
+            )
+            top_sim = sim.iloc[0]
+            sim_delta = float(pd.to_numeric(top_sim.get("delta_avg_ret_simulated_minus_current"), errors="coerce") or 0.0)
+            sim_promoted_n = int(pd.to_numeric(top_sim.get("promoted_n"), errors="coerce") or 0)
+            sim_actions = str(top_sim.get("promoted_actions", ""))
+            if short_gate_decision["status"] == "review":
+                short_gate_decision["detail"] += (
+                    f" 最小模擬顯示只升格 `{sim_actions}` 時，`1D short ok` 平均報酬可再增加 `{sim_delta:.2f}%` "
+                    f"（`promoted_n={sim_promoted_n}`）。"
+                )
+            elif sim_promoted_n >= 3 and sim_delta >= 0.5:
+                short_gate_decision = {
+                    "status": "review",
+                    "detail": (
+                        f"最小模擬顯示只升格 `{sim_actions}` 時，`1D short ok` 平均報酬可增加 `{sim_delta:.2f}%` "
+                        f"（`promoted_n={sim_promoted_n}`）；值得先做 action-level tuning，不要直接改整體 short gate。"
+                    ),
+                }
+
     return {
         "threshold": threshold_decision,
         "short_gate": short_gate_decision,
@@ -802,6 +835,7 @@ def build_weekly_review_payload(
     overall_by_spec_subtype = parts.get("overall_by_spec_subtype", pd.DataFrame())
     spec_risk_check = parts.get("spec_risk_check", pd.DataFrame())
     short_gate_promotion_watch = parts.get("short_gate_promotion_watch", pd.DataFrame())
+    short_gate_simulation = parts.get("short_gate_simulation", pd.DataFrame())
 
     summary = {
         "signal_dates": recent_dates,
@@ -828,6 +862,7 @@ def build_weekly_review_payload(
             "overall_by_spec_subtype": overall_by_spec_subtype.to_dict(orient="records"),
             "spec_risk_check": spec_risk_check.to_dict(orient="records"),
             "short_gate_promotion_watch": short_gate_promotion_watch.to_dict(orient="records"),
+            "short_gate_simulation": short_gate_simulation.to_dict(orient="records"),
             "current_rank_spec_risk_by_group": rank_spec_coverage["by_group"],
             "current_rank_spec_risk_by_layer": rank_spec_coverage["by_layer"],
             "current_rank_spec_risk_by_source": candidate_source_summary["by_source"],
@@ -913,6 +948,7 @@ def render_weekly_review_markdown(payload: dict[str, object]) -> str:
     lines.extend(["", "## Overall By Signal", _table_markdown(pd.DataFrame(tables.get("overall_by_signal", []))).rstrip(), ""])
     lines.extend(["## Threshold Delta", _table_markdown(pd.DataFrame(tables.get("weekly_threshold_delta", []))).rstrip(), ""])
     lines.extend(["## Short Gate Promotion Watch", _table_markdown(pd.DataFrame(tables.get("short_gate_promotion_watch", []))).rstrip(), ""])
+    lines.extend(["## Short Gate Simulation", _table_markdown(pd.DataFrame(tables.get("short_gate_simulation", []))).rstrip(), ""])
     lines.extend(["## Heat Bias Check", _table_markdown(pd.DataFrame(tables.get("heat_bias_check", []))).rstrip(), ""])
     lines.extend(["## Overall By Spec Risk", _table_markdown(pd.DataFrame(tables.get("overall_by_spec_risk", []))).rstrip(), ""])
     lines.extend(["## Overall By Spec Subtype", _table_markdown(pd.DataFrame(tables.get("overall_by_spec_subtype", []))).rstrip(), ""])

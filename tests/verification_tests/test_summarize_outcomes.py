@@ -357,6 +357,8 @@ class SummarizeOutcomesTests(unittest.TestCase):
         self.assertIn("## Overall By Action", md)
         self.assertIn("## Short Threshold Diagnostics", md)
         self.assertIn("## Short Gate Promotion Watch", md)
+        self.assertIn("## Short Gate Action Context", md)
+        self.assertIn("## Short Gate Simulation", md)
         self.assertIn("## Overall By Scenario + Action", md)
         self.assertIn("reco_status", md)
         self.assertIn("Momentum Leader", md)
@@ -512,7 +514,13 @@ class SummarizeOutcomesTests(unittest.TestCase):
         top_row = parts["short_gate_promotion_watch"].iloc[0]
         self.assertEqual(str(top_row["action"]), "開高不追")
         self.assertEqual(str(top_row["verdict"]), "watch_upgrade")
+        self.assertTrue(bool(top_row["promotion_ready"]))
         self.assertGreater(float(top_row["delta_avg_ret_below_minus_ok"]), 0.0)
+        self.assertFalse(parts["short_gate_action_context"].empty)
+        self.assertFalse(parts["short_gate_simulation"].empty)
+        sim_row = parts["short_gate_simulation"].iloc[0]
+        self.assertIn("開高不追", str(sim_row["promoted_actions"]))
+        self.assertGreater(float(sim_row["delta_avg_ret_simulated_minus_current"]), 0.0)
 
     def test_summarize_atr_band_checkpoints_tracks_maturity_and_levels(self) -> None:
         alert_tracking = pd.DataFrame(
