@@ -1979,6 +1979,151 @@ class PushMessageTests(unittest.TestCase):
 
         self.assertEqual(len(out), 260)
 
+    def test_build_open_not_chase_shadow_observations_marks_only_normal_rows_eligible(self) -> None:
+        df_rank = pd.DataFrame(
+            [
+                {
+                    "rank": 1,
+                    "ticker": "AAA.TW",
+                    "name": "Alpha",
+                    "group": "theme",
+                    "layer": "short_attack",
+                    "grade": "A",
+                    "setup_score": 9,
+                    "risk_score": 3,
+                    "ret5_pct": 16.0,
+                    "ret20_pct": 20.0,
+                    "volume_ratio20": 1.8,
+                    "signals": "TREND,ACCEL",
+                    "rank_change": 0,
+                    "setup_change": 1,
+                    "spec_risk_label": "正常",
+                    "volatility_tag": "活潑",
+                },
+                {
+                    "rank": 2,
+                    "ticker": "BBB.TW",
+                    "name": "Beta",
+                    "group": "theme",
+                    "layer": "short_attack",
+                    "grade": "A",
+                    "setup_score": 8,
+                    "risk_score": 3,
+                    "ret5_pct": 15.5,
+                    "ret20_pct": 19.0,
+                    "volume_ratio20": 1.7,
+                    "signals": "TREND,ACCEL",
+                    "rank_change": 0,
+                    "setup_change": 1,
+                    "spec_risk_label": "投機偏高",
+                    "volatility_tag": "活潑",
+                },
+            ]
+        )
+        market_regime = {"ret20_pct": 12.0, "volume_ratio20": 1.1, "is_bullish": True, "session_phase": "postclose"}
+        us_market = {"summary": "偏強"}
+
+        out = dtw.build_open_not_chase_shadow_observations(df_rank, market_regime, us_market)
+
+        self.assertEqual(list(out["ticker"]), ["AAA.TW", "BBB.TW"])
+        self.assertEqual(str(out.iloc[0]["scenario_label"]), "高檔震盪盤")
+        self.assertEqual(str(out.iloc[0]["market_heat"]), "hot")
+        self.assertTrue(bool(out.iloc[0]["shadow_eligible"]))
+        self.assertFalse(bool(out.iloc[1]["shadow_eligible"]))
+        self.assertIn("spec_risk 非 normal", str(out.iloc[1]["shadow_reason"]))
+
+    def test_save_open_not_chase_shadow_observations_writes_local_and_snapshot_files(self) -> None:
+        df_rank = pd.DataFrame(
+            [
+                {
+                    "rank": 1,
+                    "ticker": "AAA.TW",
+                    "name": "Alpha",
+                    "group": "theme",
+                    "layer": "short_attack",
+                    "grade": "A",
+                    "setup_score": 9,
+                    "risk_score": 3,
+                    "ret5_pct": 16.0,
+                    "ret20_pct": 20.0,
+                    "volume_ratio20": 1.8,
+                    "signals": "TREND,ACCEL",
+                    "rank_change": 0,
+                    "setup_change": 1,
+                    "spec_risk_label": "正常",
+                    "volatility_tag": "活潑",
+                }
+            ]
+        )
+        market_regime = {"ret20_pct": 12.0, "volume_ratio20": 1.1, "is_bullish": True, "session_phase": "postclose"}
+        us_market = {"summary": "偏強"}
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            with patch.object(dtw, "SHADOW_OPEN_NOT_CHASE_CSV", tmp / "shadow.csv"), patch.object(
+                dtw, "SHADOW_OPEN_NOT_CHASE_MD", tmp / "shadow.md"
+            ), patch.object(
+                dtw, "SHADOW_OPEN_NOT_CHASE_SNAPSHOTS_CSV", tmp / "shadow_snapshots.csv"
+            ), patch.object(
+                dtw, "RANK_CSV", tmp / "daily_rank.csv"
+            ):
+                out = dtw.save_open_not_chase_shadow_observations(df_rank, market_regime, us_market)
+
+            self.assertFalse(out.empty)
+            self.assertTrue((tmp / "shadow.csv").exists())
+            self.assertTrue((tmp / "shadow.md").exists())
+            self.assertTrue((tmp / "shadow_snapshots.csv").exists())
+            md = (tmp / "shadow.md").read_text(encoding="utf-8")
+            snap = pd.read_csv(tmp / "shadow_snapshots.csv")
+
+        self.assertIn("Shadow Observation", md)
+        self.assertIn("AAA.TW", md)
+        self.assertEqual(len(snap), 1)
+        self.assertEqual(str(snap.iloc[0]["ticker"]), "AAA.TW")
+
+    def test_save_open_not_chase_shadow_observations_writes_header_only_when_empty(self) -> None:
+        df_rank = pd.DataFrame(
+            [
+                {
+                    "rank": 1,
+                    "ticker": "AAA.TW",
+                    "name": "Alpha",
+                    "group": "theme",
+                    "layer": "short_attack",
+                    "grade": "A",
+                    "setup_score": 9,
+                    "risk_score": 2,
+                    "ret5_pct": 6.0,
+                    "ret20_pct": 20.0,
+                    "volume_ratio20": 1.8,
+                    "signals": "TREND,ACCEL",
+                    "rank_change": 0,
+                    "setup_change": 1,
+                    "spec_risk_label": "正常",
+                    "volatility_tag": "活潑",
+                }
+            ]
+        )
+        market_regime = {"ret20_pct": 12.0, "volume_ratio20": 1.1, "is_bullish": True, "session_phase": "postclose"}
+        us_market = {"summary": "偏強"}
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            with patch.object(dtw, "SHADOW_OPEN_NOT_CHASE_CSV", tmp / "shadow.csv"), patch.object(
+                dtw, "SHADOW_OPEN_NOT_CHASE_MD", tmp / "shadow.md"
+            ), patch.object(
+                dtw, "SHADOW_OPEN_NOT_CHASE_SNAPSHOTS_CSV", tmp / "shadow_snapshots.csv"
+            ), patch.object(
+                dtw, "RANK_CSV", tmp / "daily_rank.csv"
+            ):
+                out = dtw.save_open_not_chase_shadow_observations(df_rank, market_regime, us_market)
+
+            self.assertTrue(out.empty)
+            csv_df = pd.read_csv(tmp / "shadow.csv")
+            self.assertEqual(len(csv_df), 0)
+            self.assertIn("shadow_status", csv_df.columns)
+            self.assertFalse((tmp / "shadow_snapshots.csv").exists())
+
     def test_special_etf_message_renders_requested_tickers(self) -> None:
         df = pd.DataFrame(
             [

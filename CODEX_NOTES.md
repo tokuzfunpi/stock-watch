@@ -1466,3 +1466,25 @@ layer 看起來則是：
   - 近週：仍是 `mixed/hold`，主因 `below_n=2`、樣本太薄
 - 所以最新建議不是直接改規則，而是：
   - 若要往前走，下一步應該做 `開高不追` 的 shadow / paper experiment
+
+## 2026-04-26 補充：開高不追 shadow observation 已上線
+- `daily_theme_watchlist.py` 現在會在正常 daily run 裡額外寫一條 **影子觀察線**：
+  - `/theme_watchlist_daily/shadow_open_not_chase_candidates.csv`
+  - `/theme_watchlist_daily/shadow_open_not_chase.md`
+- 這條線只做記錄，不影響：
+  - 正式 `short_candidates`
+  - 正式 Telegram notifications
+  - 既有 candidate / backup selection 邏輯
+- shadow selection 目前只看：
+  - `short_term_action_label == 開高不追`
+  - 並額外標記 `shadow_eligible`
+  - guardrails 仍要求：
+    - `scenario_label` 在 `強勢延伸盤 / 高檔震盪盤`
+    - `market_heat == hot`
+    - `spec_risk_bucket == normal`
+- 另外會把符合觀察範圍的名字寫進：
+  - `verification/watchlist_daily/shadow_open_not_chase_snapshots.csv`
+  - 但只有當日真的有 `開高不追` 名單時才會寫 snapshot
+- 目前實跑結果：
+  - shadow 檔案已會正常產生
+  - 當天若沒有符合 `開高不追` 的觀察標的，`shadow_open_not_chase_candidates.csv` 會保留空表頭，不再是空白壞檔

@@ -83,8 +83,11 @@ RUNTIME_METRICS_MD = OUTDIR / "runtime_metrics.md"
 RUNTIME_METRICS_JSON = OUTDIR / "runtime_metrics.json"
 ALERT_TRACK_CSV = OUTDIR / "alert_tracking.csv"
 FEEDBACK_SUMMARY_CSV = OUTDIR / "feedback_summary.csv"
+SHADOW_OPEN_NOT_CHASE_CSV = OUTDIR / "shadow_open_not_chase_candidates.csv"
+SHADOW_OPEN_NOT_CHASE_MD = OUTDIR / "shadow_open_not_chase.md"
 SUCCESS_FILE = OUTDIR / "last_success_date.txt"
 VERIFICATION_OUTCOMES_CSV = BASE_DIR / "verification" / "watchlist_daily" / "reco_outcomes.csv"
+SHADOW_OPEN_NOT_CHASE_SNAPSHOTS_CSV = BASE_DIR / "verification" / "watchlist_daily" / "shadow_open_not_chase_snapshots.csv"
 LOG_DIR = OUTDIR / "logs"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -1795,6 +1798,68 @@ def build_candidate_sets(
     return short_candidates, short_backups, midlong_candidates, midlong_backups
 
 
+def market_heat_bucket(df_rank: Optional[pd.DataFrame], scenario: dict) -> str:
+    if df_rank is None or df_rank.empty:
+        return "normal"
+    working = df_rank.head(10).copy()
+    if working.empty:
+        return "normal"
+    for col in ["risk_score", "ret5_pct"]:
+        if col in working.columns:
+            working[col] = pd.to_numeric(working[col], errors="coerce")
+    hot_mask = (
+        working.get("risk_score", pd.Series(dtype=float)).fillna(0).ge(5)
+        | working.get("ret5_pct", pd.Series(dtype=float)).fillna(0).ge(12)
+        | working.get("volatility_tag", pd.Series(dtype=str)).astype(str).isin(["活潑", "劇烈"])
+        | working.get("spec_risk_label", pd.Series(dtype=str)).astype(str).eq("疑似炒作風險高")
+    )
+    hot_ratio = float(hot_mask.mean()) if len(working) else 0.0
+    label = str(scenario.get("label", "") or "")
+    if hot_ratio >= 0.3 and label in {"高檔震盪盤", "強勢延伸盤"}:
+        return "hot"
+    if hot_ratio >= 0.15:
+        return "warm"
+    return "normal"
+
+
+def _shadow_spec_risk_bucket(spec_label: str) -> str:
+    spec_label = str(spec_label or "").strip()
+    if spec_label == "疑似炒作風險高":
+        return "high"
+    if spec_label in {"投機偏高", "偏熱", "留意"}:
+        return "watch"
+    return "normal"
+
+
+def _empty_shadow_open_not_chase_df() -> pd.DataFrame:
+    return pd.DataFrame(
+        columns=[
+            "rank",
+            "ticker",
+            "name",
+            "group",
+            "layer",
+            "grade",
+            "setup_score",
+            "risk_score",
+            "ret5_pct",
+            "ret20_pct",
+            "volume_ratio20",
+            "signals",
+            "spec_risk_label",
+            "scenario_label",
+            "market_heat",
+            "spec_risk_bucket",
+            "action_label",
+            "shadow_target",
+            "shadow_guardrail_scope",
+            "shadow_eligible",
+            "shadow_status",
+            "shadow_reason",
+        ]
+    )
+
+
 def build_state(df_rank: pd.DataFrame, market_regime: dict) -> str:
     base_state = "|".join(
         f"{r.ticker}:{r.setup_score}:{r.risk_score}:{r.signals}:{r.rank}:{r.grade}"
@@ -1824,6 +1889,146 @@ def short_term_action_label(row: pd.Series) -> str:
     if row["setup_change"] > 0 or row["rank_change"] > 0:
         return "續抱觀察"
     return "續追蹤"
+
+
+def build_open_not_chase_shadow_observations(
+    df_rank: pd.DataFrame,
+    market_regime: dict,
+    us_market: dict,
+) -> pd.DataFrame:
+    if df_rank is None or df_rank.empty:
+        return _empty_shadow_open_not_chase_df()
+
+    scenario = build_market_scenario(market_regime, us_market, df_rank)
+    market_heat = market_heat_bucket(df_rank, scenario)
+    pool = rank_short_term_pool(df_rank).copy()
+    if pool.empty:
+        return _empty_shadow_open_not_chase_df()
+
+    pool["action_label"] = pool.apply(short_term_action_label, axis=1)
+    pool = pool[pool["action_label"].astype(str) == "開高不追"].copy()
+    if pool.empty:
+        return _empty_shadow_open_not_chase_df()
+
+    pool["scenario_label"] = str(scenario.get("label", ""))
+    pool["market_heat"] = market_heat
+    pool["spec_risk_bucket"] = pool.get("spec_risk_label", "").astype(str).apply(_shadow_spec_risk_bucket)
+    pool["shadow_target"] = "開高不追"
+    pool["shadow_guardrail_scope"] = "1D short only"
+    pool["shadow_eligible"] = (
+        pool["scenario_label"].astype(str).isin(["強勢延伸盤", "高檔震盪盤"])
+        & pool["market_heat"].astype(str).eq("hot")
+        & pool["spec_risk_bucket"].astype(str).eq("normal")
+    )
+
+    def _shadow_reason(row: pd.Series) -> str:
+        reasons: list[str] = []
+        if str(row.get("scenario_label", "")) not in {"強勢延伸盤", "高檔震盪盤"}:
+            reasons.append("scenario 不在目標區")
+        if str(row.get("market_heat", "")) != "hot":
+            reasons.append("market_heat 非 hot")
+        if str(row.get("spec_risk_bucket", "")) != "normal":
+            reasons.append("spec_risk 非 normal")
+        if not reasons:
+            return "符合 shadow promotion 觀察條件"
+        return " / ".join(reasons)
+
+    pool["shadow_reason"] = pool.apply(_shadow_reason, axis=1)
+    pool["shadow_status"] = pool["shadow_eligible"].map(lambda v: "eligible" if bool(v) else "observe_only")
+    keep_cols = _empty_shadow_open_not_chase_df().columns.tolist()
+    return pool[keep_cols].sort_values(by=["shadow_eligible", "rank"], ascending=[False, True]).reset_index(drop=True)
+
+
+def _upsert_shadow_open_not_chase_snapshots(path: Path, rows: pd.DataFrame) -> None:
+    if rows is None or rows.empty:
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    incoming = rows.copy()
+    key_cols = ["signal_date", "ticker"]
+    for col in key_cols:
+        incoming[col] = incoming[col].astype(str).str.strip()
+
+    if path.exists():
+        try:
+            existing = pd.read_csv(path)
+        except Exception:
+            existing = pd.DataFrame()
+    else:
+        existing = pd.DataFrame()
+
+    if existing.empty:
+        incoming.to_csv(path, index=False, encoding="utf-8")
+        return
+
+    for col in incoming.columns:
+        if col not in existing.columns:
+            existing[col] = ""
+    for col in existing.columns:
+        if col not in incoming.columns:
+            incoming[col] = ""
+    existing = existing[incoming.columns.tolist()].copy()
+    for col in key_cols:
+        if col not in existing.columns:
+            existing[col] = ""
+        existing[col] = existing[col].astype(str).str.strip()
+    merged = pd.concat([existing, incoming], ignore_index=True)
+    merged = merged.drop_duplicates(subset=key_cols, keep="last")
+    merged.to_csv(path, index=False, encoding="utf-8")
+
+
+def build_open_not_chase_shadow_markdown(df_shadow: pd.DataFrame) -> str:
+    now_text = datetime.now(LOCAL_TZ).strftime("%Y-%m-%d %H:%M:%S %Z")
+    lines = [
+        "# 開高不追 Shadow Observation",
+        f"- Generated: {now_text}",
+        "- Scope: 只做影子觀察，不影響正式 short candidates / Telegram notifications。",
+        "- Experiment: `開高不追` / `1D short only` / shadow promotion watch",
+        "",
+    ]
+    if df_shadow is None or df_shadow.empty:
+        lines.extend(["## Candidates", "", "- None", ""])
+        return "\n".join(lines)
+
+    eligible_count = int(df_shadow.get("shadow_eligible", pd.Series(dtype=bool)).astype(bool).sum())
+    lines.extend(
+        [
+            f"- Total observed: `{len(df_shadow)}`",
+            f"- Eligible now: `{eligible_count}`",
+            "",
+            "## Candidates",
+            "",
+            "| Rank | Ticker | Name | Scenario | Heat | Spec | Eligible | Reason | 5D | 20D | Signals |",
+            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+        ]
+    )
+    for _, row in df_shadow.iterrows():
+        lines.append(
+            f"| {int(row['rank'])} | {row['ticker']} | {row['name']} | {row['scenario_label']} | {row['market_heat']} | "
+            f"{row['spec_risk_bucket']} | {str(bool(row['shadow_eligible']))} | {row['shadow_reason']} | "
+            f"{row['ret5_pct']} | {row['ret20_pct']} | {row['signals']} |"
+        )
+    lines.append("")
+    return "\n".join(lines)
+
+
+def save_open_not_chase_shadow_observations(
+    df_rank: pd.DataFrame,
+    market_regime: dict,
+    us_market: dict,
+) -> pd.DataFrame:
+    df_shadow = build_open_not_chase_shadow_observations(df_rank, market_regime, us_market)
+    SHADOW_OPEN_NOT_CHASE_MD.write_text(build_open_not_chase_shadow_markdown(df_shadow), encoding="utf-8")
+    if df_shadow.empty:
+        _empty_shadow_open_not_chase_df().to_csv(SHADOW_OPEN_NOT_CHASE_CSV, index=False, encoding="utf-8-sig")
+        return df_shadow
+
+    df_shadow.to_csv(SHADOW_OPEN_NOT_CHASE_CSV, index=False, encoding="utf-8-sig")
+    snapshot_rows = df_shadow.copy()
+    snapshot_rows.insert(0, "generated_at", datetime.now(LOCAL_TZ).strftime("%Y-%m-%d %H:%M:%S %Z"))
+    snapshot_rows.insert(1, "signal_date", today_local_str())
+    snapshot_rows["source"] = str(RANK_CSV)
+    _upsert_shadow_open_not_chase_snapshots(SHADOW_OPEN_NOT_CHASE_SNAPSHOTS_CSV, snapshot_rows)
+    return df_shadow
 
 
 def is_strict_short_chase(row: pd.Series) -> bool:
@@ -3192,6 +3397,18 @@ def main(*, force_run: bool | None = None) -> int:
         )
         market_scenario = build_market_scenario(market_regime, us_market, df_rank)
         _timed_call(step_timings, "reports", save_reports, df_rank, market_regime, bt_steady, bt_attack, us_market)
+        try:
+            _timed_call(
+                step_timings,
+                "shadow_observation",
+                save_open_not_chase_shadow_observations,
+                df_rank,
+                market_regime,
+                us_market,
+            )
+        except Exception as exc:
+            warnings.append(f"shadow_observation: {exc}")
+            logger.exception("Shadow observation update failed (best effort): %s", exc)
         try:
             _timed_call(
                 step_timings,
