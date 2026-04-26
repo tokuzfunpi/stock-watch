@@ -12,6 +12,8 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from daily_theme_watchlist import ALERT_TRACK_CSV, LOCAL_TZ
+from stock_watch.signals import apply_signal_template_labels
+from stock_watch.signals import build_speculative_risk_profile
 
 
 def _pct(v: float | None) -> str:
@@ -65,6 +67,56 @@ def _pick_best_row(df: pd.DataFrame, min_samples: int, delta_col: str) -> pd.Ser
     return work.iloc[0]
 
 
+def _spec_risk_bucket_from_row(row: pd.Series) -> str:
+    score, label, _ = _spec_risk_profile_from_row(row)
+    if pd.notna(score):
+        if float(score) >= 6:
+            return "high"
+        if float(score) >= 3:
+            return "watch"
+        return "normal"
+    if "疑似炒作風險高" in label:
+        return "high"
+    if label in {"偏熱", "留意"}:
+        return "watch"
+    return "normal"
+
+
+def _spec_risk_profile_from_row(row: pd.Series) -> tuple[object, str, str]:
+    score = pd.to_numeric(row.get("spec_risk_score"), errors="coerce")
+    label = str(row.get("spec_risk_label", "")).strip()
+    subtype = str(row.get("spec_risk_subtype", "")).strip()
+    if pd.notna(score) or label:
+        return score, label, subtype
+
+    def _num(name: str, default: float = 0.0) -> float:
+        value = pd.to_numeric(row.get(name), errors="coerce")
+        return float(default if pd.isna(value) else value)
+
+    def _int_num(name: str, default: int = 0) -> int:
+        value = pd.to_numeric(row.get(name), errors="coerce")
+        return int(default if pd.isna(value) else value)
+
+    try:
+        profile = build_speculative_risk_profile(
+            ret1_pct=_num("ret1_pct"),
+            ret5_pct=_num("ret5_pct"),
+            ret20_pct=_num("ret20_pct"),
+            volume_ratio20=_num("volume_ratio20"),
+            bias20_pct=_num("bias20_pct"),
+            atr_pct=_num("atr_pct"),
+            range20_pct=_num("range20_pct"),
+            drawdown120_pct=_num("drawdown120_pct", -100.0),
+            risk_score=_int_num("risk_score"),
+            setup_score=_int_num("setup_score"),
+            signals=str(row.get("signals", "")),
+            group=str(row.get("group", "")),
+        )
+        return profile.score, profile.label, profile.subtype
+    except Exception:
+        return pd.NA, "", ""
+
+
 def build_key_findings(parts: dict[str, pd.DataFrame]) -> list[str]:
     findings: list[str] = []
 
@@ -92,6 +144,31 @@ def build_key_findings(parts: dict[str, pd.DataFrame]) -> list[str]:
             f"按日期看，`{date_row['signal_date']}` 的熱度差最明顯："
             f"`hot-normal = {_pct(date_row['delta_avg_ret_hot_minus_normal'])}%` "
             f"（`hot_n={int(date_row['hot_n'])}`、`normal_n={int(date_row['normal_n'])}`）。"
+        )
+
+    template_row = _pick_best_row(parts.get("overall_by_signal_template", pd.DataFrame()), min_samples=3, delta_col="avg_ret")
+    if template_row is not None:
+        findings.append(
+            f"`{int(template_row['horizon_days'])}D {template_row['watch_type']}` 裡，"
+            f"`{template_row['signal_template']}` 目前平均報酬 `{_pct(template_row['avg_ret'])}%`、"
+            f"勝率 `{_pct(template_row['win_rate'])}%`，`n={int(template_row['n'])}`。"
+        )
+
+    spec_row = _pick_best_row(parts.get("spec_risk_check", pd.DataFrame()), min_samples=3, delta_col="delta_avg_ret_high_minus_normal")
+    if spec_row is not None:
+        direction = "較強" if float(spec_row["delta_avg_ret_high_minus_normal"]) >= 0 else "較弱"
+        findings.append(
+            f"`{int(spec_row['horizon_days'])}D {spec_row['watch_type']}` 裡，`high` 疑似炒作樣本相較 `normal` {direction}，"
+            f"平均報酬差 `{_pct(spec_row['delta_avg_ret_high_minus_normal'])}%`，"
+            f"`min_n={int(spec_row['min_n'])}`、`confidence={spec_row['confidence']}`。"
+        )
+
+    spec_subtype_row = _pick_best_row(parts.get("overall_by_spec_subtype", pd.DataFrame()), min_samples=3, delta_col="avg_ret")
+    if spec_subtype_row is not None:
+        findings.append(
+            f"`{int(spec_subtype_row['horizon_days'])}D {spec_subtype_row['watch_type']}` 裡，"
+            f"`{spec_subtype_row['spec_risk_subtype']}` 平均報酬 `{_pct(spec_subtype_row['avg_ret'])}%`、"
+            f"勝率 `{_pct(spec_subtype_row['win_rate'])}%`，`n={int(spec_subtype_row['n'])}`。"
         )
 
     if not findings and not parts.get("overall_by_scenario", pd.DataFrame()).empty:
@@ -210,11 +287,16 @@ def summarize_outcomes(outcomes: pd.DataFrame) -> dict[str, pd.DataFrame]:
             "overall_by_scenario": empty,
             "overall_by_scenario_action": empty,
             "overall_by_scenario_heat": empty,
+            "overall_by_signal_template": empty,
+            "overall_by_scenario_template": empty,
+            "overall_by_spec_risk": empty,
+            "overall_by_spec_subtype": empty,
             "delta_ok_minus_below": empty,
             "delta_ok_minus_below_by_date": empty,
             "heat_bias_check": empty,
             "heat_bias_by_scenario": empty,
             "heat_bias_by_date": empty,
+            "spec_risk_check": empty,
         }
 
     df = outcomes.copy()
@@ -233,11 +315,16 @@ def summarize_outcomes(outcomes: pd.DataFrame) -> dict[str, pd.DataFrame]:
             "overall_by_scenario": empty,
             "overall_by_scenario_action": empty,
             "overall_by_scenario_heat": empty,
+            "overall_by_signal_template": empty,
+            "overall_by_scenario_template": empty,
+            "overall_by_spec_risk": empty,
+            "overall_by_spec_subtype": empty,
             "delta_ok_minus_below": empty,
             "delta_ok_minus_below_by_date": empty,
             "heat_bias_check": empty,
             "heat_bias_by_scenario": empty,
             "heat_bias_by_date": empty,
+            "spec_risk_check": empty,
         }
 
     if "watch_type" in df.columns:
@@ -256,11 +343,16 @@ def summarize_outcomes(outcomes: pd.DataFrame) -> dict[str, pd.DataFrame]:
             "overall_by_scenario": empty,
             "overall_by_scenario_action": empty,
             "overall_by_scenario_heat": empty,
+            "overall_by_signal_template": empty,
+            "overall_by_scenario_template": empty,
+            "overall_by_spec_risk": empty,
+            "overall_by_spec_subtype": empty,
             "delta_ok_minus_below": empty,
             "delta_ok_minus_below_by_date": empty,
             "heat_bias_check": empty,
             "heat_bias_by_scenario": empty,
             "heat_bias_by_date": empty,
+            "spec_risk_check": empty,
         }
 
     # Split analysis: ok vs below_threshold (forced-fill).
@@ -286,6 +378,15 @@ def summarize_outcomes(outcomes: pd.DataFrame) -> dict[str, pd.DataFrame]:
         ] = "unknown"
     else:
         df["scenario_label"] = "unknown"
+
+    df = apply_signal_template_labels(df, signal_col="signals", output_col="signal_template")
+    df["signal_template"] = df["signal_template"].fillna("General").astype(str).str.strip()
+    df.loc[df["signal_template"] == "", "signal_template"] = "General"
+    spec_profiles = df.apply(_spec_risk_profile_from_row, axis=1, result_type="expand")
+    spec_profiles.columns = ["_spec_risk_score", "_spec_risk_label", "_spec_risk_subtype"]
+    df["spec_risk_subtype"] = spec_profiles["_spec_risk_subtype"].fillna("").astype(str).str.strip()
+    df.loc[df["spec_risk_subtype"] == "", "spec_risk_subtype"] = "正常"
+    df["spec_risk_bucket"] = df.apply(_spec_risk_bucket_from_row, axis=1)
 
     df["realized_ret_pct"] = pd.to_numeric(df["realized_ret_pct"], errors="coerce")
     df["horizon_days"] = pd.to_numeric(df["horizon_days"], errors="coerce").astype("Int64")
@@ -418,6 +519,68 @@ def summarize_outcomes(outcomes: pd.DataFrame) -> dict[str, pd.DataFrame]:
     for c in ["avg_ret", "med_ret", "min_ret", "max_ret"]:
         overall_by_scenario_action[c] = overall_by_scenario_action[c].round(2)
 
+    overall_by_signal_template = (
+        df.groupby(["horizon_days", "watch_type", "signal_template"], dropna=False)
+        .agg(
+            n=("realized_ret_pct", "count"),
+            win_rate=("win", "mean"),
+            avg_ret=("realized_ret_pct", "mean"),
+            med_ret=("realized_ret_pct", "median"),
+        )
+        .reset_index()
+        .sort_values(by=["horizon_days", "watch_type", "n", "avg_ret"], ascending=[True, True, False, False])
+    )
+    overall_by_signal_template["win_rate"] = (overall_by_signal_template["win_rate"] * 100).round(1)
+    for c in ["avg_ret", "med_ret"]:
+        overall_by_signal_template[c] = overall_by_signal_template[c].round(2)
+
+    overall_by_scenario_template = (
+        df.groupby(["horizon_days", "watch_type", "scenario_label", "signal_template"], dropna=False)
+        .agg(
+            n=("realized_ret_pct", "count"),
+            win_rate=("win", "mean"),
+            avg_ret=("realized_ret_pct", "mean"),
+            med_ret=("realized_ret_pct", "median"),
+        )
+        .reset_index()
+        .sort_values(by=["horizon_days", "watch_type", "scenario_label", "n", "avg_ret"], ascending=[True, True, True, False, False])
+    )
+    overall_by_scenario_template["win_rate"] = (overall_by_scenario_template["win_rate"] * 100).round(1)
+    for c in ["avg_ret", "med_ret"]:
+        overall_by_scenario_template[c] = overall_by_scenario_template[c].round(2)
+
+    overall_by_spec_risk = (
+        df.groupby(["horizon_days", "watch_type", "spec_risk_bucket"], dropna=False)
+        .agg(
+            n=("realized_ret_pct", "count"),
+            win_rate=("win", "mean"),
+            avg_ret=("realized_ret_pct", "mean"),
+            med_ret=("realized_ret_pct", "median"),
+        )
+        .reset_index()
+        .sort_values(by=["horizon_days", "watch_type", "spec_risk_bucket"], ascending=[True, True, True])
+    )
+    overall_by_spec_risk["win_rate"] = (overall_by_spec_risk["win_rate"] * 100).round(1)
+    for c in ["avg_ret", "med_ret"]:
+        overall_by_spec_risk[c] = overall_by_spec_risk[c].round(2)
+
+    overall_by_spec_subtype = (
+        df[df["spec_risk_bucket"] != "normal"]
+        .groupby(["horizon_days", "watch_type", "spec_risk_subtype"], dropna=False)
+        .agg(
+            n=("realized_ret_pct", "count"),
+            win_rate=("win", "mean"),
+            avg_ret=("realized_ret_pct", "mean"),
+            med_ret=("realized_ret_pct", "median"),
+        )
+        .reset_index()
+        .sort_values(by=["horizon_days", "watch_type", "n", "avg_ret"], ascending=[True, True, False, False])
+    )
+    if not overall_by_spec_subtype.empty:
+        overall_by_spec_subtype["win_rate"] = (overall_by_spec_subtype["win_rate"] * 100).round(1)
+        for c in ["avg_ret", "med_ret"]:
+            overall_by_spec_subtype[c] = overall_by_spec_subtype[c].round(2)
+
     overall_by_signal_status = (
         df.groupby(["horizon_days", "watch_type", "reco_status"], dropna=False)
         .agg(
@@ -455,6 +618,7 @@ def summarize_outcomes(outcomes: pd.DataFrame) -> dict[str, pd.DataFrame]:
     heat_bias_check = pd.DataFrame()
     heat_bias_by_scenario = pd.DataFrame()
     heat_bias_by_date = pd.DataFrame()
+    spec_risk_check = pd.DataFrame()
     try:
         delta_base = overall_by_signal_status.copy()
         delta_base = delta_base[delta_base["reco_status"].isin(["ok", "below_threshold"])].copy()
@@ -635,6 +799,51 @@ def summarize_outcomes(outcomes: pd.DataFrame) -> dict[str, pd.DataFrame]:
         heat_bias_by_scenario = pd.DataFrame()
         heat_bias_by_date = pd.DataFrame()
 
+    try:
+        spec_base = overall_by_spec_risk.copy()
+        spec_base = spec_base[spec_base["spec_risk_bucket"].isin(["normal", "high"])].copy()
+        if not spec_base.empty:
+            normal = spec_base[spec_base["spec_risk_bucket"] == "normal"].copy()
+            high = spec_base[spec_base["spec_risk_bucket"] == "high"].copy()
+            merged_spec = high.merge(
+                normal,
+                on=["horizon_days", "watch_type"],
+                how="inner",
+                suffixes=("_high", "_normal"),
+            )
+            if not merged_spec.empty:
+                min_n_spec = pd.concat(
+                    [
+                        pd.to_numeric(merged_spec["n_high"], errors="coerce"),
+                        pd.to_numeric(merged_spec["n_normal"], errors="coerce"),
+                    ],
+                    axis=1,
+                ).min(axis=1)
+                spec_risk_check = pd.DataFrame(
+                    {
+                        "horizon_days": merged_spec["horizon_days"],
+                        "watch_type": merged_spec["watch_type"],
+                        "high_n": merged_spec["n_high"],
+                        "normal_n": merged_spec["n_normal"],
+                        "min_n": min_n_spec.astype("Int64"),
+                        "confidence": [_confidence_label(int(x)) if pd.notna(x) else "low" for x in min_n_spec.tolist()],
+                        "delta_win_rate_high_minus_normal": (
+                            pd.to_numeric(merged_spec["win_rate_high"], errors="coerce")
+                            - pd.to_numeric(merged_spec["win_rate_normal"], errors="coerce")
+                        ).round(1),
+                        "delta_avg_ret_high_minus_normal": (
+                            pd.to_numeric(merged_spec["avg_ret_high"], errors="coerce")
+                            - pd.to_numeric(merged_spec["avg_ret_normal"], errors="coerce")
+                        ).round(2),
+                        "delta_med_ret_high_minus_normal": (
+                            pd.to_numeric(merged_spec["med_ret_high"], errors="coerce")
+                            - pd.to_numeric(merged_spec["med_ret_normal"], errors="coerce")
+                        ).round(2),
+                    }
+                ).sort_values(by=["horizon_days", "watch_type"])
+    except Exception:
+        spec_risk_check = pd.DataFrame()
+
     return {
         "by_action": by_action,
         "by_signal": by_signal,
@@ -646,11 +855,16 @@ def summarize_outcomes(outcomes: pd.DataFrame) -> dict[str, pd.DataFrame]:
         "overall_by_scenario": overall_by_scenario,
         "overall_by_scenario_action": overall_by_scenario_action,
         "overall_by_scenario_heat": overall_by_scenario_heat,
+        "overall_by_signal_template": overall_by_signal_template,
+        "overall_by_scenario_template": overall_by_scenario_template,
+        "overall_by_spec_risk": overall_by_spec_risk,
+        "overall_by_spec_subtype": overall_by_spec_subtype,
         "delta_ok_minus_below": delta_ok_minus_below,
         "delta_ok_minus_below_by_date": delta_ok_minus_below_by_date,
         "heat_bias_check": heat_bias_check,
         "heat_bias_by_scenario": heat_bias_by_scenario,
         "heat_bias_by_date": heat_bias_by_date,
+        "spec_risk_check": spec_risk_check,
     }
 
 
@@ -759,14 +973,24 @@ def build_summary_markdown(
     lines.extend(["## Overall By Signal (all dates)", _table_markdown(parts["overall_by_signal"]).rstrip(), ""])
     if not parts["overall_by_market_heat"].empty:
         lines.extend(["## Overall By Market Heat (all dates)", _table_markdown(parts["overall_by_market_heat"]).rstrip(), ""])
+    if not parts["overall_by_signal_template"].empty:
+        lines.extend(["## Overall By Signal Template (all dates)", _table_markdown(parts["overall_by_signal_template"]).rstrip(), ""])
+    if not parts["overall_by_spec_risk"].empty:
+        lines.extend(["## Overall By Spec Risk (all dates)", _table_markdown(parts["overall_by_spec_risk"]).rstrip(), ""])
+    if not parts["overall_by_spec_subtype"].empty:
+        lines.extend(["## Overall By Spec Subtype (all dates)", _table_markdown(parts["overall_by_spec_subtype"]).rstrip(), ""])
     if not parts["overall_by_scenario"].empty:
         lines.extend(["## Overall By Scenario (all dates)", _table_markdown(parts["overall_by_scenario"]).rstrip(), ""])
+    if not parts["overall_by_scenario_template"].empty:
+        lines.extend(["## Overall By Scenario + Signal Template (all dates, top 80)", _table_markdown(parts["overall_by_scenario_template"].head(80)).rstrip(), ""])
     if not parts["heat_bias_check"].empty:
         lines.extend(["## Heat Bias Check (hot - normal)", _table_markdown(parts["heat_bias_check"]).rstrip(), ""])
     if not parts["heat_bias_by_scenario"].empty:
         lines.extend(["## Heat Bias By Scenario (hot - normal)", _table_markdown(parts["heat_bias_by_scenario"]).rstrip(), ""])
     if not parts["heat_bias_by_date"].empty:
         lines.extend(["## Heat Bias By Date (hot - normal, top 20)", _table_markdown(parts["heat_bias_by_date"].head(20)).rstrip(), ""])
+    if not parts["spec_risk_check"].empty:
+        lines.extend(["## Spec Risk Check (high - normal)", _table_markdown(parts["spec_risk_check"]).rstrip(), ""])
     if not band_parts["band_coverage"].empty:
         lines.extend(["## ATR Band Coverage", _table_markdown(band_parts["band_coverage"]).rstrip(), ""])
     if not band_parts["band_checkpoints"].empty:

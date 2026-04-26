@@ -46,6 +46,7 @@ from stock_watch.state.alert_tracking import upsert_alert_tracking as upsert_ale
 from stock_watch.signals.detect import (
     add_indicators as add_indicators_impl,
     apply_group_weight as apply_group_weight_impl,
+    build_speculative_risk_profile as build_speculative_risk_profile_impl,
     detect_row as detect_row_impl,
     grade_signal as grade_signal_impl,
     score_band as score_band_impl,
@@ -910,6 +911,10 @@ def speculative_risk_score(
 
 def speculative_risk_label(score: int) -> str:
     return speculative_risk_label_impl(score)
+
+
+def build_speculative_risk_profile(**kwargs):
+    return build_speculative_risk_profile_impl(**kwargs)
 
 
 def volatility_label(atr_pct: float) -> str:

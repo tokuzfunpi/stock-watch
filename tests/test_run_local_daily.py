@@ -60,7 +60,13 @@ class RunLocalDailyTests(unittest.TestCase):
             theme_outdir.mkdir(parents=True, exist_ok=True)
             verification_outdir.mkdir(parents=True, exist_ok=True)
 
-            pd.DataFrame([{"ticker": "2330.TW"}, {"ticker": "2317.TW"}]).to_csv(theme_outdir / "daily_rank.csv", index=False)
+            pd.DataFrame(
+                [
+                    {"ticker": "2330.TW", "spec_risk_score": 0, "spec_risk_label": "正常", "rank": 2},
+                    {"ticker": "3057.TW", "spec_risk_score": 8, "spec_risk_label": "疑似炒作風險高", "rank": 1},
+                    {"ticker": "6669.TW", "spec_risk_score": 4, "spec_risk_label": "投機偏高", "rank": 3},
+                ]
+            ).to_csv(theme_outdir / "daily_rank.csv", index=False)
             pd.DataFrame(
                 [
                     {"signal_date": "2026-04-22", "watch_type": "short", "ticker": "2330.TW"},
@@ -81,20 +87,29 @@ class RunLocalDailyTests(unittest.TestCase):
                 json.dumps({"status": "ok", "wall_seconds": 0.456}),
                 encoding="utf-8",
             )
+            (verification_outdir / "runtime_metrics.json").write_text(
+                json.dumps({"status": "ok", "wall_seconds": 2.5}),
+                encoding="utf-8",
+            )
 
             metrics = collect_status_metrics(theme_outdir, verification_outdir)
 
         self.assertEqual(metrics["latest_snapshot_signal_date"], "2026-04-23")
         self.assertEqual(metrics["latest_outcome_signal_date"], "2026-04-23")
-        self.assertEqual(metrics["daily_rank_rows"], 2)
+        self.assertEqual(metrics["daily_rank_rows"], 3)
         self.assertEqual(metrics["snapshot_rows"], 2)
         self.assertEqual(metrics["outcome_rows"], 2)
         self.assertEqual(metrics["outcome_ok_rows"], 1)
         self.assertEqual(metrics["outcome_pending_rows"], 1)
         self.assertEqual(metrics["watchlist_runtime_status"], "ok")
         self.assertEqual(metrics["portfolio_runtime_status"], "ok")
+        self.assertEqual(metrics["verification_runtime_status"], "ok")
         self.assertAlmostEqual(metrics["watchlist_runtime_seconds"], 1.234)
         self.assertAlmostEqual(metrics["portfolio_runtime_seconds"], 0.456)
+        self.assertAlmostEqual(metrics["verification_runtime_seconds"], 2.5)
+        self.assertEqual(metrics["spec_risk_high_rows"], 1)
+        self.assertEqual(metrics["spec_risk_watch_rows"], 1)
+        self.assertEqual(metrics["spec_risk_top_tickers"], ["3057.TW", "6669.TW"])
 
     def test_write_local_status_dashboard_writes_markdown_and_json(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -105,6 +120,12 @@ class RunLocalDailyTests(unittest.TestCase):
             theme_outdir.mkdir(parents=True, exist_ok=True)
             verification_outdir.mkdir(parents=True, exist_ok=True)
             pd.DataFrame([{"ticker": "2330.TW"}]).to_csv(theme_outdir / "daily_rank.csv", index=False)
+            pd.DataFrame(
+                [
+                    {"ticker": "3057.TW", "spec_risk_score": 8, "spec_risk_label": "疑似炒作風險高", "rank": 1},
+                    {"ticker": "2330.TW", "spec_risk_score": 0, "spec_risk_label": "正常", "rank": 2},
+                ]
+            ).to_csv(theme_outdir / "daily_rank.csv", index=False)
 
             args = parse_args(["--mode", "preopen"])
             steps = [{"name": "watchlist", "label": "Watchlist", "status": "completed", "detail": "OK"}]
@@ -125,11 +146,16 @@ class RunLocalDailyTests(unittest.TestCase):
         self.assertIn("Local Run Status", markdown)
         self.assertIn("Watchlist", markdown)
         self.assertIn("Watchlist runtime", markdown)
+        self.assertIn("Verification runtime", markdown)
+        self.assertIn("Spec risk high rows", markdown)
+        self.assertIn("3057.TW", markdown)
         self.assertEqual(payload["mode"], "preopen")
         self.assertEqual(payload["overall_status"], "ok")
         self.assertEqual(payload["steps"][0]["status"], "completed")
         self.assertIn("watchlist_runtime", payload["outputs"])
         self.assertIn("portfolio_runtime", payload["outputs"])
+        self.assertIn("verification_runtime", payload["outputs"])
+        self.assertEqual(payload["metrics"]["spec_risk_high_rows"], 1)
 
     def test_main_runs_preopen_steps_in_order(self) -> None:
         calls: list[str] = []

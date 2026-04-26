@@ -1,4 +1,4 @@
 ﻿date,ticker,name,group,layer,close,ret1_pct,ret5_pct,ret10_pct,ret20_pct,volume,avg_vol20,volume_ratio20,ma20,ma60,ma120,drawdown120_pct,bias20_pct,setup_score,risk_score,signals,score_band,regime,spec_risk_score,spec_risk_label,atr_pct,volatility_tag
 2026-04-22,3491.TWO,昇達科,satellite,midlong_core,1720.0,-3.1,-1.15,-3.91,30.3,1656197,2030914,0.82,1638.75,1396.35,977.04,-5.23,4.96,6,2,TREND,偏強可追蹤,中段延續中,1,正常,6.44,活潑
 2026-04-23,3491.TWO,昇達科,satellite,midlong_core,1550.0,-9.88,-11.43,-11.93,20.62,3170698,2172053,1.46,1652.0,1407.35,986.12,-14.6,-6.17,4,0,NONE,開始轉強,還在觀察,0,正常,7.44,劇烈
-2026-04-24,3491.TWO,昇達科,satellite,midlong_core,1550.0,0.0,-7.19,-14.6,9.93,2175942,2263632,0.96,1659.0,1417.85,995.16,-14.6,-6.57,3,0,NONE,一般觀察,還在觀察,0,正常,7.4,劇烈
+2026-04-24,3491.TWO,昇達科,satellite,midlong_core,1515.0,-2.26,-9.28,-16.53,7.45,1673312,2238501,0.75,1657.25,1417.27,994.87,-16.53,-8.58,3,0,NONE,一般觀察,還在觀察,0,正常,7.4,劇烈

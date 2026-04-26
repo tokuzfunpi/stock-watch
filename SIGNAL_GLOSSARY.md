@@ -56,3 +56,25 @@ This glossary is the readable rulebook for the current watchlist strategy.
 - `ACCEL` is the most important momentum-style signal in the current strategy because it is aligned with notifications and attack-style backtest logic.
 - `SURGE` is useful, but it should be read together with `risk_score` and `spec_risk_label` to avoid blind chasing.
 - The report wording and Telegram wording should stay aligned with the descriptions above.
+
+## Speculation Heuristics
+
+- `spec_risk_score` 現在不只看漲很多，還會拆成 4 類：
+  - `price_action`：短線/波段漲太快
+  - `crowding`：爆量、震幅過大、波動劇烈
+  - `extension`：20MA 乖離太大、高檔無回檔
+  - `structure`：缺少 `TREND/REBREAK` 這種較健康的結構支撐
+- `spec_risk_subtype` 會把高風險型態再翻成更直白的 bucket，例如：`急拉爆量型`、`高檔脫離型`、`結構失配型`
+- `spec_risk_note` 會把最主要的 2–3 個可疑訊號寫出來，例如：`短線急漲、爆量、乖離過大`
+- `core` / `etf`、`TREND`、`REBREAK`、`BASE` 會有折減，因為這些比較不像純題材硬拉
+- 這一版還是 first-pass heuristic，不代表「證明有人炒作」，而是把**價量與結構失衡**的名字先框出來
+
+## Template Bundles
+
+- `Momentum Leader` = `ACCEL` + `TREND`
+- `Reclaim Breakout` = `REBREAK` (+ `ACCEL` / `TREND` if present)
+- `Theme Heat` = `SURGE` (+ `ACCEL` if present, but not `PULLBACK`)
+- `Reset Pullback` = `PULLBACK` (+ `TREND` or `REBREAK` if present)
+- `Early Base` = `BASE` (+ `REBREAK` if present)
+
+These bundles now live in `stock_watch/signals/library.py` so verification reports can describe common 台股型態 with one label instead of only raw signal strings.

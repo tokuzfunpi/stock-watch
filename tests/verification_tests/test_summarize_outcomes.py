@@ -148,6 +148,130 @@ class SummarizeOutcomesTests(unittest.TestCase):
         self.assertEqual(float(parts["heat_bias_by_scenario"].iloc[0]["delta_avg_ret_hot_minus_normal"]), 4.0)
         self.assertEqual(float(parts["heat_bias_by_date"].iloc[0]["delta_avg_ret_hot_minus_normal"]), 4.0)
 
+    def test_summarize_outcomes_builds_signal_template_slices(self) -> None:
+        df = pd.DataFrame(
+            [
+                {
+                    "signal_date": "2026-04-17",
+                    "horizon_days": 5,
+                    "watch_type": "midlong",
+                    "reco_status": "ok",
+                    "market_heat": "hot",
+                    "scenario_label": "強勢延伸盤",
+                    "signals": "ACCEL,TREND",
+                    "spec_risk_score": 7,
+                    "spec_risk_label": "疑似炒作風險高",
+                    "action": "續抱",
+                    "realized_ret_pct": 5.0,
+                    "status": "ok",
+                },
+                {
+                    "signal_date": "2026-04-16",
+                    "horizon_days": 5,
+                    "watch_type": "midlong",
+                    "reco_status": "ok",
+                    "market_heat": "normal",
+                    "scenario_label": "強勢延伸盤",
+                    "signals": "ACCEL,TREND",
+                    "spec_risk_score": 1,
+                    "spec_risk_label": "正常",
+                    "action": "續抱",
+                    "realized_ret_pct": 3.0,
+                    "status": "ok",
+                },
+                {
+                    "signal_date": "2026-04-16",
+                    "horizon_days": 5,
+                    "watch_type": "midlong",
+                    "reco_status": "ok",
+                    "market_heat": "normal",
+                    "scenario_label": "高檔震盪盤",
+                    "signals": "REBREAK",
+                    "spec_risk_score": 0,
+                    "spec_risk_label": "正常",
+                    "action": "續抱",
+                    "realized_ret_pct": 1.0,
+                    "status": "ok",
+                },
+                {
+                    "signal_date": "2026-04-15",
+                    "horizon_days": 5,
+                    "watch_type": "midlong",
+                    "reco_status": "ok",
+                    "market_heat": "hot",
+                    "scenario_label": "強勢延伸盤",
+                    "signals": "ACCEL",
+                    "spec_risk_score": 8,
+                    "spec_risk_label": "疑似炒作風險高",
+                    "action": "續抱",
+                    "realized_ret_pct": -2.0,
+                    "status": "ok",
+                },
+            ]
+        )
+        parts = summarize_outcomes(df)
+        self.assertIn("overall_by_signal_template", parts)
+        self.assertFalse(parts["overall_by_signal_template"].empty)
+        self.assertIn("signal_template", parts["overall_by_signal_template"].columns)
+        self.assertIn("Momentum Leader", parts["overall_by_signal_template"]["signal_template"].tolist())
+        self.assertIn("overall_by_scenario_template", parts)
+        self.assertFalse(parts["overall_by_scenario_template"].empty)
+        self.assertIn("overall_by_spec_risk", parts)
+        self.assertFalse(parts["overall_by_spec_risk"].empty)
+        self.assertIn("spec_risk_bucket", parts["overall_by_spec_risk"].columns)
+        self.assertIn("overall_by_spec_subtype", parts)
+        self.assertFalse(parts["overall_by_spec_subtype"].empty)
+        self.assertIn("spec_risk_subtype", parts["overall_by_spec_subtype"].columns)
+        self.assertIn("spec_risk_check", parts)
+        self.assertFalse(parts["spec_risk_check"].empty)
+
+    def test_summarize_outcomes_backfills_spec_risk_bucket_from_legacy_fields(self) -> None:
+        df = pd.DataFrame(
+            [
+                {
+                    "signal_date": "2026-04-17",
+                    "horizon_days": 1,
+                    "watch_type": "short",
+                    "reco_status": "ok",
+                    "market_heat": "hot",
+                    "scenario_label": "強勢延伸盤",
+                    "signals": "ACCEL",
+                    "risk_score": 6,
+                    "ret5_pct": 24.0,
+                    "ret20_pct": 52.0,
+                    "volume_ratio20": 2.9,
+                    "bias20_pct": 16.0,
+                    "action": "等拉回",
+                    "realized_ret_pct": -2.0,
+                    "status": "ok",
+                },
+                {
+                    "signal_date": "2026-04-16",
+                    "horizon_days": 1,
+                    "watch_type": "short",
+                    "reco_status": "ok",
+                    "market_heat": "normal",
+                    "scenario_label": "強勢延伸盤",
+                    "signals": "TREND",
+                    "risk_score": 2,
+                    "ret5_pct": 5.0,
+                    "ret20_pct": 12.0,
+                    "volume_ratio20": 1.1,
+                    "bias20_pct": 4.0,
+                    "action": "等拉回",
+                    "realized_ret_pct": 1.0,
+                    "status": "ok",
+                },
+            ]
+        )
+        parts = summarize_outcomes(df)
+        self.assertIn("overall_by_spec_risk", parts)
+        buckets = parts["overall_by_spec_risk"]["spec_risk_bucket"].tolist()
+        self.assertIn("high", buckets)
+        self.assertIn("normal", buckets)
+        self.assertFalse(parts["spec_risk_check"].empty)
+        self.assertFalse(parts["overall_by_spec_subtype"].empty)
+
     def test_build_summary_markdown_renders_sections(self) -> None:
         df = pd.DataFrame(
             [
@@ -158,6 +282,9 @@ class SummarizeOutcomesTests(unittest.TestCase):
                     "reco_status": "ok",
                     "market_heat": "warm",
                     "scenario_label": "權值撐盤、個股轉弱",
+                    "signals": "REBREAK",
+                    "spec_risk_score": 1,
+                    "spec_risk_label": "正常",
                     "action": "續抱",
                     "realized_ret_pct": -2.0,
                     "status": "ok",
@@ -169,6 +296,9 @@ class SummarizeOutcomesTests(unittest.TestCase):
                     "reco_status": "ok",
                     "market_heat": "hot",
                     "scenario_label": "強勢延伸盤",
+                    "signals": "ACCEL,TREND",
+                    "spec_risk_score": 7,
+                    "spec_risk_label": "疑似炒作風險高",
                     "action": "等拉回",
                     "realized_ret_pct": 3.0,
                     "status": "ok",
@@ -180,8 +310,25 @@ class SummarizeOutcomesTests(unittest.TestCase):
                     "reco_status": "ok",
                     "market_heat": "normal",
                     "scenario_label": "強勢延伸盤",
+                    "signals": "ACCEL,TREND",
+                    "spec_risk_score": 1,
+                    "spec_risk_label": "正常",
                     "action": "等拉回",
                     "realized_ret_pct": 1.0,
+                    "status": "ok",
+                },
+                {
+                    "signal_date": "2026-04-15",
+                    "horizon_days": 1,
+                    "watch_type": "short",
+                    "reco_status": "ok",
+                    "market_heat": "hot",
+                    "scenario_label": "強勢延伸盤",
+                    "signals": "ACCEL",
+                    "spec_risk_score": 8,
+                    "spec_risk_label": "疑似炒作風險高",
+                    "action": "等拉回",
+                    "realized_ret_pct": -1.5,
                     "status": "ok",
                 },
             ]
@@ -194,14 +341,20 @@ class SummarizeOutcomesTests(unittest.TestCase):
         self.assertIn("## Key Findings", md)
         self.assertIn("market_heat", md)
         self.assertIn("## Overall By Market Heat", md)
+        self.assertIn("## Overall By Signal Template", md)
+        self.assertIn("## Overall By Spec Risk", md)
+        self.assertIn("## Overall By Spec Subtype", md)
         self.assertIn("## Overall By Scenario", md)
+        self.assertIn("## Overall By Scenario + Signal Template", md)
         self.assertIn("## Heat Bias Check (hot - normal)", md)
         self.assertIn("## Heat Bias By Scenario (hot - normal)", md)
         self.assertIn("## Heat Bias By Date (hot - normal, top 20)", md)
+        self.assertIn("## Spec Risk Check (high - normal)", md)
         self.assertIn("## Weekly Checkpoint", md)
         self.assertIn("## Overall By Action", md)
         self.assertIn("## Overall By Scenario + Action", md)
         self.assertIn("reco_status", md)
+        self.assertIn("Momentum Leader", md)
         self.assertIn("## By Action", md)
 
     def test_build_key_findings_summarizes_heat_and_scenario(self) -> None:

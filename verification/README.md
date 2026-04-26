@@ -26,6 +26,9 @@
 - `run_daily_verification.py`
   - 目的：把 `verify -> evaluate -> summarize -> feedback sensitivity` 串成單一入口，並支援 `盤前 / 盤後 / 全流程` 模式。
   - 適合：想用同一支指令跑早上快照、收盤後回填，或完整 workflow 時使用。
+  - 另外會輸出：
+    - `verification/watchlist_daily/runtime_metrics.md`
+    - `verification/watchlist_daily/runtime_metrics.json`
 
 ## 建議執行時機（台灣時間）
 
@@ -117,11 +120,16 @@ python3.11 verification/backfill_from_git.py --since 2026-04-15 --until 2026-04-
 ## 結果怎麼看
 
 - `verification_report.md`：當天短線/中線推薦清單 + warnings/diagnostics（偏「質檢」）
+- `verification_report.md` 也會列出 `Spec Risk Watchlist`，把 forced 名單中的 `watch/high` 疑似炒作樣本單獨拉出來看
 - `codex_context.json`：同一份資料但用 JSON（你可以直接貼到 Codex 做後續分析/迭代）
 - `reco_snapshots.csv`：每天早上推薦快照（偏「可追溯」）
 - `reco_outcomes.csv`：每個 ticker * 每個 horizon 的 realized return（偏「校正/評估」）
 - `outcomes_summary.md`：把 `reco_outcomes.csv` 聚合成勝率/平均報酬/樣本數（偏「管理 dashboard」）
+- `outcomes_summary.md` 目前也會按 `signal_template`（例如 `Momentum Leader`、`Reclaim Breakout`）切片，方便看哪種訊號組合真的有 edge
+- `outcomes_summary.md` 也會按 `spec_risk_bucket`（`normal/watch/high`）切片，方便看高疑似炒作樣本後續表現是否真的比較差
+- `outcomes_summary.md` 也會按 `spec_risk_subtype`（例如 `急拉爆量型`、`高檔脫離型`）切片，方便看哪種可疑型態真的最危險
 - `feedback_weight_sensitivity.md`：看不同 `feedback_score` 權重下，action 排名會不會明顯洗牌（偏「離線研究」）
+- `runtime_metrics.md`：verification 各 step 花多久、cache 檔數/容量、以及是否有 warning（偏「操作/觀測」）
 
 ## GitHub Actions（手動）
 

@@ -16,6 +16,7 @@ from stock_watch.backtesting.core import run_backtest_dual as run_backtest_dual_
 from stock_watch.ranking.scoring import build_rank_table
 from stock_watch.signals.detect import (
     add_indicators as module_add_indicators,
+    build_speculative_risk_profile as module_build_speculative_risk_profile,
     detect_row as module_detect_row,
     grade_signal as module_grade_signal,
 )
@@ -42,6 +43,7 @@ from daily_theme_watchlist import (
     build_special_etf_message,
     build_midlong_message,
     build_short_term_message,
+    build_speculative_risk_profile,
     detect_row,
     grade_signal,
     load_telegram_chat_ids,
@@ -176,6 +178,9 @@ class DetectRowTests(unittest.TestCase):
         self.assertIn("atr_pct", out)
         self.assertIn("volatility_tag", out)
         self.assertIn("date", out)
+        self.assertIn("spec_risk_note", out)
+        self.assertIn("spec_risk_flags", out)
+        self.assertIn("spec_risk_subtype", out)
 
     def test_detect_row_module_matches_legacy_wrapper(self) -> None:
         dates = pd.date_range("2025-01-01", periods=260, freq="B")
@@ -610,6 +615,50 @@ class SpeculativeRiskTests(unittest.TestCase):
 
         self.assertGreaterEqual(score, 6)
         self.assertEqual(speculative_risk_label(score), "疑似炒作風險高")
+
+    def test_speculative_risk_profile_surfaces_flags_and_note(self) -> None:
+        profile = build_speculative_risk_profile(
+            ret1_pct=8.0,
+            ret5_pct=24.0,
+            ret20_pct=52.0,
+            volume_ratio20=3.1,
+            bias20_pct=19.0,
+            atr_pct=7.2,
+            range20_pct=28.0,
+            drawdown120_pct=-2.0,
+            risk_score=6,
+            setup_score=6,
+            signals="SURGE",
+            group="theme",
+        )
+
+        self.assertGreaterEqual(profile.score, 6)
+        self.assertEqual(profile.label, "疑似炒作風險高")
+        self.assertEqual(profile.subtype, "急拉爆量型")
+        self.assertIn("短線急漲", profile.flags)
+        self.assertIn("爆量", profile.flags)
+        self.assertIn("乖離偏大", profile.flags)
+        self.assertNotEqual(profile.note, "結構相對正常")
+
+    def test_speculative_risk_profile_gives_structure_discount_to_core_trend(self) -> None:
+        profile = module_build_speculative_risk_profile(
+            ret1_pct=1.0,
+            ret5_pct=6.0,
+            ret20_pct=14.0,
+            volume_ratio20=1.0,
+            bias20_pct=4.0,
+            atr_pct=2.4,
+            range20_pct=8.0,
+            drawdown120_pct=-12.0,
+            risk_score=2,
+            setup_score=8,
+            signals="TREND",
+            group="core",
+        )
+
+        self.assertEqual(profile.label, "正常")
+        self.assertEqual(profile.subtype, "正常")
+        self.assertEqual(profile.note, "結構相對正常")
 
 
 class FeedbackTests(unittest.TestCase):
@@ -1845,7 +1894,9 @@ class PushMessageTests(unittest.TestCase):
                     "ret10_pct": 9.0,
                     "ret20_pct": 12.0,
                     "volume_ratio20": 1.4,
+                    "spec_risk_score": 2,
                     "spec_risk_label": "正常",
+                    "spec_risk_note": "結構相對正常",
                     "signals": "ACCEL,TREND",
                     "rank_change": 1,
                     "setup_change": 1,
@@ -1853,6 +1904,31 @@ class PushMessageTests(unittest.TestCase):
                     "regime": "轉強速度有出來",
                     "date": "2026-04-14",
                     "close": 100.0,
+                }
+                ,
+                {
+                    "rank": 2,
+                    "ticker": "RPT2.TW",
+                    "name": "Report Two",
+                    "group": "theme",
+                    "layer": "short_attack",
+                    "grade": "C",
+                    "setup_score": 7,
+                    "risk_score": 6,
+                    "ret5_pct": 24.0,
+                    "ret10_pct": 28.0,
+                    "ret20_pct": 52.0,
+                    "volume_ratio20": 3.1,
+                    "spec_risk_score": 9,
+                    "spec_risk_label": "疑似炒作風險高",
+                    "spec_risk_note": "短線急漲、爆量、乖離過大",
+                    "signals": "SURGE",
+                    "rank_change": 0,
+                    "setup_change": 0,
+                    "status_change": "NEW",
+                    "regime": "有點過熱，別硬追",
+                    "date": "2026-04-14",
+                    "close": 120.0,
                 }
             ]
         )
@@ -1868,6 +1944,8 @@ class PushMessageTests(unittest.TestCase):
         self.assertIn("## Prediction Feedback", report)
         self.assertIn("## Adaptive Strategy Adjustments", report)
         self.assertIn("情境：高檔震盪盤", report)
+        self.assertIn("## 疑似炒作觀察", report)
+        self.assertIn("RPT2.TW", report)
 
     def test_main_applies_scenario_adjusted_strategy_to_watchlist(self) -> None:
         df = pd.DataFrame(

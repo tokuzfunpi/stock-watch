@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import json
+import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 from verification.run_daily_verification import (
@@ -150,3 +153,37 @@ class RunDailyVerificationTests(unittest.TestCase):
 
         self.assertEqual(code, 0)
         self.assertEqual(calls, ["evaluate"])
+
+    def test_main_writes_runtime_metrics(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runtime_md = Path(tmpdir) / "runtime_metrics.md"
+            runtime_json = Path(tmpdir) / "runtime_metrics.json"
+            cache_dir = Path(tmpdir) / "cache"
+
+            def _runner(argv: list[str] | None = None) -> int:
+                cache_dir.mkdir(parents=True, exist_ok=True)
+                (cache_dir / "2330_TW.csv").write_text("Date,Close\n2026-04-24,1\n", encoding="utf-8")
+                return 0
+
+            with patch("verification.run_daily_verification.verify_recommendations.main", side_effect=_runner), patch(
+                "verification.run_daily_verification.evaluate_recommendations.main", side_effect=_runner
+            ), patch("verification.run_daily_verification.summarize_outcomes.main", side_effect=_runner), patch(
+                "verification.run_daily_verification.feedback_weight_sensitivity.main", side_effect=_runner
+            ):
+                code = main(
+                    [
+                        "--runtime-metrics-md",
+                        str(runtime_md),
+                        "--runtime-metrics-json",
+                        str(runtime_json),
+                        "--cache-dir",
+                        str(cache_dir),
+                    ]
+                )
+
+            self.assertEqual(code, 0)
+            payload = json.loads(runtime_json.read_text(encoding="utf-8"))
+            self.assertEqual(payload["status"], "ok")
+            self.assertIn("verify", payload["step_timings"])
+            self.assertEqual(payload["cache_stats"]["cache_files"], 1)
+            self.assertIn("Verification Runtime Metrics", runtime_md.read_text(encoding="utf-8"))

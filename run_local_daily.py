@@ -22,6 +22,7 @@ LOCAL_STATUS_MD = THEME_OUTDIR / "local_run_status.md"
 LOCAL_STATUS_JSON = THEME_OUTDIR / "local_run_status.json"
 RUNTIME_METRICS_JSON = THEME_OUTDIR / "runtime_metrics.json"
 PORTFOLIO_RUNTIME_METRICS_JSON = THEME_OUTDIR / "portfolio_runtime_metrics.json"
+VERIFICATION_RUNTIME_METRICS_JSON = VERIFICATION_OUTDIR / "runtime_metrics.json"
 
 MODE_STEPS: dict[str, tuple[str, ...]] = {
     "preopen": ("watchlist", "verification"),
@@ -157,12 +158,66 @@ def _load_runtime_metrics(path: Path) -> dict[str, object]:
     return payload
 
 
+def _spec_risk_bucket(df: pd.DataFrame) -> pd.Series:
+    if df.empty:
+        return pd.Series(dtype=str)
+    score = pd.to_numeric(df.get("spec_risk_score"), errors="coerce")
+    label = df.get("spec_risk_label", pd.Series(index=df.index, dtype=object)).fillna("").astype(str).str.strip()
+    bucket = pd.Series("normal", index=df.index, dtype=object)
+    bucket[(score >= 3) | label.isin(["投機偏高", "偏熱", "留意"])] = "watch"
+    bucket[(score >= 6) | (label == "疑似炒作風險高")] = "high"
+    return bucket.astype(str)
+
+
+def _collect_spec_risk_metrics(daily_rank_csv: Path) -> dict[str, object]:
+    if not daily_rank_csv.exists():
+        return {
+            "spec_risk_high_rows": 0,
+            "spec_risk_watch_rows": 0,
+            "spec_risk_top_tickers": [],
+        }
+    try:
+        df = pd.read_csv(daily_rank_csv)
+    except Exception:
+        return {
+            "spec_risk_high_rows": 0,
+            "spec_risk_watch_rows": 0,
+            "spec_risk_top_tickers": [],
+        }
+    if df.empty:
+        return {
+            "spec_risk_high_rows": 0,
+            "spec_risk_watch_rows": 0,
+            "spec_risk_top_tickers": [],
+        }
+    work = df.copy()
+    work["spec_risk_bucket"] = _spec_risk_bucket(work)
+    high_rows = int((work["spec_risk_bucket"] == "high").sum())
+    watch_rows = int((work["spec_risk_bucket"] == "watch").sum())
+    if "rank" not in work.columns:
+        work["rank"] = range(1, len(work) + 1)
+    work["_spec_risk_order"] = work["spec_risk_bucket"].map({"high": 0, "watch": 1, "normal": 2}).fillna(3)
+    work["_spec_risk_score_num"] = pd.to_numeric(work.get("spec_risk_score"), errors="coerce").fillna(0)
+    top = (
+        work[work["spec_risk_bucket"].isin(["high", "watch"])]
+        .sort_values(by=["_spec_risk_order", "_spec_risk_score_num", "rank"], ascending=[True, False, True])
+        .head(5)
+    )
+    return {
+        "spec_risk_high_rows": high_rows,
+        "spec_risk_watch_rows": watch_rows,
+        "spec_risk_top_tickers": top.get("ticker", pd.Series(dtype=str)).astype(str).tolist(),
+    }
+
+
 def collect_status_metrics(theme_outdir: Path = THEME_OUTDIR, verification_outdir: Path = VERIFICATION_OUTDIR) -> dict[str, object]:
     snapshots_csv = verification_outdir / "reco_snapshots.csv"
     outcomes_csv = verification_outdir / "reco_outcomes.csv"
     daily_rank_csv = theme_outdir / "daily_rank.csv"
     watchlist_runtime = _load_runtime_metrics(theme_outdir / "runtime_metrics.json")
     portfolio_runtime = _load_runtime_metrics(theme_outdir / "portfolio_runtime_metrics.json")
+    verification_runtime = _load_runtime_metrics(verification_outdir / "runtime_metrics.json")
+    spec_risk_metrics = _collect_spec_risk_metrics(daily_rank_csv)
 
     outcomes_total = 0
     outcomes_ok = 0
@@ -191,6 +246,11 @@ def collect_status_metrics(theme_outdir: Path = THEME_OUTDIR, verification_outdi
         "watchlist_runtime_status": str(watchlist_runtime.get("status", "") or ""),
         "portfolio_runtime_seconds": float(portfolio_runtime.get("wall_seconds", 0.0) or 0.0),
         "portfolio_runtime_status": str(portfolio_runtime.get("status", "") or ""),
+        "verification_runtime_seconds": float(verification_runtime.get("wall_seconds", 0.0) or 0.0),
+        "verification_runtime_status": str(verification_runtime.get("status", "") or ""),
+        "spec_risk_high_rows": int(spec_risk_metrics["spec_risk_high_rows"]),
+        "spec_risk_watch_rows": int(spec_risk_metrics["spec_risk_watch_rows"]),
+        "spec_risk_top_tickers": list(spec_risk_metrics["spec_risk_top_tickers"]),
     }
 
 
@@ -228,8 +288,12 @@ def render_local_status_markdown(
             f"- Outcome rows: `{metrics.get('outcome_rows', 0)}`",
             f"- Outcome OK rows: `{metrics.get('outcome_ok_rows', 0)}`",
             f"- Outcome pending rows: `{metrics.get('outcome_pending_rows', 0)}`",
+            f"- Spec risk high rows: `{metrics.get('spec_risk_high_rows', 0)}`",
+            f"- Spec risk watch rows: `{metrics.get('spec_risk_watch_rows', 0)}`",
+            f"- Spec risk top tickers: `{', '.join(metrics.get('spec_risk_top_tickers', [])) or 'n/a'}`",
             f"- Watchlist runtime: `{metrics.get('watchlist_runtime_seconds', 0.0):.3f}s` ({metrics.get('watchlist_runtime_status') or 'n/a'})",
             f"- Portfolio runtime: `{metrics.get('portfolio_runtime_seconds', 0.0):.3f}s` ({metrics.get('portfolio_runtime_status') or 'n/a'})",
+            f"- Verification runtime: `{metrics.get('verification_runtime_seconds', 0.0):.3f}s` ({metrics.get('verification_runtime_status') or 'n/a'})",
             "",
             "## Key Outputs",
             "",
@@ -238,6 +302,7 @@ def render_local_status_markdown(
             f"- Portfolio report: `{theme_outdir_str('portfolio_report.md')}`",
             f"- Portfolio runtime: `{theme_outdir_str('portfolio_runtime_metrics.md')}`",
             f"- Verification report: `{verification_outdir_str('verification_report.md')}`",
+            f"- Verification runtime: `{verification_outdir_str('runtime_metrics.md')}`",
             f"- Outcomes summary: `{verification_outdir_str('outcomes_summary.md')}`",
             f"- Feedback sensitivity: `{verification_outdir_str('feedback_weight_sensitivity.md')}`",
         ]
@@ -277,6 +342,7 @@ def write_local_status_dashboard(
             "portfolio_report": str(theme_outdir / "portfolio_report.md"),
             "portfolio_runtime": str(theme_outdir / "portfolio_runtime_metrics.md"),
             "verification_report": str(verification_outdir / "verification_report.md"),
+            "verification_runtime": str(verification_outdir / "runtime_metrics.md"),
             "outcomes_summary": str(verification_outdir / "outcomes_summary.md"),
             "feedback_sensitivity": str(verification_outdir / "feedback_weight_sensitivity.md"),
         },

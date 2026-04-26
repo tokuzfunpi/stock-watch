@@ -31,6 +31,8 @@ from daily_theme_watchlist import (
     midlong_action_label,
     short_term_action_label,
 )
+from stock_watch.signals import apply_signal_template_labels
+from stock_watch.signals import summarize_signal_templates
 
 
 @dataclass(frozen=True)
@@ -247,6 +249,9 @@ def build_codex_context(
         "grade",
         "setup_score",
         "risk_score",
+        "spec_risk_score",
+        "spec_risk_label",
+        "spec_risk_subtype",
         "ret5_pct",
         "ret20_pct",
         "volume_ratio20",
@@ -279,6 +284,10 @@ def build_codex_context(
             "short": _action_counts(short_forced, "action"),
             "midlong": _action_counts(midlong_forced, "action"),
         },
+        "spec_risk_counts": {
+            "short": _spec_risk_counts(short_forced),
+            "midlong": _spec_risk_counts(midlong_forced),
+        },
         "forced": {
             "short": _df_records(short_forced, cols_reco, 20),
             "midlong": _df_records(midlong_forced, cols_reco, 20),
@@ -308,7 +317,11 @@ def write_codex_context_files(ctx: dict) -> tuple[Path, Path]:
 def _format_table(df: pd.DataFrame, cols: list[str]) -> str:
     if df.empty:
         return "_None_\n"
-    view = df[cols].copy()
+    view = df.copy()
+    for col in cols:
+        if col not in view.columns:
+            view[col] = pd.NA
+    view = view[cols].copy()
     headers = [str(c) for c in view.columns.tolist()]
     rows: list[list[str]] = []
     for _, r in view.iterrows():
@@ -338,6 +351,36 @@ def _action_counts(df: pd.DataFrame, col: str) -> dict[str, int]:
     if df.empty or col not in df.columns:
         return {}
     return df[col].fillna("").astype(str).value_counts().to_dict()
+
+
+def _spec_risk_bucket(df: pd.DataFrame) -> pd.Series:
+    if df.empty:
+        return pd.Series(dtype=str)
+    score = pd.to_numeric(df.get("spec_risk_score"), errors="coerce")
+    label = df.get("spec_risk_label", pd.Series(index=df.index, dtype=object)).fillna("").astype(str).str.strip()
+    bucket = pd.Series("normal", index=df.index, dtype=object)
+    bucket[(score >= 3) | label.isin(["投機偏高", "偏熱", "留意"])] = "watch"
+    bucket[(score >= 6) | (label == "疑似炒作風險高")] = "high"
+    return bucket.astype(str)
+
+
+def _spec_risk_counts(df: pd.DataFrame) -> dict[str, int]:
+    if df.empty:
+        return {}
+    return _spec_risk_bucket(df).value_counts().to_dict()
+
+
+def _spec_risk_watch_rows(df: pd.DataFrame) -> pd.DataFrame:
+    if df.empty:
+        return df.head(0).copy()
+    work = df.copy()
+    work["spec_risk_bucket"] = _spec_risk_bucket(work)
+    watch = work[work["spec_risk_bucket"].isin(["high", "watch"])].copy()
+    if watch.empty:
+        return watch
+    watch["_spec_risk_order"] = watch["spec_risk_bucket"].map({"high": 0, "watch": 1}).fillna(2)
+    watch["_spec_risk_score_num"] = pd.to_numeric(watch.get("spec_risk_score"), errors="coerce").fillna(0)
+    return watch.sort_values(by=["_spec_risk_order", "_spec_risk_score_num", "rank"], ascending=[True, False, True])
 
 
 def _maybe_date_from_rank(df_rank: pd.DataFrame) -> str:
@@ -386,12 +429,23 @@ def compute_reco_warnings(
             names = ", ".join(low_vol["ticker"].astype(str).head(5).tolist())
             warnings.append(f"{label} 含量比偏低標的（< {heuristics.warn_low_volume_ratio}）：{names}")
 
+    def _scan_speculative(df: pd.DataFrame, label: str) -> None:
+        if df.empty:
+            return
+        buckets = _spec_risk_bucket(df)
+        high = df[buckets == "high"].copy()
+        if not high.empty:
+            names = ", ".join(high["ticker"].astype(str).head(5).tolist())
+            warnings.append(f"{label} 含高疑似炒作樣本（spec_risk=high）：{names}")
+
     _scan_below_threshold(short_forced, "短線推薦")
     _scan_below_threshold(midlong_forced, "中線推薦")
     _scan_overheated(short_forced, "短線推薦")
     _scan_overheated(midlong_forced, "中線推薦")
     _scan_liquidity(short_forced, "短線推薦")
     _scan_liquidity(midlong_forced, "中線推薦")
+    _scan_speculative(short_forced, "短線推薦")
+    _scan_speculative(midlong_forced, "中線推薦")
     return warnings
 
 
@@ -438,6 +492,10 @@ def build_verification_report_markdown(
 
     short_action_counts = _action_counts(short_forced, "action")
     midlong_action_counts = _action_counts(midlong_forced, "action")
+    short_templates = summarize_signal_templates(short_forced)
+    midlong_templates = summarize_signal_templates(midlong_forced)
+    short_spec_counts = _spec_risk_counts(short_forced)
+    midlong_spec_counts = _spec_risk_counts(midlong_forced)
 
     warnings = compute_reco_warnings(
         short_forced,
@@ -449,12 +507,12 @@ def build_verification_report_markdown(
         warnings.insert(0, "短線推薦為空：可能條件過嚴或資料不足。")
     if midlong_forced.empty:
         warnings.insert(0, "中線推薦為空：可能條件過嚴或資料不足。")
-    if short_forced.empty:
-        warnings.insert(0, "短線推薦為空：可能條件過嚴或資料不足。")
-    if midlong_forced.empty:
-        warnings.insert(0, "中線推薦為空：可能條件過嚴或資料不足。")
 
     improvement_notes = improvement_notes if improvement_notes is not None else list(DEFAULT_IMPROVEMENT_NOTES)
+    short_display = apply_signal_template_labels(short_forced)
+    midlong_display = apply_signal_template_labels(midlong_forced)
+    short_spec_watch = _spec_risk_watch_rows(short_display)
+    midlong_spec_watch = _spec_risk_watch_rows(midlong_display)
 
     lines: list[str] = [
         "# Recommendation Verification (pre-09:00 best-effort)",
@@ -481,7 +539,7 @@ def build_verification_report_markdown(
             "",
             "## Short-Term Candidates",
             _format_table(
-                short_forced,
+                short_display,
                 [
                     "rank",
                     "ticker",
@@ -489,10 +547,14 @@ def build_verification_report_markdown(
                     "grade",
                     "setup_score",
                     "risk_score",
+                    "spec_risk_score",
+                    "spec_risk_label",
+                    "spec_risk_subtype",
                     "ret5_pct",
                     "ret20_pct",
                     "volume_ratio20",
                     "signals",
+                    "signal_template",
                     "action",
                     "reco_status",
                 ],
@@ -500,7 +562,7 @@ def build_verification_report_markdown(
             "",
             "## Mid-Long Candidates",
             _format_table(
-                midlong_forced,
+                midlong_display,
                 [
                     "rank",
                     "ticker",
@@ -508,10 +570,14 @@ def build_verification_report_markdown(
                     "grade",
                     "setup_score",
                     "risk_score",
+                    "spec_risk_score",
+                    "spec_risk_label",
+                    "spec_risk_subtype",
                     "ret5_pct",
                     "ret20_pct",
                     "volume_ratio20",
                     "signals",
+                    "signal_template",
                     "action",
                     "reco_status",
                 ],
@@ -520,9 +586,67 @@ def build_verification_report_markdown(
             "## Diagnostics",
             f"- Short action counts: {short_action_counts or '{}'}",
             f"- Midlong action counts: {midlong_action_counts or '{}'}",
+            f"- Short signal templates: {short_templates or '{}'}",
+            f"- Midlong signal templates: {midlong_templates or '{}'}",
+            f"- Short spec risk counts: {short_spec_counts or '{}'}",
+            f"- Midlong spec risk counts: {midlong_spec_counts or '{}'}",
             "",
         ]
     )
+
+    if not short_spec_watch.empty or not midlong_spec_watch.empty:
+        lines.extend(
+            [
+                "## Spec Risk Watchlist",
+                "",
+            ]
+        )
+        if not short_spec_watch.empty:
+            lines.extend(
+                [
+                    "### Short",
+                    _format_table(
+                        short_spec_watch.head(10),
+                        [
+                            "rank",
+                            "ticker",
+                            "name",
+                            "spec_risk_score",
+                            "spec_risk_label",
+                            "spec_risk_note",
+                            "ret5_pct",
+                            "ret20_pct",
+                            "signals",
+                            "signal_template",
+                            "action",
+                        ],
+                    ).rstrip(),
+                    "",
+                ]
+            )
+        if not midlong_spec_watch.empty:
+            lines.extend(
+                [
+                    "### Midlong",
+                    _format_table(
+                        midlong_spec_watch.head(10),
+                        [
+                            "rank",
+                            "ticker",
+                            "name",
+                            "spec_risk_score",
+                            "spec_risk_label",
+                            "spec_risk_note",
+                            "ret5_pct",
+                            "ret20_pct",
+                            "signals",
+                            "signal_template",
+                            "action",
+                        ],
+                    ).rstrip(),
+                    "",
+                ]
+            )
 
     lines.extend(_render_notes_section("## Improvement Notes (heuristic)", improvement_notes))
     lines.append("")
@@ -668,6 +792,10 @@ def main(argv: list[str] | None = None) -> int:
                 "grade",
                 "setup_score",
                 "risk_score",
+                "spec_risk_score",
+                "spec_risk_label",
+                "spec_risk_subtype",
+                "spec_risk_note",
                 "ret5_pct",
                 "ret20_pct",
                 "volume_ratio20",

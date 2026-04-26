@@ -17,6 +17,9 @@
 3231.TW,緯創,theme,short_attack,true
 2356.TW,英業達,theme,short_attack,true
 4919.TW,新唐,theme,short_attack,true
+6182.TWO,合晶,theme,short_attack,true
+2312.TW,金寶,theme,short_attack,true
+5347.TWO,世界,theme,short_attack,true
 2330.TW,台積電,core,midlong_core,true
 2317.TW,鴻海,core,midlong_core,true
 2454.TW,聯發科,core,midlong_core,true
@@ -29,6 +32,7 @@
 2886.TW,兆豐金,core,midlong_core,true
 2891.TW,中信金,core,midlong_core,true
 2892.TW,第一金,core,midlong_core,true
+8064.TWO,東捷,core,midlong_core,true
 1301.TW,台塑,core,midlong_core,false
 0050.TW,元大台灣50,etf,midlong_core,true
 00878.TW,國泰永續高股息,etf,midlong_core,true
@@ -42,6 +46,9 @@
 6147.TWO,頎邦,satellite,midlong_core,true
 3035.TW,智原,satellite,midlong_core,true
 5274.TWO,信驊,satellite,midlong_core,true
+6962.TW,奕力-KY,satellite,midlong_core,true
+2340.TW,台亞,satellite,midlong_core,true
+2464.TW,盟立,satellite,midlong_core,true
 00679B.TWO,元大美債20年,etf,defensive_watch,true
 00687B.TWO,國泰20年美債,etf,defensive_watch,true
 00772B.TWO,中信高評級公司債,etf,defensive_watch,true

@@ -1176,3 +1176,233 @@ requirements.txt
 - 若是文件結論，就整理進 `main` notes
 - 若是 code，先看會不會回退 `main` 已有 guardrails
 - 原則上仍避免直接 merge `testv`
+
+## 2026-04-25 補充：`spec_risk` 線的最新 handoff
+
+### 這次完成的內容
+
+1. **把 `spec_risk` 從單一分數補成一條可追蹤的分析線**
+   - `detect_row()` 現在會產出：
+     - `spec_risk_score`
+     - `spec_risk_label`
+     - `spec_risk_subtype`
+     - `spec_risk_note`
+     - `spec_risk_flags`
+     - `spec_price_action_score`
+     - `spec_crowding_score`
+     - `spec_extension_score`
+     - `spec_structure_score`
+
+2. **`spec_risk` 已串進主要輸出**
+   - `daily_report.md/html`
+     - 有 `疑似炒作觀察`
+   - `verification_report.md`
+     - 有 `spec risk counts`
+     - 有 `Spec Risk Watchlist`
+   - `outcomes_summary.md`
+     - 有 `Overall By Spec Risk`
+     - 有 `Spec Risk Check`
+     - 有 `Overall By Spec Subtype`
+   - `weekly_review.md/json`
+     - 有 `spec_risk` decision
+     - 有 `Spec Risk Highlights`
+     - 有 `Overall By Spec Risk`
+     - 有 `Overall By Spec Subtype`
+   - `local_run_status` / `local_doctor`
+     - 也會顯示 `spec_risk_high_rows`
+     - `spec_risk_watch_rows`
+     - `spec_risk_top_tickers`
+
+3. **legacy 資料也支援 fallback**
+   - 舊 snapshot / outcomes 就算沒有 `spec_risk_*` 欄位
+   - 現在也會從既有的價量 / risk / signals 欄位回推：
+     - bucket
+     - subtype
+     - note
+   - 所以不用先重建整包歷史資料，summary / weekly review 就能先開始工作
+
+### 目前 subtype bucket
+
+- `急拉爆量型`
+- `高檔脫離型`
+- `結構失配型`
+- `急拉追價型`
+- `資金擁擠型`
+- `高檔無回檔型`
+- `一般投機型`
+- `正常`
+
+### 現在最重要的判讀
+
+1. **這條線已經有辨識力，但還沒有足夠證據變成 hard filter**
+   - live 名單確實能抓到像：
+     - `2388.TW`
+     - `3661.TW`
+     - `3443.TW`
+     - `6669.TW`
+     - `3017.TW`
+   - 這代表 heuristic 方向是對的
+
+2. **verification / weekly review 的樣本還是偏少**
+   - `spec_risk high vs normal` 還沒有足夠成熟樣本
+   - subtype 目前也還是小樣本
+   - 所以 `spec_risk` 現在比較適合作為：
+     - 風險提醒
+     - 推播保守化參考
+   - 還不適合直接拿來當硬排除
+
+3. **目前 weekly review 已經能把「過度解讀小樣本」擋下來**
+   - `Spec Risk Highlights` 現在會顯示：
+     - most frequent subtype
+     - weakest subtype
+   - 但也會加上：
+     - confidence note
+     - same subtype extremes note
+   - 避免因為只有 `n=2` 就誤以為某 subtype 已被證明最危險
+
+### 對「要不要補更多標的」的判斷
+
+目前結論是：
+
+- **有需要補，但不應該直接亂擴 watchlist**
+- 應該補的是：
+  - 更容易產生投機 / 異常價量樣本的候選池
+- 不應該只是：
+  - 再加更多大型權值 / ETF
+  - 或單純為了湊數而加低品質標的
+
+換句話說，下一步真正該做的是：
+
+- `watchlist coverage / candidate mix` 分析
+  - 哪些 group 幾乎不會產生 `spec_risk` 樣本
+  - 哪些 group 最有機會補到 `high / subtype` 樣本
+
+### 目前最合理的下一步
+
+1. 先做 `watchlist coverage` 分析
+2. 再決定要不要擴 universe
+3. 如果之後證據還是不夠，再考慮外部資料：
+   - `TWSE 注意/處置`
+   - 集中度 / 當沖比
+   - 新聞 / 基本面失配
+
+### 目前不建議做的事
+
+- 不要現在就把 `spec_risk` 變成硬排除條件
+- 不要因為某個 subtype 暫時看起來弱，就直接下 production 規則
+- 不要為了補樣本而大幅亂擴 watchlist
+- 不要把 `testv` 整包 merge 回來
+
+### 這一輪對後續 Codex 最重要的一句話
+
+如果新對話要繼續接手，最值得延續的方向不是再加更多報表，而是：
+
+- **先回答 coverage 問題，再決定是否擴 candidate universe**
+
+因為目前 `spec_risk` 的主要瓶頸已不是「看不到」，而是「成熟樣本還不夠」。
+
+## 2026-04-25 補充：`spec_risk` coverage / candidate mix 分析
+
+### 這次新增的輸出
+
+- `run_weekly_review.py` 現在除了看近期 outcomes 的 `spec_risk` 外，還會直接吃當前 `theme_watchlist_daily/daily_rank.csv`
+- 新增區塊：
+  - `Current Rank Spec Risk By Group`
+  - `Current Rank Spec Risk By Layer`
+  - `Current Suspicious Candidates`
+
+### 目前得到的第一個實際結論
+
+這份 coverage output 很清楚：
+
+- `theme`：18 檔裡有 6 檔是 non-normal `spec_risk`
+- `satellite`：7 檔裡有 5 檔是 non-normal `spec_risk`
+- `core`：13 檔裡有 3 檔是 non-normal `spec_risk`
+- `etf`：7 檔裡是 0
+
+layer 看起來則是：
+
+- `midlong_core`：23 檔裡 8 檔 non-normal
+- `short_attack`：18 檔裡 6 檔 non-normal
+- `defensive_watch`：4 檔裡 0
+
+### 對「要不要補更多標的」的最新判斷
+
+這讓我們可以把前面的直覺講得更精準：
+
+- **如果目的是補 `spec_risk` 樣本，就不要加 ETF / defensive_watch。**
+- 真正值得補的是：
+  - `theme`
+  - `satellite`
+  - 以及會進 `short_attack` / `midlong_core` 的題材型標的
+
+所以未來若要擴 universe，應優先朝：
+
+- 更容易出現異常價量 / 題材波動的台股候選池
+
+而不是：
+
+- 再增加一批低波動大型權值
+- 再增加 ETF
+- 或為了湊數擴充 defensive watch
+
+### 目前仍然不能做的事
+
+即使 coverage 已經更清楚，production 仍不該立刻把 `spec_risk` 變成硬規則。
+
+原因不是 coverage 不夠，而是：
+
+- 成熟 `high vs normal` outcome 樣本仍然少
+- subtype 比較也仍然是小樣本
+
+所以：
+
+- coverage 現在回答的是「該去哪裡補樣本」
+- 不是「已經可以下硬結論」
+
+## 2026-04-25 補充：weekly coverage guidance
+- `run_weekly_review.py` 新增 `Candidate Mix Guidance`，直接從 `theme_watchlist_daily/daily_rank.csv` 的 `spec_risk` coverage 推出擴池方向。
+- 目前 weekly review 的結論是：若要補更多可能標的以累積 `spec_risk` 樣本，優先補 `theme`、`satellite`，以及會流入 `midlong_core`、`short_attack` 的候選；不要為了湊數擴 `etf` 或 `defensive_watch`。
+- 這仍然只是 coverage recommendation，不代表 `spec_risk` 已可當 hard filter；成熟 outcome 樣本依然偏薄。
+
+## 2026-04-25 補充：candidate expansion targets
+- `run_weekly_review.py` 新增 `Candidate Expansion Targets`，把 coverage guidance 再細化成建議補幾檔的 group/layer heuristic。
+- 目前基於現有 `daily_rank.csv`，建議優先補：`satellite +3`、`theme +3`、`core +1`；layer 以 `midlong_core +3`、`short_attack +3` 為主。
+- 這是用來提高 `spec_risk` 樣本 coverage 的工程性建議，不代表已經要改 production 策略或把 `spec_risk` 變硬過濾。
+
+## 2026-04-25 補充：source-side expansion analysis
+- `run_weekly_review.py` 現在會從 `daily_rank.csv` 推導 `candidate_source` archetype，並在 weekly review 顯示 `Current Rank Spec Risk By Source` 與 `By Source Archetype`。
+- 目前 source-side 最值得先補的方向是：`Satellite high-beta leaders`、`Theme trend acceleration`、`Theme momentum burst`。
+- 這些 archetype 只是幫我們回答「新增的 theme/satellite 名額比較像該從哪種型態去找」，還不是 production source schema。
+
+## 2026-04-26 補充：watchlist gap snapshot
+- `run_weekly_review.py` 現在新增 `Watchlist Gap Snapshot By Group/By Source`，把目前 `watchlist.csv` 的 group 數量與建議擴池目標直接對照。
+- 目前 snapshot：`satellite 7 -> 10`、`theme 18 -> 21`、`core 14 -> 15`。
+- 這一層已經足夠支撐下一個真正的決策：要不要實際擴 `watchlist`，以及先擴 `satellite/theme` 哪些 archetype。
+
+## 2026-04-26 補充：watchlist addition draft
+- 新增 `draft_watchlist_additions.py`，會從台股活躍報價池做 best-effort universe scan，套用現有 signal/spec-risk 邏輯，輸出 `theme_watchlist_daily/watchlist_addition_draft.md/json`。
+- 本次 draft（2026-04-26）主草案：
+  - satellite: `6962.TW 奕力-KY`, `2340.TW 台亞`, `2464.TW 盟立`
+  - theme: `6182.TWO 合晶`, `2312.TW 金寶`, `5347.TWO 世界`
+  - core: `8064.TWO 東捷`
+  - reserve only: `4927.TW 泰鼎-KY`, `8240.TWO 華宏`
+- 目前已經到真正需要 user 拍板的地方：要不要把哪幾檔正式加進 `watchlist.csv`。
+
+## 2026-04-26 補充：aggressive watchlist expansion approved
+- User approved the aggressive draft and `watchlist.csv` was updated with 7 additions.
+- Added tickers:
+  - theme: `6182.TWO 合晶`, `2312.TW 金寶`, `5347.TWO 世界`
+  - core: `8064.TWO 東捷`
+  - satellite: `6962.TW 奕力-KY`, `2340.TW 台亞`, `2464.TW 盟立`
+- `run_weekly_review.py` and `draft_watchlist_additions.py` were rerun after the change.
+- Current watchlist count is now `55`, and weekly gap snapshot moved to `satellite 10 -> 13`, `theme 21 -> 24`, `core 15 -> 16`.
+- The refreshed addition draft now proposes a next wave rather than the already-added names.
+
+## 2026-04-26 補充：new additions priority
+- 新增 `/theme_watchlist_daily/new_additions_priority.md`，把 aggressive expansion 加入的 7 檔分成主看 / 觀察 / 高風險觀察。
+- 目前排序：
+  - 主看：`2312.TW`, `8064.TWO`, `6182.TWO`
+  - 觀察：`5347.TWO`
+  - 高風險觀察：`6962.TW`, `2340.TW`, `2464.TW`
+- 這份筆記適合直接當開盤前的新增名單閱讀順序。

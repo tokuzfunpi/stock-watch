@@ -72,6 +72,70 @@ def _safe_dir_total_bytes(path: Path, pattern: str = "*") -> int:
     return total
 
 
+def _load_runtime_metrics(path: Path) -> dict[str, object]:
+    if not path.exists():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    if not isinstance(payload, dict):
+        return {}
+    return payload
+
+
+def _spec_risk_bucket(df: pd.DataFrame) -> pd.Series:
+    if df.empty:
+        return pd.Series(dtype=str)
+    score = pd.to_numeric(df.get("spec_risk_score"), errors="coerce")
+    label = df.get("spec_risk_label", pd.Series(index=df.index, dtype=object)).fillna("").astype(str).str.strip()
+    bucket = pd.Series("normal", index=df.index, dtype=object)
+    bucket[(score >= 3) | label.isin(["投機偏高", "偏熱", "留意"])] = "watch"
+    bucket[(score >= 6) | (label == "疑似炒作風險高")] = "high"
+    return bucket.astype(str)
+
+
+def _collect_spec_risk_metrics(path: Path) -> dict[str, object]:
+    if not path.exists():
+        return {
+            "spec_risk_high_rows": 0,
+            "spec_risk_watch_rows": 0,
+            "spec_risk_top_tickers": [],
+        }
+    try:
+        df = pd.read_csv(path)
+    except Exception:
+        return {
+            "spec_risk_high_rows": 0,
+            "spec_risk_watch_rows": 0,
+            "spec_risk_top_tickers": [],
+        }
+    if df.empty:
+        return {
+            "spec_risk_high_rows": 0,
+            "spec_risk_watch_rows": 0,
+            "spec_risk_top_tickers": [],
+        }
+    work = df.copy()
+    work["spec_risk_bucket"] = _spec_risk_bucket(work)
+    high_rows = int((work["spec_risk_bucket"] == "high").sum())
+    watch_rows = int((work["spec_risk_bucket"] == "watch").sum())
+    if "rank" not in work.columns:
+        work["rank"] = range(1, len(work) + 1)
+    work["_spec_risk_order"] = work["spec_risk_bucket"].map({"high": 0, "watch": 1, "normal": 2}).fillna(3)
+    work["_spec_risk_score_num"] = pd.to_numeric(work.get("spec_risk_score"), errors="coerce").fillna(0)
+    top = (
+        work[work["spec_risk_bucket"].isin(["high", "watch"])]
+        .sort_values(by=["_spec_risk_order", "_spec_risk_score_num", "rank"], ascending=[True, False, True])
+        .head(5)
+    )
+    return {
+        "spec_risk_high_rows": high_rows,
+        "spec_risk_watch_rows": watch_rows,
+        "spec_risk_top_tickers": top.get("ticker", pd.Series(dtype=str)).astype(str).tolist(),
+    }
+
+
 def _check_python_runtime() -> DoctorCheck:
     version = sys.version_info
     status = "ok" if version >= (3, 11) else "warn"
@@ -223,6 +287,10 @@ def run_doctor_checks(args: argparse.Namespace) -> list[DoctorCheck]:
 
 def collect_doctor_metrics() -> dict[str, int]:
     history_cache_dir = THEME_OUTDIR / "history_cache"
+    watchlist_runtime = _load_runtime_metrics(THEME_OUTDIR / "runtime_metrics.json")
+    portfolio_runtime = _load_runtime_metrics(THEME_OUTDIR / "portfolio_runtime_metrics.json")
+    verification_runtime = _load_runtime_metrics(VERIFICATION_OUTDIR / "runtime_metrics.json")
+    spec_risk_metrics = _collect_spec_risk_metrics(THEME_OUTDIR / "daily_rank.csv")
     return {
         "daily_rank_rows": _safe_count_csv_rows(THEME_OUTDIR / "daily_rank.csv"),
         "alert_tracking_rows": _safe_count_csv_rows(THEME_OUTDIR / "alert_tracking.csv"),
@@ -230,6 +298,12 @@ def collect_doctor_metrics() -> dict[str, int]:
         "outcome_rows": _safe_count_csv_rows(VERIFICATION_OUTDIR / "reco_outcomes.csv"),
         "history_cache_files": _safe_dir_file_count(history_cache_dir, "*.csv"),
         "history_cache_bytes": _safe_dir_total_bytes(history_cache_dir, "*.csv"),
+        "watchlist_runtime_seconds": round(float(watchlist_runtime.get("wall_seconds", 0.0) or 0.0), 3),
+        "portfolio_runtime_seconds": round(float(portfolio_runtime.get("wall_seconds", 0.0) or 0.0), 3),
+        "verification_runtime_seconds": round(float(verification_runtime.get("wall_seconds", 0.0) or 0.0), 3),
+        "spec_risk_high_rows": int(spec_risk_metrics["spec_risk_high_rows"]),
+        "spec_risk_watch_rows": int(spec_risk_metrics["spec_risk_watch_rows"]),
+        "spec_risk_top_tickers": list(spec_risk_metrics["spec_risk_top_tickers"]),
     }
 
 
@@ -266,6 +340,12 @@ def render_doctor_markdown(*, generated_at: str, checks: list[DoctorCheck], metr
             f"- Verification outcome rows: `{metrics.get('outcome_rows', 0)}`",
             f"- History cache files: `{metrics.get('history_cache_files', 0)}`",
             f"- History cache bytes: `{metrics.get('history_cache_bytes', 0)}`",
+            f"- Spec risk high rows: `{metrics.get('spec_risk_high_rows', 0)}`",
+            f"- Spec risk watch rows: `{metrics.get('spec_risk_watch_rows', 0)}`",
+            f"- Spec risk top tickers: `{', '.join(metrics.get('spec_risk_top_tickers', [])) or 'n/a'}`",
+            f"- Watchlist runtime seconds: `{metrics.get('watchlist_runtime_seconds', 0.0)}`",
+            f"- Portfolio runtime seconds: `{metrics.get('portfolio_runtime_seconds', 0.0)}`",
+            f"- Verification runtime seconds: `{metrics.get('verification_runtime_seconds', 0.0)}`",
         ]
     )
     return "\n".join(lines)

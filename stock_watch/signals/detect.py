@@ -1,8 +1,22 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any
 
 import pandas as pd
+
+
+@dataclass(frozen=True)
+class SpeculativeRiskProfile:
+    score: int
+    label: str
+    subtype: str
+    note: str
+    flags: tuple[str, ...]
+    price_action_score: int
+    crowding_score: int
+    extension_score: int
+    structure_score: int
 
 
 def add_indicators(df: pd.DataFrame, ma_period: int = 20) -> pd.DataFrame:
@@ -66,6 +80,17 @@ def score_band(setup_score: int, risk_score: int) -> str:
     return "一般觀察"
 
 
+def _signal_tokens(signals: str) -> set[str]:
+    return {token.strip().upper() for token in str(signals or "").split(",") if token.strip()}
+
+
+def _append_flag(flags: list[str], seen: set[str], flag: str) -> None:
+    if flag in seen:
+        return
+    seen.add(flag)
+    flags.append(flag)
+
+
 def speculative_risk_score(
     ret5_pct: float,
     ret20_pct: float,
@@ -109,6 +134,142 @@ def speculative_risk_label(score: int) -> str:
     if score >= 3:
         return "投機偏高"
     return "正常"
+
+
+def speculative_risk_subtype(
+    *,
+    score: int,
+    price_action_score: int,
+    crowding_score: int,
+    extension_score: int,
+    structure_score: int,
+) -> str:
+    if score < 3:
+        return "正常"
+    if price_action_score >= 2 and crowding_score >= 2:
+        return "急拉爆量型"
+    if extension_score >= 2 and structure_score >= 1:
+        return "高檔脫離型"
+    if structure_score >= 2:
+        return "結構失配型"
+    if price_action_score >= 2:
+        return "急拉追價型"
+    if crowding_score >= 2:
+        return "資金擁擠型"
+    if extension_score >= 2:
+        return "高檔無回檔型"
+    return "一般投機型"
+
+
+def build_speculative_risk_profile(
+    *,
+    ret1_pct: float,
+    ret5_pct: float,
+    ret20_pct: float,
+    volume_ratio20: float,
+    bias20_pct: float,
+    atr_pct: float,
+    range20_pct: float,
+    drawdown120_pct: float,
+    risk_score: int,
+    setup_score: int,
+    signals: str,
+    group: str,
+) -> SpeculativeRiskProfile:
+    signal_set = _signal_tokens(signals)
+    flags: list[str] = []
+    seen_flags: set[str] = set()
+
+    price_action_score = 0
+    if ret1_pct >= 7:
+        price_action_score += 1
+        _append_flag(flags, seen_flags, "單日急拉")
+    if ret5_pct >= 12:
+        price_action_score += 1
+        _append_flag(flags, seen_flags, "短線急漲")
+    if ret5_pct >= 20:
+        price_action_score += 1
+        _append_flag(flags, seen_flags, "5日過熱")
+    if ret20_pct >= 25:
+        price_action_score += 1
+        _append_flag(flags, seen_flags, "波段急漲")
+    if ret20_pct >= 45:
+        price_action_score += 1
+        _append_flag(flags, seen_flags, "20日飆漲")
+
+    crowding_score = 0
+    if volume_ratio20 >= 1.8:
+        crowding_score += 1
+        _append_flag(flags, seen_flags, "爆量")
+    if volume_ratio20 >= 2.8:
+        crowding_score += 1
+        _append_flag(flags, seen_flags, "量能失衡")
+    if atr_pct >= 6.0:
+        crowding_score += 1
+        _append_flag(flags, seen_flags, "波動劇烈")
+    if range20_pct >= 25:
+        crowding_score += 1
+        _append_flag(flags, seen_flags, "震幅過大")
+
+    extension_score = 0
+    if bias20_pct >= 10:
+        extension_score += 1
+        _append_flag(flags, seen_flags, "乖離偏大")
+    if bias20_pct >= 18:
+        extension_score += 1
+        _append_flag(flags, seen_flags, "乖離過大")
+    if drawdown120_pct >= -5:
+        extension_score += 1
+        _append_flag(flags, seen_flags, "高檔無回檔")
+
+    structure_score = 0
+    if risk_score >= 5:
+        structure_score += 1
+        _append_flag(flags, seen_flags, "追價風險高")
+    if "TREND" not in signal_set and "REBREAK" not in signal_set and (ret5_pct >= 12 or ret20_pct >= 25):
+        structure_score += 1
+        _append_flag(flags, seen_flags, "缺少趨勢支撐")
+    if ("ACCEL" in signal_set or "SURGE" in signal_set) and "TREND" not in signal_set and bias20_pct >= 10:
+        structure_score += 1
+        _append_flag(flags, seen_flags, "加速但結構薄")
+    if (not signal_set or signal_set == {"NONE"}) and (ret5_pct >= 8 or volume_ratio20 >= 1.8):
+        structure_score += 1
+        _append_flag(flags, seen_flags, "走勢與訊號不匹配")
+
+    score = price_action_score + crowding_score + extension_score + structure_score
+
+    if "TREND" in signal_set:
+        score -= 1
+    if "REBREAK" in signal_set:
+        score -= 1
+    if "BASE" in signal_set:
+        score -= 1
+    if group in {"core", "etf"}:
+        score -= 1
+    if setup_score >= 8 and risk_score <= 3:
+        score -= 1
+
+    score = max(score, 0)
+    label = speculative_risk_label(score)
+    subtype = speculative_risk_subtype(
+        score=score,
+        price_action_score=price_action_score,
+        crowding_score=crowding_score,
+        extension_score=extension_score,
+        structure_score=structure_score,
+    )
+    note = "結構相對正常" if not flags else "、".join(flags[:3])
+    return SpeculativeRiskProfile(
+        score=score,
+        label=label,
+        subtype=subtype,
+        note=note,
+        flags=tuple(flags),
+        price_action_score=price_action_score,
+        crowding_score=crowding_score,
+        extension_score=extension_score,
+        structure_score=structure_score,
+    )
 
 
 def volatility_label(atr_pct: float) -> str:
@@ -282,16 +443,21 @@ def detect_row(
         regime = "還在觀察"
 
     signal_text = ",".join(signals) if signals else "NONE"
-    spec_score = speculative_risk_score(
+    atr_pct = round(float(x["ATR_Pct"]) * 100, 2) if pd.notna(x.get("ATR_Pct")) else 0.0
+    spec_profile = build_speculative_risk_profile(
+        ret1_pct=ret1 * 100,
         ret5_pct=ret5 * 100,
         ret20_pct=ret20 * 100,
         volume_ratio20=vol_ratio20,
         bias20_pct=bias20 * 100,
+        atr_pct=atr_pct,
+        range20_pct=range20 * 100,
+        drawdown120_pct=drawdown120 * 100,
         risk_score=risk_score,
+        setup_score=setup_score,
         signals=signal_text,
         group=group,
     )
-    atr_pct = round(float(x["ATR_Pct"]) * 100, 2) if pd.notna(x.get("ATR_Pct")) else 0.0
 
     return {
         "date": df.index[-1].strftime("%Y-%m-%d"),
@@ -317,8 +483,15 @@ def detect_row(
         "signals": signal_text,
         "score_band": score_band(setup_score, risk_score),
         "regime": regime,
-        "spec_risk_score": int(spec_score),
-        "spec_risk_label": speculative_risk_label(spec_score),
+        "spec_risk_score": int(spec_profile.score),
+        "spec_risk_label": spec_profile.label,
+        "spec_risk_subtype": spec_profile.subtype,
+        "spec_risk_note": spec_profile.note,
+        "spec_risk_flags": ",".join(spec_profile.flags),
+        "spec_price_action_score": int(spec_profile.price_action_score),
+        "spec_crowding_score": int(spec_profile.crowding_score),
+        "spec_extension_score": int(spec_profile.extension_score),
+        "spec_structure_score": int(spec_profile.structure_score),
         "atr_pct": atr_pct,
         "volatility_tag": volatility_label(atr_pct),
     }
@@ -339,4 +512,3 @@ def grade_signal(row: dict) -> str:
     if risk >= 6:
         return "C"
     return "X"
-

@@ -17,6 +17,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from daily_theme_watchlist import ALERT_TRACK_CSV, LOCAL_TZ, logger
+from stock_watch.signals import build_speculative_risk_profile
 
 
 @dataclass(frozen=True)
@@ -26,6 +27,42 @@ class EvalConfig:
     retries: int = 3
     backoff_seconds: float = 1.0
     cache_dir: Path | None = None
+
+
+def _spec_profile_from_snapshot_row(row) -> tuple[object, str, str]:
+    score = pd.to_numeric(getattr(row, "spec_risk_score", None), errors="coerce")
+    label = str(getattr(row, "spec_risk_label", "")).strip()
+    subtype = str(getattr(row, "spec_risk_subtype", "")).strip()
+    note = str(getattr(row, "spec_risk_note", "")).strip()
+    if pd.notna(score) or label or subtype or note:
+        return (None if pd.isna(score) else int(score), label, subtype, note)
+
+    def _num(name: str, default: float = 0.0) -> float:
+        value = pd.to_numeric(getattr(row, name, None), errors="coerce")
+        return float(default if pd.isna(value) else value)
+
+    def _int_num(name: str, default: int = 0) -> int:
+        value = pd.to_numeric(getattr(row, name, None), errors="coerce")
+        return int(default if pd.isna(value) else value)
+
+    try:
+        profile = build_speculative_risk_profile(
+            ret1_pct=_num("ret1_pct"),
+            ret5_pct=_num("ret5_pct"),
+            ret20_pct=_num("ret20_pct"),
+            volume_ratio20=_num("volume_ratio20"),
+            bias20_pct=_num("bias20_pct"),
+            atr_pct=_num("atr_pct"),
+            range20_pct=_num("range20_pct"),
+            drawdown120_pct=_num("drawdown120_pct", -100.0),
+            risk_score=_int_num("risk_score"),
+            setup_score=_int_num("setup_score"),
+            signals=str(getattr(row, "signals", "")),
+            group=str(getattr(row, "group", "")),
+        )
+        return profile.score, profile.label, profile.subtype, profile.note
+    except Exception:
+        return None, "", "", ""
 
 
 def classify_market_heat(
@@ -608,6 +645,7 @@ def main(argv: list[str] | None = None) -> int:
         ticker = str(getattr(r, "ticker"))
         watch_type = str(getattr(r, "watch_type", ""))
         name = str(getattr(r, "name", ""))
+        spec_risk_score, spec_risk_label, spec_risk_subtype, spec_risk_note = _spec_profile_from_snapshot_row(r)
         for h in horizons:
             close_series = series_map.get(ticker)
             status_detail = ""
@@ -636,6 +674,10 @@ def main(argv: list[str] | None = None) -> int:
                     "grade": str(getattr(r, "grade", "")),
                     "setup_score": getattr(r, "setup_score", None),
                     "risk_score": getattr(r, "risk_score", None),
+                    "spec_risk_score": spec_risk_score,
+                    "spec_risk_label": spec_risk_label,
+                    "spec_risk_subtype": spec_risk_subtype,
+                    "spec_risk_note": spec_risk_note,
                     "ret5_pct": getattr(r, "ret5_pct", None),
                     "ret20_pct": getattr(r, "ret20_pct", None),
                     "volume_ratio20": getattr(r, "volume_ratio20", None),

@@ -10,6 +10,7 @@ from verification.evaluate_recommendations import compute_forward_return_pct
 from verification.evaluate_recommendations import dedupe_snapshots_by_key
 from verification.evaluate_recommendations import enrich_scenario_label_columns
 from verification.evaluate_recommendations import is_valid_signal_date
+from verification.evaluate_recommendations import _spec_profile_from_snapshot_row
 from verification.evaluate_recommendations import _chunked
 
 
@@ -114,3 +115,24 @@ class EvaluateRecommendationsTests(unittest.TestCase):
         out = enrich_scenario_label_columns(outcomes, snapshots=snapshots)
 
         self.assertEqual(out.loc[0, "scenario_label"], "強勢延伸盤")
+
+    def test_spec_profile_from_snapshot_row_backfills_legacy_snapshot_fields(self) -> None:
+        row = pd.Series(
+            {
+                "ticker": "3057.TW",
+                "signals": "ACCEL",
+                "risk_score": 6,
+                "ret5_pct": 24.0,
+                "ret20_pct": 52.0,
+                "volume_ratio20": 2.9,
+                "bias20_pct": 16.0,
+            }
+        )
+
+        score, label, subtype, note = _spec_profile_from_snapshot_row(row)
+
+        self.assertIsNotNone(score)
+        self.assertGreaterEqual(score or 0, 6)
+        self.assertEqual(label, "疑似炒作風險高")
+        self.assertEqual(subtype, "急拉爆量型")
+        self.assertTrue(note)

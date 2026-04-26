@@ -9,6 +9,44 @@ import pandas as pd
 from stock_watch.reports.common import dataframe_to_html
 
 
+def _fallback_spec_risk_note(row: pd.Series) -> str:
+    flags: list[str] = []
+    ret5 = pd.to_numeric(row.get("ret5_pct"), errors="coerce")
+    ret20 = pd.to_numeric(row.get("ret20_pct"), errors="coerce")
+    volume_ratio20 = pd.to_numeric(row.get("volume_ratio20"), errors="coerce")
+    bias20 = pd.to_numeric(row.get("bias20_pct"), errors="coerce")
+
+    if pd.notna(ret5) and float(ret5) >= 20:
+        flags.append("短線急漲")
+    elif pd.notna(ret5) and float(ret5) >= 12:
+        flags.append("短線偏熱")
+    if pd.notna(ret20) and float(ret20) >= 45:
+        flags.append("20日飆漲")
+    elif pd.notna(ret20) and float(ret20) >= 25:
+        flags.append("波段急漲")
+    if pd.notna(volume_ratio20) and float(volume_ratio20) >= 1.8:
+        flags.append("爆量")
+    if pd.notna(bias20) and float(bias20) >= 10:
+        flags.append("乖離偏大")
+
+    return "結構相對正常" if not flags else "、".join(flags[:3])
+
+
+def _spec_note(row: pd.Series) -> str:
+    note = str(row.get("spec_risk_note", "") or "").strip()
+    if note:
+        return note
+    return _fallback_spec_risk_note(row)
+
+
+def _spec_text(row: pd.Series) -> str:
+    label = str(row.get("spec_risk_label", "") or "")
+    note = _spec_note(row)
+    if note and note != "結構相對正常":
+        return f"{label}（{note}）"
+    return label
+
+
 def build_daily_report_markdown(
     df_rank: pd.DataFrame,
     market_regime: dict,
@@ -46,9 +84,25 @@ def build_daily_report_markdown(
         lines.append(
             f"| {int(row['rank'])} | {row['grade']} | {row['name']} ({row['ticker']}) | "
             f"{layer_label(row['layer'])} | {row['regime']} | "
-            f"{row['ret5_pct']}% | {row['ret20_pct']}% | {row.get('volatility_tag', '')} ({row.get('atr_pct', '')}%) | {row['spec_risk_label']} | "
+            f"{row['ret5_pct']}% | {row['ret20_pct']}% | {row.get('volatility_tag', '')} ({row.get('atr_pct', '')}%) | {_spec_text(row)} | "
             f"{row['signals']} / 量比 {row['volume_ratio20']} |"
         )
+
+    spec_scores = pd.to_numeric(df_rank.get("spec_risk_score", pd.Series(index=df_rank.index, dtype=float)), errors="coerce").fillna(0)
+    spec_labels = df_rank.get("spec_risk_label", pd.Series(index=df_rank.index, dtype=str)).astype(str)
+    suspicious = df_rank[(spec_scores >= 6) | spec_labels.eq("疑似炒作風險高")].copy()
+    if not suspicious.empty:
+        suspicious = suspicious.sort_values(by=["spec_risk_score", "rank"], ascending=[False, True]).head(5)
+    lines.extend(["", "## 疑似炒作觀察", ""])
+    if suspicious.empty:
+        lines.append("- None")
+    else:
+        for _, row in suspicious.iterrows():
+            lines.append(
+                f"- #{int(row['rank'])} {row['name']} {row['ticker']} | 投機分數 {int(row.get('spec_risk_score', 0))} | "
+                f"{row['spec_risk_label']} / {str(row.get('spec_risk_subtype', '') or '一般投機型')} | {_spec_note(row)} | "
+                f"5D {row['ret5_pct']}% / 20D {row['ret20_pct']}% / 量比 {row['volume_ratio20']}"
+            )
 
     short_candidates, short_backups, midlong_candidates, midlong_backups = build_candidate_sets(
         df_rank,
@@ -65,7 +119,7 @@ def build_daily_report_markdown(
             lines.append(
                 f"- #{int(row['rank'])} {row['name']} {row['ticker']} [{row['group']}/{layer_label(row['layer'])}] | "
                 f"setup {row['setup_score']} risk {row['risk_score']} | "
-                f"5D {row['ret5_pct']}% 10D {row['ret10_pct']}% 20D {row['ret20_pct']}% | 投機 {row['spec_risk_label']} | "
+                f"5D {row['ret5_pct']}% 10D {row['ret10_pct']}% 20D {row['ret20_pct']}% | 投機 {_spec_text(row)} | "
                 f"{row['signals']} | rankΔ {int(row['rank_change']):+d} setupΔ {int(row['setup_change']):+d}"
             )
 
@@ -77,7 +131,7 @@ def build_daily_report_markdown(
             lines.append(
                 f"- #{int(row['rank'])} {row['name']} {row['ticker']} [{row['group']}/{layer_label(row['layer'])}] | "
                 f"setup {row['setup_score']} risk {row['risk_score']} | "
-                f"5D {row['ret5_pct']}% 10D {row['ret10_pct']}% 20D {row['ret20_pct']}% | 投機 {row['spec_risk_label']} | "
+                f"5D {row['ret5_pct']}% 10D {row['ret10_pct']}% 20D {row['ret20_pct']}% | 投機 {_spec_text(row)} | "
                 f"{row['signals']} | rankΔ {int(row['rank_change']):+d} setupΔ {int(row['setup_change']):+d} | "
                 f"{watch_price_plan_text(row, 'short')}"
             )
@@ -90,7 +144,7 @@ def build_daily_report_markdown(
             lines.append(
                 f"- #{int(row['rank'])} {row['name']} {row['ticker']} [{row['group']}/{layer_label(row['layer'])}] | "
                 f"setup {row['setup_score']} risk {row['risk_score']} | "
-                f"10D {row['ret10_pct']}% 20D {row['ret20_pct']}% | 投機 {row['spec_risk_label']} | "
+                f"10D {row['ret10_pct']}% 20D {row['ret20_pct']}% | 投機 {_spec_text(row)} | "
                 f"{row['signals']} | rankΔ {int(row['rank_change']):+d} setupΔ {int(row['setup_change']):+d}"
             )
 
@@ -102,7 +156,7 @@ def build_daily_report_markdown(
             lines.append(
                 f"- #{int(row['rank'])} {row['name']} {row['ticker']} [{row['group']}/{layer_label(row['layer'])}] | "
                 f"setup {row['setup_score']} risk {row['risk_score']} | "
-                f"10D {row['ret10_pct']}% 20D {row['ret20_pct']}% | 投機 {row['spec_risk_label']} | "
+                f"10D {row['ret10_pct']}% 20D {row['ret20_pct']}% | 投機 {_spec_text(row)} | "
                 f"{row['signals']} | rankΔ {int(row['rank_change']):+d} setupΔ {int(row['setup_change']):+d} | "
                 f"{watch_price_plan_text(row, 'midlong')}"
             )
@@ -120,7 +174,7 @@ def build_daily_report_markdown(
             lines.append(
                 f"- #{int(row['rank'])} {row['name']} {row['ticker']} [{row['group']}/{layer_label(row['layer'])}] | "
                 f"setup {row['setup_score']} risk {row['risk_score']} | "
-                f"5D {row['ret5_pct']}% 20D {row['ret20_pct']}% | 投機 {row['spec_risk_label']} | "
+                f"5D {row['ret5_pct']}% 20D {row['ret20_pct']}% | 投機 {_spec_text(row)} | "
                 f"{row['signals']} | 操作 {special_etf_action_label(row)}"
             )
 
@@ -132,7 +186,7 @@ def build_daily_report_markdown(
             lines.append(
                 f"- #{int(row['rank'])} {row['name']} {row['ticker']} [{row['group']}/{layer_label(row['layer'])}] | "
                 f"setup {row['setup_score']} risk {row['risk_score']} | "
-                f"5D {row['ret5_pct']}% 20D {row['ret20_pct']}% | 投機 {row['spec_risk_label']} | "
+                f"5D {row['ret5_pct']}% 20D {row['ret20_pct']}% | 投機 {_spec_text(row)} | "
                 f"{row['signals']} | 理由 {early_gem_reason(row)} | {watch_price_plan_text(row, 'short')}"
             )
 
@@ -248,6 +302,34 @@ def build_daily_report_html(
     gem_html = "<p>None</p>" if gem_candidates.empty else dataframe_to_html(gem_candidates)
     feedback_summary = build_feedback_summary()
     feedback_html = "<p>None</p>" if feedback_summary.empty else dataframe_to_html(feedback_summary)
+    spec_scores = pd.to_numeric(df_rank.get("spec_risk_score", pd.Series(index=df_rank.index, dtype=float)), errors="coerce").fillna(0)
+    spec_labels = df_rank.get("spec_risk_label", pd.Series(index=df_rank.index, dtype=str)).astype(str)
+    suspicious = df_rank[(spec_scores >= 6) | spec_labels.eq("疑似炒作風險高")].copy()
+    if not suspicious.empty:
+        suspicious = suspicious.sort_values(by=["spec_risk_score", "rank"], ascending=[False, True]).head(10)
+    suspicious_html = "<p>None</p>" if suspicious.empty else dataframe_to_html(
+        suspicious[
+            [
+                col
+                for col in [
+                    "rank",
+                    "ticker",
+                    "name",
+                    "group",
+                    "layer",
+                    "spec_risk_score",
+                    "spec_risk_label",
+                    "spec_risk_subtype",
+                    "spec_risk_note",
+                    "ret5_pct",
+                    "ret20_pct",
+                    "volume_ratio20",
+                    "signals",
+                ]
+                if col in suspicious.columns
+            ]
+        ]
+    )
     scenario = build_market_scenario(market_regime, us_market or {}, df_rank)
     adaptive_preview_html = "<br>".join(
         [f"情境：{scenario['label']} | 目前節奏：{scenario['stance']}"] + strategy_preview_lines(config_strategy, scenario)
@@ -263,6 +345,7 @@ th {{ background: #f4f4f4; }}
 <h1>Daily 20D v2.2 Attack Report</h1>
 <p><strong>Market:</strong> {market_regime['comment']}</p>
 <h2>Top Ranking</h2>{dataframe_to_html(df_rank)}
+<h2>疑似炒作觀察</h2>{suspicious_html}
 <h2>Short-Term Candidates</h2>{short_html}
 <h2>Short-Term Backups</h2>{short_backup_html}
 <h2>Mid-Long Candidates</h2>{midlong_html}

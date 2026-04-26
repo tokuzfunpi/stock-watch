@@ -57,6 +57,28 @@ class VerifyRecommendationsTests(unittest.TestCase):
             [
                 {
                     "rank": 1,
+                    "ticker": "3057.TW",
+                    "name": "喬鼎",
+                    "group": "theme",
+                    "layer": "short_attack",
+                    "grade": "B",
+                    "setup_score": 6,
+                    "risk_score": 6,
+                    "spec_risk_score": 8,
+                    "spec_risk_label": "疑似炒作風險高",
+                    "spec_risk_subtype": "急拉爆量型",
+                    "spec_risk_note": "短線急漲、爆量、缺少趨勢支撐",
+                    "ret5_pct": 24.0,
+                    "ret20_pct": 52.0,
+                    "volume_ratio20": 2.9,
+                    "signals": "ACCEL",
+                    "rank_change": 0,
+                    "setup_change": 0,
+                    "close": 42.0,
+                    "date": "2026-04-17",
+                },
+                {
+                    "rank": 2,
                     "ticker": "2330.TW",
                     "name": "台積電",
                     "group": "core",
@@ -64,11 +86,13 @@ class VerifyRecommendationsTests(unittest.TestCase):
                     "grade": "A",
                     "setup_score": 8,
                     "risk_score": 2,
+                    "spec_risk_score": 0,
                     "ret5_pct": 8.5,
                     "ret20_pct": 12.0,
                     "volume_ratio20": 1.4,
                     "signals": "TREND",
                     "spec_risk_label": "正常",
+                    "spec_risk_subtype": "正常",
                     "rank_change": 0,
                     "setup_change": 0,
                     "close": 950.0,
@@ -87,3 +111,10 @@ class VerifyRecommendationsTests(unittest.TestCase):
         self.assertIn("## Short-Term Candidates", report)
         self.assertIn("| ticker |", report)
         self.assertIn("2330.TW", report)
+        self.assertIn("3057.TW", report)
+        self.assertIn("signal_template", report)
+        self.assertIn("General", report)
+        self.assertIn("## Spec Risk Watchlist", report)
+        self.assertIn("高疑似炒作樣本", report)
+        self.assertIn("Short spec risk counts", report)
+        self.assertIn("急拉爆量型", report)
