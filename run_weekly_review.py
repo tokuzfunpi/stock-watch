@@ -624,6 +624,7 @@ def build_decisions(
     threshold_row = _find_single_row(parts.get("delta_ok_minus_below", pd.DataFrame()), horizon_days=1, watch_type="midlong")
     heat_row = _find_single_row(parts.get("heat_bias_check", pd.DataFrame()), horizon_days=1, watch_type="midlong")
     spec_risk_row = _find_single_row(parts.get("spec_risk_check", pd.DataFrame()), horizon_days=1, watch_type="short")
+    short_gate_watch = parts.get("short_gate_promotion_watch", pd.DataFrame())
 
     if threshold_row is None:
         threshold_decision = {
@@ -705,8 +706,56 @@ def build_decisions(
                 ),
             }
 
+    if short_gate_watch is None or short_gate_watch.empty:
+        short_gate_decision = {
+            "status": "hold",
+            "detail": "最近樣本還不足以判斷哪一種短線候補值得升格；先持續累積。",
+        }
+    else:
+        candidates = short_gate_watch.copy()
+        candidates = candidates[
+            (pd.to_numeric(candidates.get("horizon_days"), errors="coerce") == 1)
+            & (candidates.get("watch_type", "").astype(str) == "short")
+        ].copy()
+        candidates = candidates[candidates["verdict"].astype(str) == "watch_upgrade"].copy()
+        if candidates.empty:
+            short_gate_decision = {
+                "status": "hold",
+                "detail": "目前還沒有明確的短線候補升格對象；先維持原本 short gate。",
+            }
+        else:
+            candidates["below_n"] = pd.to_numeric(candidates.get("below_n"), errors="coerce").fillna(0)
+            candidates["delta_avg_ret_below_minus_ok"] = pd.to_numeric(candidates.get("delta_avg_ret_below_minus_ok"), errors="coerce").fillna(0.0)
+            candidates = candidates.sort_values(
+                by=["delta_avg_ret_below_minus_ok", "below_n"],
+                ascending=[False, False],
+            )
+            top_candidate = candidates.iloc[0]
+            min_n = int(pd.to_numeric(top_candidate.get("min_n"), errors="coerce") or 0)
+            delta_avg = float(pd.to_numeric(top_candidate.get("delta_avg_ret_below_minus_ok"), errors="coerce") or 0.0)
+            confidence = str(top_candidate.get("confidence", "low"))
+            action = str(top_candidate.get("action", ""))
+            if min_n >= 5 and delta_avg >= 1.0:
+                short_gate_decision = {
+                    "status": "review",
+                    "detail": (
+                        f"`{action}` 目前是最值得研究的短線候補升格對象，"
+                        f"`below-ok = {delta_avg:.2f}%`、`min_n={min_n}`、`confidence={confidence}`；"
+                        "可以優先做 action-level tuning，但先不要一次放寬整體 short gate。"
+                    ),
+                }
+            else:
+                short_gate_decision = {
+                    "status": "hold",
+                    "detail": (
+                        f"`{action}` 雖然看起來偏強，但目前只有 `below-ok = {delta_avg:.2f}%`、"
+                        f"`min_n={min_n}`、`confidence={confidence}`；先當成觀察名單，不急著動 short gate。"
+                    ),
+                }
+
     return {
         "threshold": threshold_decision,
+        "short_gate": short_gate_decision,
         "atr": atr_decision,
         "feedback": feedback_decision,
         "spec_risk": spec_risk_decision,
@@ -752,6 +801,7 @@ def build_weekly_review_payload(
     overall_by_spec_risk = parts.get("overall_by_spec_risk", pd.DataFrame())
     overall_by_spec_subtype = parts.get("overall_by_spec_subtype", pd.DataFrame())
     spec_risk_check = parts.get("spec_risk_check", pd.DataFrame())
+    short_gate_promotion_watch = parts.get("short_gate_promotion_watch", pd.DataFrame())
 
     summary = {
         "signal_dates": recent_dates,
@@ -777,6 +827,7 @@ def build_weekly_review_payload(
             "overall_by_spec_risk": overall_by_spec_risk.to_dict(orient="records"),
             "overall_by_spec_subtype": overall_by_spec_subtype.to_dict(orient="records"),
             "spec_risk_check": spec_risk_check.to_dict(orient="records"),
+            "short_gate_promotion_watch": short_gate_promotion_watch.to_dict(orient="records"),
             "current_rank_spec_risk_by_group": rank_spec_coverage["by_group"],
             "current_rank_spec_risk_by_layer": rank_spec_coverage["by_layer"],
             "current_rank_spec_risk_by_source": candidate_source_summary["by_source"],
@@ -815,7 +866,7 @@ def render_weekly_review_markdown(payload: dict[str, object]) -> str:
         "## Decisions",
         "",
     ]
-    for key in ["threshold", "atr", "feedback", "spec_risk"]:
+    for key in ["threshold", "short_gate", "atr", "feedback", "spec_risk"]:
         item = decisions.get(key, {})
         lines.append(f"- `{key}`: `{item.get('status', 'hold')}` — {item.get('detail', '')}")
 
@@ -861,6 +912,7 @@ def render_weekly_review_markdown(payload: dict[str, object]) -> str:
 
     lines.extend(["", "## Overall By Signal", _table_markdown(pd.DataFrame(tables.get("overall_by_signal", []))).rstrip(), ""])
     lines.extend(["## Threshold Delta", _table_markdown(pd.DataFrame(tables.get("weekly_threshold_delta", []))).rstrip(), ""])
+    lines.extend(["## Short Gate Promotion Watch", _table_markdown(pd.DataFrame(tables.get("short_gate_promotion_watch", []))).rstrip(), ""])
     lines.extend(["## Heat Bias Check", _table_markdown(pd.DataFrame(tables.get("heat_bias_check", []))).rstrip(), ""])
     lines.extend(["## Overall By Spec Risk", _table_markdown(pd.DataFrame(tables.get("overall_by_spec_risk", []))).rstrip(), ""])
     lines.extend(["## Overall By Spec Subtype", _table_markdown(pd.DataFrame(tables.get("overall_by_spec_subtype", []))).rstrip(), ""])

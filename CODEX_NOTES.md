@@ -1406,3 +1406,19 @@ layer 看起來則是：
   - 觀察：`5347.TWO`
   - 高風險觀察：`6962.TW`, `2340.TW`, `2464.TW`
 - 這份筆記適合直接當開盤前的新增名單閱讀順序。
+
+## 2026-04-26 補充：verification short gate diagnostics
+- `verification/evaluate_recommendations.py` 已經在 rerun 時先做全表 dedupe，再寫回 `reco_outcomes.csv`，目前 outcome key 重複數應維持為 0。
+- `verification/summarize_outcomes.py` 現在除了 `Threshold Guard Check`、`Short Threshold Diagnostics` 外，還新增 `Short Gate Promotion Watch`：
+  - 會直接把短線 `below_threshold` action 與同 horizon 的 short `ok` baseline 做對照。
+  - 目前全歷史 rerun 下，`1D short / 開高不追` 顯示為 `watch_upgrade`，大意是它比 short `ok` baseline 還強，但還先只當 tuning 候選。
+- `run_weekly_review.py` 也接了 `short_gate` decision：
+  - weekly view 只看最近 signal dates，所以目前仍可能是 `hold`。
+  - 這是合理的：全歷史 verification 已經指出候選，但近週樣本還沒大到足以直接推動規則調整。
+- 實際輸出重點：
+  - `verification/watchlist_daily/outcomes_summary.md`：會看到 `Short Gate Promotion Watch`
+  - `theme_watchlist_daily/weekly_review.md`：會看到 `short_gate` decision 與 weekly 的 promotion watch 表
+- 目前對 short gate 的最新判讀：
+  - 不再是 dedupe 問題。
+  - 也還不是「直接放寬 short gate」。
+  - 最值得優先研究的是 `開高不追` 這種 `below_threshold` action 是否應該做 action-level tuning。

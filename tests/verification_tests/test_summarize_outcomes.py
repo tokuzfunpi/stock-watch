@@ -356,6 +356,7 @@ class SummarizeOutcomesTests(unittest.TestCase):
         self.assertIn("## Weekly Checkpoint", md)
         self.assertIn("## Overall By Action", md)
         self.assertIn("## Short Threshold Diagnostics", md)
+        self.assertIn("## Short Gate Promotion Watch", md)
         self.assertIn("## Overall By Scenario + Action", md)
         self.assertIn("reco_status", md)
         self.assertIn("Momentum Leader", md)
@@ -473,6 +474,45 @@ class SummarizeOutcomesTests(unittest.TestCase):
         joined = "\n".join(findings)
         self.assertIn("below_threshold", joined)
         self.assertIn("短線 `ok` 門檻可能偏保守", joined)
+        self.assertIn("升格觀察", joined)
+
+    def test_summarize_outcomes_builds_short_gate_promotion_watch(self) -> None:
+        rows = []
+        for idx in range(6):
+            rows.append(
+                {
+                    "signal_date": f"2026-04-{10 + idx:02d}",
+                    "horizon_days": 1,
+                    "watch_type": "short",
+                    "reco_status": "ok",
+                    "market_heat": "warm",
+                    "scenario_label": "強勢延伸盤",
+                    "action": "等拉回",
+                    "realized_ret_pct": 1.0,
+                    "status": "ok",
+                }
+            )
+        for idx in range(4):
+            rows.append(
+                {
+                    "signal_date": f"2026-04-{10 + idx:02d}",
+                    "horizon_days": 1,
+                    "watch_type": "short",
+                    "reco_status": "below_threshold",
+                    "market_heat": "hot",
+                    "scenario_label": "強勢延伸盤",
+                    "action": "開高不追",
+                    "realized_ret_pct": 4.0,
+                    "status": "ok",
+                }
+            )
+
+        parts = summarize_outcomes(pd.DataFrame(rows))
+        self.assertFalse(parts["short_gate_promotion_watch"].empty)
+        top_row = parts["short_gate_promotion_watch"].iloc[0]
+        self.assertEqual(str(top_row["action"]), "開高不追")
+        self.assertEqual(str(top_row["verdict"]), "watch_upgrade")
+        self.assertGreater(float(top_row["delta_avg_ret_below_minus_ok"]), 0.0)
 
     def test_summarize_atr_band_checkpoints_tracks_maturity_and_levels(self) -> None:
         alert_tracking = pd.DataFrame(

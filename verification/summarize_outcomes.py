@@ -196,6 +196,22 @@ def build_key_findings(parts: dict[str, pd.DataFrame]) -> list[str]:
                 f"`n={int(top_below['n'])}`；這表示補滿用名單偏強，可能是近期強盤把保守動作也往上抬。"
             )
 
+    short_promotion = parts.get("short_gate_promotion_watch", pd.DataFrame())
+    if not short_promotion.empty:
+        promote = short_promotion[short_promotion["verdict"].astype(str) == "watch_upgrade"].copy()
+        if not promote.empty:
+            promote = promote.sort_values(
+                by=["delta_avg_ret_below_minus_ok", "below_n"],
+                ascending=[False, False],
+            )
+            top_promote = promote.iloc[0]
+            findings.append(
+                f"短線候補裡 `{top_promote['action']}` 最值得列入升格觀察，"
+                f"`below-ok = {_pct(top_promote['delta_avg_ret_below_minus_ok'])}%`、"
+                f"`below_n={int(top_promote['below_n'])}`、`confidence={top_promote['confidence']}`；"
+                "先把它當成 tuning 候選，而不是直接放寬整體門檻。"
+            )
+
     if not findings and not parts.get("overall_by_scenario", pd.DataFrame()).empty:
         findings.append("目前 scenario 資料已開始累積，但 `hot vs normal` 的可比較樣本還不夠，先以表格追蹤，不急著下規則結論。")
 
@@ -318,6 +334,9 @@ def summarize_outcomes(outcomes: pd.DataFrame) -> dict[str, pd.DataFrame]:
             "overall_by_spec_subtype": empty,
             "delta_ok_minus_below": empty,
             "delta_ok_minus_below_by_date": empty,
+            "threshold_guard_check": empty,
+            "short_threshold_diagnostics": empty,
+            "short_gate_promotion_watch": empty,
             "heat_bias_check": empty,
             "heat_bias_by_scenario": empty,
             "heat_bias_by_date": empty,
@@ -346,6 +365,9 @@ def summarize_outcomes(outcomes: pd.DataFrame) -> dict[str, pd.DataFrame]:
             "overall_by_spec_subtype": empty,
             "delta_ok_minus_below": empty,
             "delta_ok_minus_below_by_date": empty,
+            "threshold_guard_check": empty,
+            "short_threshold_diagnostics": empty,
+            "short_gate_promotion_watch": empty,
             "heat_bias_check": empty,
             "heat_bias_by_scenario": empty,
             "heat_bias_by_date": empty,
@@ -374,6 +396,9 @@ def summarize_outcomes(outcomes: pd.DataFrame) -> dict[str, pd.DataFrame]:
             "overall_by_spec_subtype": empty,
             "delta_ok_minus_below": empty,
             "delta_ok_minus_below_by_date": empty,
+            "threshold_guard_check": empty,
+            "short_threshold_diagnostics": empty,
+            "short_gate_promotion_watch": empty,
             "heat_bias_check": empty,
             "heat_bias_by_scenario": empty,
             "heat_bias_by_date": empty,
@@ -646,6 +671,7 @@ def summarize_outcomes(outcomes: pd.DataFrame) -> dict[str, pd.DataFrame]:
     spec_risk_check = pd.DataFrame()
     threshold_guard_check = pd.DataFrame()
     short_threshold_diagnostics = pd.DataFrame()
+    short_gate_promotion_watch = pd.DataFrame()
     try:
         delta_base = overall_by_signal_status.copy()
         delta_base = delta_base[delta_base["reco_status"].isin(["ok", "below_threshold"])].copy()
@@ -735,6 +761,102 @@ def summarize_outcomes(outcomes: pd.DataFrame) -> dict[str, pd.DataFrame]:
             ).reset_index(drop=True)
     except Exception:
         short_threshold_diagnostics = pd.DataFrame()
+
+    try:
+        if not short_threshold_diagnostics.empty:
+            ok_baseline = short_threshold_diagnostics[
+                short_threshold_diagnostics["reco_status"].astype(str) == "ok"
+            ].copy()
+            ok_baseline = (
+                ok_baseline.groupby(["horizon_days", "watch_type"], dropna=False)
+                .agg(
+                    ok_n=("n", "sum"),
+                    ok_win_rate=("win_rate", "mean"),
+                    ok_avg_ret=("avg_ret", "mean"),
+                    ok_med_ret=("med_ret", "mean"),
+                )
+                .reset_index()
+            )
+            below_actions = short_threshold_diagnostics[
+                short_threshold_diagnostics["reco_status"].astype(str) == "below_threshold"
+            ].copy()
+            if not below_actions.empty and not ok_baseline.empty:
+                short_gate_promotion_watch = below_actions.merge(
+                    ok_baseline,
+                    on=["horizon_days", "watch_type"],
+                    how="left",
+                )
+                short_gate_promotion_watch["below_n"] = pd.to_numeric(short_gate_promotion_watch["n"], errors="coerce").astype("Int64")
+                short_gate_promotion_watch["ok_n"] = pd.to_numeric(short_gate_promotion_watch["ok_n"], errors="coerce").astype("Int64")
+                min_n_promo = pd.concat(
+                    [
+                        pd.to_numeric(short_gate_promotion_watch["below_n"], errors="coerce"),
+                        pd.to_numeric(short_gate_promotion_watch["ok_n"], errors="coerce"),
+                    ],
+                    axis=1,
+                ).min(axis=1)
+                short_gate_promotion_watch["min_n"] = min_n_promo.astype("Int64")
+                short_gate_promotion_watch["confidence"] = [
+                    _confidence_label(int(x)) if pd.notna(x) else "low" for x in min_n_promo.tolist()
+                ]
+                short_gate_promotion_watch["delta_win_rate_below_minus_ok"] = (
+                    pd.to_numeric(short_gate_promotion_watch["win_rate"], errors="coerce")
+                    - pd.to_numeric(short_gate_promotion_watch["ok_win_rate"], errors="coerce")
+                ).round(1)
+                short_gate_promotion_watch["delta_avg_ret_below_minus_ok"] = (
+                    pd.to_numeric(short_gate_promotion_watch["avg_ret"], errors="coerce")
+                    - pd.to_numeric(short_gate_promotion_watch["ok_avg_ret"], errors="coerce")
+                ).round(2)
+                short_gate_promotion_watch["delta_med_ret_below_minus_ok"] = (
+                    pd.to_numeric(short_gate_promotion_watch["med_ret"], errors="coerce")
+                    - pd.to_numeric(short_gate_promotion_watch["ok_med_ret"], errors="coerce")
+                ).round(2)
+
+                def _promotion_verdict(row: pd.Series) -> str:
+                    below_n = pd.to_numeric(row.get("below_n"), errors="coerce")
+                    delta_avg = pd.to_numeric(row.get("delta_avg_ret_below_minus_ok"), errors="coerce")
+                    if pd.notna(below_n) and below_n >= 3 and pd.notna(delta_avg) and delta_avg >= 0:
+                        return "watch_upgrade"
+                    if pd.notna(below_n) and below_n >= 2 and pd.notna(delta_avg) and delta_avg >= -1.0:
+                        return "mixed"
+                    return "keep_guardrail"
+
+                short_gate_promotion_watch["verdict"] = short_gate_promotion_watch.apply(_promotion_verdict, axis=1)
+                short_gate_promotion_watch = short_gate_promotion_watch[
+                    [
+                        "horizon_days",
+                        "watch_type",
+                        "action",
+                        "below_n",
+                        "ok_n",
+                        "min_n",
+                        "confidence",
+                        "win_rate",
+                        "ok_win_rate",
+                        "delta_win_rate_below_minus_ok",
+                        "avg_ret",
+                        "ok_avg_ret",
+                        "delta_avg_ret_below_minus_ok",
+                        "med_ret",
+                        "ok_med_ret",
+                        "delta_med_ret_below_minus_ok",
+                        "verdict",
+                    ]
+                ].rename(
+                    columns={
+                        "win_rate": "below_win_rate",
+                        "avg_ret": "below_avg_ret",
+                        "med_ret": "below_med_ret",
+                    }
+                )
+                verdict_order = {"watch_upgrade": 0, "mixed": 1, "keep_guardrail": 2}
+                short_gate_promotion_watch["_verdict_order"] = short_gate_promotion_watch["verdict"].map(verdict_order).fillna(9)
+                short_gate_promotion_watch = short_gate_promotion_watch.sort_values(
+                    by=["horizon_days", "_verdict_order", "delta_avg_ret_below_minus_ok", "below_n"],
+                    ascending=[True, True, False, False],
+                ).drop(columns="_verdict_order")
+    except Exception:
+        short_gate_promotion_watch = pd.DataFrame()
 
     try:
         heat_base = overall_by_market_heat.copy()
@@ -912,6 +1034,7 @@ def summarize_outcomes(outcomes: pd.DataFrame) -> dict[str, pd.DataFrame]:
         "delta_ok_minus_below_by_date": delta_ok_minus_below_by_date,
         "threshold_guard_check": threshold_guard_check,
         "short_threshold_diagnostics": short_threshold_diagnostics,
+        "short_gate_promotion_watch": short_gate_promotion_watch,
         "heat_bias_check": heat_bias_check,
         "heat_bias_by_scenario": heat_bias_by_scenario,
         "heat_bias_by_date": heat_bias_by_date,
@@ -1076,6 +1199,10 @@ def build_summary_markdown(
         lines.extend(["## Short Threshold Diagnostics", _table_markdown(parts["short_threshold_diagnostics"].head(20)).rstrip(), ""])
     else:
         lines.extend(["## Short Threshold Diagnostics", "_None_", ""])
+    if not parts["short_gate_promotion_watch"].empty:
+        lines.extend(["## Short Gate Promotion Watch", _table_markdown(parts["short_gate_promotion_watch"].head(20)).rstrip(), ""])
+    else:
+        lines.extend(["## Short Gate Promotion Watch", "_None_", ""])
     if not parts["overall_by_scenario_action"].empty:
         lines.extend(["## Overall By Scenario + Action (all dates, top 80)", _table_markdown(parts["overall_by_scenario_action"].head(80)).rstrip(), ""])
     lines.extend(["## By Signal (watch_type)", _table_markdown(parts["by_signal"].head(30)).rstrip(), ""])

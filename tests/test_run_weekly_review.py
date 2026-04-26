@@ -82,6 +82,21 @@ class RunWeeklyReviewTests(unittest.TestCase):
                     }
                 ]
             ),
+            "short_gate_promotion_watch": pd.DataFrame(
+                [
+                    {
+                        "horizon_days": 1,
+                        "watch_type": "short",
+                        "action": "開高不追",
+                        "below_n": 5,
+                        "ok_n": 28,
+                        "min_n": 5,
+                        "confidence": "medium",
+                        "delta_avg_ret_below_minus_ok": 2.3,
+                        "verdict": "watch_upgrade",
+                    }
+                ]
+            ),
         }
         band_parts = {
             "band_coverage": pd.DataFrame(
@@ -104,6 +119,7 @@ class RunWeeklyReviewTests(unittest.TestCase):
             decisions = build_decisions(parts, band_parts, feedback_csv)
 
         self.assertEqual(decisions["threshold"]["status"], "review")
+        self.assertEqual(decisions["short_gate"]["status"], "review")
         self.assertEqual(decisions["atr"]["status"], "hold")
         self.assertEqual(decisions["feedback"]["status"], "hold")
         self.assertEqual(decisions["spec_risk"]["status"], "review")
@@ -425,6 +441,7 @@ class RunWeeklyReviewTests(unittest.TestCase):
         self.assertIn("## Overall By Spec Risk", markdown)
         self.assertIn("## Overall By Spec Subtype", markdown)
         self.assertIn("## Spec Risk Check", markdown)
+        self.assertIn("## Short Gate Promotion Watch", markdown)
         self.assertIn("## Current Rank Spec Risk By Group", markdown)
         self.assertIn("## Current Rank Spec Risk By Layer", markdown)
         self.assertIn("## Current Rank Spec Risk By Source", markdown)
@@ -432,3 +449,4 @@ class RunWeeklyReviewTests(unittest.TestCase):
         self.assertIn("prioritize groups like", markdown)
         self.assertIn("3057.TW", markdown)
         self.assertIn("spec_risk", payload["decisions"])
+        self.assertIn("short_gate", payload["decisions"])
