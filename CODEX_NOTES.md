@@ -1442,3 +1442,27 @@ layer 看起來則是：
 - 這表示下一個真正的規則決策點，不是「short gate 全放寬」，而是：
   - 要不要只對 `開高不追` 做 action-level tuning
   - 或者先繼續累積近週樣本，等 weekly 也轉成 `watch_upgrade` 再動
+
+## 2026-04-26 補充：開高不追 action-level tuning 草案
+- `run_weekly_review.py` 現在會用全歷史 outcomes + 近週 outcomes 同時產生 `開高不追 Tuning Draft`
+  - 全歷史證據來自 `full_short_gate_*`
+  - 近週保守判斷仍沿用 recent-only `short_gate`
+- 目前週報新增：
+  - `## 開高不追 Tuning Draft`
+  - `## Full Short Gate Promotion Watch`
+  - `## Full Short Gate Action Context`
+  - `## Full Short Gate Simulation`
+- 目前草案內容大意：
+  - 只研究 `開高不追`
+  - 不放寬整體 short gate
+  - 提議在 `強勢延伸盤 / hot`、`高檔震盪盤 / hot` 下，把 `開高不追` 列為 shadow promotion 觀察名單
+  - guardrails 明確要求：
+    - 僅限 `1D short`
+    - 僅做 paper/shadow experiment
+    - 若 `spec_risk_bucket != normal` 或 recent-only 樣本仍偏單日集中，就不正式升格
+- 目前數字：
+  - 全歷史：`below-ok = +2.30%`、`promotion_ready = True`
+  - 最小模擬：若只升格 `開高不追`，`1D short ok avg_ret` 約增加 `+0.35%`
+  - 近週：仍是 `mixed/hold`，主因 `below_n=2`、樣本太薄
+- 所以最新建議不是直接改規則，而是：
+  - 若要往前走，下一步應該做 `開高不追` 的 shadow / paper experiment

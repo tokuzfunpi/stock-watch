@@ -616,6 +616,159 @@ def build_spec_risk_overview(parts: dict[str, pd.DataFrame]) -> dict[str, object
     return summary
 
 
+def build_short_gate_tuning_draft(
+    full_parts: dict[str, pd.DataFrame],
+    recent_parts: dict[str, pd.DataFrame],
+    *,
+    target_action: str = "開高不追",
+) -> dict[str, object]:
+    summary: dict[str, object] = {
+        "target_action": target_action,
+        "status": "hold",
+        "why_now": "",
+        "proposal": "",
+        "guardrails": [],
+        "historical": {},
+        "recent": {},
+        "contexts": [],
+        "simulation": {},
+    }
+
+    full_watch = full_parts.get("short_gate_promotion_watch", pd.DataFrame())
+    recent_watch = recent_parts.get("short_gate_promotion_watch", pd.DataFrame())
+    full_context = full_parts.get("short_gate_action_context", pd.DataFrame())
+    full_sim = full_parts.get("short_gate_simulation", pd.DataFrame())
+
+    def _pick_action_row(df: pd.DataFrame) -> pd.Series | None:
+        if df is None or df.empty:
+            return None
+        work = df.copy()
+        work = work[
+            (pd.to_numeric(work.get("horizon_days"), errors="coerce") == 1)
+            & (work.get("watch_type", "").astype(str) == "short")
+            & (work.get("action", "").astype(str) == target_action)
+        ].copy()
+        if work.empty:
+            return None
+        return work.iloc[0]
+
+    full_row = _pick_action_row(full_watch)
+    recent_row = _pick_action_row(recent_watch)
+
+    if full_row is not None:
+        summary["historical"] = {
+            "below_n": int(pd.to_numeric(full_row.get("below_n"), errors="coerce") or 0),
+            "ok_n": int(pd.to_numeric(full_row.get("ok_n"), errors="coerce") or 0),
+            "confidence": str(full_row.get("confidence", "low")),
+            "delta_avg_ret_below_minus_ok": round(float(pd.to_numeric(full_row.get("delta_avg_ret_below_minus_ok"), errors="coerce") or 0.0), 2),
+            "promotion_ready": bool(full_row.get("promotion_ready", False)),
+            "verdict": str(full_row.get("verdict", "")),
+        }
+
+    if recent_row is not None:
+        summary["recent"] = {
+            "below_n": int(pd.to_numeric(recent_row.get("below_n"), errors="coerce") or 0),
+            "ok_n": int(pd.to_numeric(recent_row.get("ok_n"), errors="coerce") or 0),
+            "confidence": str(recent_row.get("confidence", "low")),
+            "delta_avg_ret_below_minus_ok": round(float(pd.to_numeric(recent_row.get("delta_avg_ret_below_minus_ok"), errors="coerce") or 0.0), 2),
+            "promotion_ready": bool(recent_row.get("promotion_ready", False)),
+            "verdict": str(recent_row.get("verdict", "")),
+        }
+
+    if not full_context.empty:
+        context = full_context.copy()
+        context = context[
+            (pd.to_numeric(context.get("horizon_days"), errors="coerce") == 1)
+            & (context.get("reco_status", "").astype(str) == "below_threshold")
+            & (context.get("action", "").astype(str) == target_action)
+        ].copy()
+        if not context.empty:
+            context["n"] = pd.to_numeric(context.get("n"), errors="coerce").fillna(0)
+            context["avg_ret"] = pd.to_numeric(context.get("avg_ret"), errors="coerce").fillna(0.0)
+            context = context.sort_values(
+                by=["n", "avg_ret"],
+                ascending=[False, False],
+            )
+            summary["contexts"] = context[
+                [
+                    c
+                    for c in [
+                        "scenario_label",
+                        "market_heat",
+                        "spec_risk_bucket",
+                        "n",
+                        "signal_dates",
+                        "win_rate",
+                        "avg_ret",
+                        "med_ret",
+                    ]
+                    if c in context.columns
+                ]
+            ].head(5).to_dict(orient="records")
+
+    if not full_sim.empty:
+        sim = full_sim.copy()
+        sim = sim[
+            (pd.to_numeric(sim.get("horizon_days"), errors="coerce") == 1)
+            & (sim.get("watch_type", "").astype(str) == "short")
+            & (sim.get("promoted_actions", "").astype(str).str.contains(target_action, regex=False))
+        ].copy()
+        if not sim.empty:
+            top_sim = sim.iloc[0]
+            summary["simulation"] = {
+                "promoted_n": int(pd.to_numeric(top_sim.get("promoted_n"), errors="coerce") or 0),
+                "delta_avg_ret_simulated_minus_current": round(float(pd.to_numeric(top_sim.get("delta_avg_ret_simulated_minus_current"), errors="coerce") or 0.0), 2),
+                "delta_win_rate_simulated_minus_current": round(float(pd.to_numeric(top_sim.get("delta_win_rate_simulated_minus_current"), errors="coerce") or 0.0), 1),
+            }
+
+    historical_ready = bool(summary.get("historical", {}).get("promotion_ready", False))
+    recent_ready = bool(summary.get("recent", {}).get("promotion_ready", False))
+    hist_delta = float(summary.get("historical", {}).get("delta_avg_ret_below_minus_ok", 0.0) or 0.0)
+    sim_delta = float(summary.get("simulation", {}).get("delta_avg_ret_simulated_minus_current", 0.0) or 0.0)
+
+    guardrails: list[str] = [
+        "只研究 `開高不追`，不動整體 short gate。",
+        "僅限 `1D short`，不外推到 `5D short` 或 `midlong`。",
+        "先只把它當 shadow upgrade / paper experiment，不直接變正式 candidate 規則。",
+        "若 `spec_risk_bucket` 不是 `normal`，或最近樣本仍偏單日集中，就不建議正式升格。",
+    ]
+    summary["guardrails"] = guardrails
+
+    if historical_ready and sim_delta > 0:
+        summary["status"] = "draft_ready"
+        summary["why_now"] = (
+            f"全歷史 `1D short / {target_action}` 目前 `below-ok={hist_delta:.2f}%`，"
+            f"而且最小模擬再增加 `ok avg_ret {sim_delta:.2f}%`。"
+        )
+        context_hints = []
+        for row in summary["contexts"][:2]:
+            scenario = str(row.get("scenario_label", ""))
+            heat = str(row.get("market_heat", ""))
+            if scenario:
+                context_hints.append(f"`{scenario}` / `{heat}`")
+        context_text = "、".join(context_hints) if context_hints else "近期偏強情境"
+        summary["proposal"] = (
+            f"草案建議：保留 `開高不追` 原標籤，但在 {context_text} 下，"
+            "把它加入 shadow promotion 觀察名單，先追蹤是否持續優於 short `ok` baseline。"
+        )
+    elif hist_delta > 0:
+        summary["status"] = "watch"
+        summary["why_now"] = (
+            f"全歷史 `1D short / {target_action}` 雖然偏強（`below-ok={hist_delta:.2f}%`），"
+            "但近週樣本還不夠穩。"
+        )
+        summary["proposal"] = (
+            "先維持現行規則，只把 `開高不追` 放進每週的 short-gate tuning watchlist，"
+            "等 recent-only 也轉成 `promotion_ready` 再討論是否進一步升格。"
+        )
+    else:
+        summary["status"] = "hold"
+        summary["why_now"] = "目前還沒有足夠證據支持針對 `開高不追` 做 tuning 草案。"
+        summary["proposal"] = "先繼續累積樣本，保持現行 short gate。"
+
+    return summary
+
+
 def build_decisions(
     parts: dict[str, pd.DataFrame],
     band_parts: dict[str, pd.DataFrame],
@@ -809,6 +962,7 @@ def build_weekly_review_payload(
     outcomes = pd.read_csv(outcomes_csv)
     recent_outcomes, recent_dates = filter_recent_signal_dates(outcomes, max_signal_dates=max_signal_dates)
     parts = summarize_outcomes(recent_outcomes)
+    full_parts = summarize_outcomes(outcomes)
 
     if alert_csv.exists():
         try:
@@ -827,6 +981,7 @@ def build_weekly_review_payload(
     candidate_source_plan = build_candidate_source_plan(candidate_source_summary)
     candidate_fill_directions = build_candidate_fill_directions(rank_csv, candidate_source_plan)
     watchlist_gap_snapshot = build_watchlist_gap_snapshot(watchlist_csv, candidate_expansion_plan, candidate_source_plan)
+    short_gate_tuning_draft = build_short_gate_tuning_draft(full_parts, parts)
 
     overall_by_signal = parts.get("overall_by_signal", pd.DataFrame())
     weekly_checkpoint = parts.get("delta_ok_minus_below", pd.DataFrame())
@@ -847,6 +1002,7 @@ def build_weekly_review_payload(
         "candidate_source_plan": candidate_source_plan,
         "candidate_fill_directions": candidate_fill_directions,
         "watchlist_gap_snapshot": watchlist_gap_snapshot,
+        "short_gate_tuning_draft": short_gate_tuning_draft,
     }
 
     return {
@@ -863,6 +1019,9 @@ def build_weekly_review_payload(
             "spec_risk_check": spec_risk_check.to_dict(orient="records"),
             "short_gate_promotion_watch": short_gate_promotion_watch.to_dict(orient="records"),
             "short_gate_simulation": short_gate_simulation.to_dict(orient="records"),
+            "full_short_gate_promotion_watch": full_parts.get("short_gate_promotion_watch", pd.DataFrame()).to_dict(orient="records"),
+            "full_short_gate_action_context": full_parts.get("short_gate_action_context", pd.DataFrame()).to_dict(orient="records"),
+            "full_short_gate_simulation": full_parts.get("short_gate_simulation", pd.DataFrame()).to_dict(orient="records"),
             "current_rank_spec_risk_by_group": rank_spec_coverage["by_group"],
             "current_rank_spec_risk_by_layer": rank_spec_coverage["by_layer"],
             "current_rank_spec_risk_by_source": candidate_source_summary["by_source"],
@@ -884,6 +1043,7 @@ def render_weekly_review_markdown(payload: dict[str, object]) -> str:
     candidate_source_plan = summary.get("candidate_source_plan", {}) if isinstance(summary, dict) else {}
     candidate_fill_directions = summary.get("candidate_fill_directions", {}) if isinstance(summary, dict) else {}
     watchlist_gap_snapshot = summary.get("watchlist_gap_snapshot", {}) if isinstance(summary, dict) else {}
+    short_gate_tuning_draft = summary.get("short_gate_tuning_draft", {}) if isinstance(summary, dict) else {}
     top_subtype = spec_risk_overview.get("top_subtype", {}) if isinstance(spec_risk_overview, dict) else {}
     weakest_subtype = spec_risk_overview.get("weakest_subtype", {}) if isinstance(spec_risk_overview, dict) else {}
     same_subtype_extremes = bool(spec_risk_overview.get("same_subtype_extremes", False)) if isinstance(spec_risk_overview, dict) else False
@@ -945,10 +1105,46 @@ def render_weekly_review_markdown(payload: dict[str, object]) -> str:
     lines.extend(["### Watchlist Gap Snapshot By Group", _table_markdown(pd.DataFrame(watchlist_gap_snapshot.get("by_group", []) if isinstance(watchlist_gap_snapshot, dict) else [])).rstrip(), ""])
     lines.extend(["### Watchlist Gap Snapshot By Source", _table_markdown(pd.DataFrame(watchlist_gap_snapshot.get("by_source", []) if isinstance(watchlist_gap_snapshot, dict) else [])).rstrip(), ""])
 
+    lines.extend(["", "## 開高不追 Tuning Draft", ""])
+    if isinstance(short_gate_tuning_draft, dict) and short_gate_tuning_draft:
+        lines.append(f"- Status: `{short_gate_tuning_draft.get('status', 'hold')}`")
+        if short_gate_tuning_draft.get("why_now"):
+            lines.append(f"- Why now: {short_gate_tuning_draft.get('why_now', '')}")
+        if short_gate_tuning_draft.get("proposal"):
+            lines.append(f"- Proposal: {short_gate_tuning_draft.get('proposal', '')}")
+        for guardrail in short_gate_tuning_draft.get("guardrails", []):
+            lines.append(f"- Guardrail: {guardrail}")
+        historical = short_gate_tuning_draft.get("historical", {})
+        recent = short_gate_tuning_draft.get("recent", {})
+        simulation = short_gate_tuning_draft.get("simulation", {})
+        if historical:
+            lines.append(
+                f"- Historical: `below_n={historical.get('below_n', 0)}` / `ok_n={historical.get('ok_n', 0)}` / "
+                f"`below-ok={historical.get('delta_avg_ret_below_minus_ok', 0.0)}%` / "
+                f"`promotion_ready={historical.get('promotion_ready', False)}`"
+            )
+        if recent:
+            lines.append(
+                f"- Recent: `below_n={recent.get('below_n', 0)}` / `ok_n={recent.get('ok_n', 0)}` / "
+                f"`below-ok={recent.get('delta_avg_ret_below_minus_ok', 0.0)}%` / "
+                f"`promotion_ready={recent.get('promotion_ready', False)}`"
+            )
+        if simulation:
+            lines.append(
+                f"- Simulation: `promoted_n={simulation.get('promoted_n', 0)}` / "
+                f"`delta_avg_ret={simulation.get('delta_avg_ret_simulated_minus_current', 0.0)}%` / "
+                f"`delta_win_rate={simulation.get('delta_win_rate_simulated_minus_current', 0.0)}%`"
+            )
+    else:
+        lines.append("- `_No tuning draft yet._`")
+
     lines.extend(["", "## Overall By Signal", _table_markdown(pd.DataFrame(tables.get("overall_by_signal", []))).rstrip(), ""])
     lines.extend(["## Threshold Delta", _table_markdown(pd.DataFrame(tables.get("weekly_threshold_delta", []))).rstrip(), ""])
     lines.extend(["## Short Gate Promotion Watch", _table_markdown(pd.DataFrame(tables.get("short_gate_promotion_watch", []))).rstrip(), ""])
     lines.extend(["## Short Gate Simulation", _table_markdown(pd.DataFrame(tables.get("short_gate_simulation", []))).rstrip(), ""])
+    lines.extend(["## Full Short Gate Promotion Watch", _table_markdown(pd.DataFrame(tables.get("full_short_gate_promotion_watch", []))).rstrip(), ""])
+    lines.extend(["## Full Short Gate Action Context", _table_markdown(pd.DataFrame(tables.get("full_short_gate_action_context", [])).head(20)).rstrip(), ""])
+    lines.extend(["## Full Short Gate Simulation", _table_markdown(pd.DataFrame(tables.get("full_short_gate_simulation", []))).rstrip(), ""])
     lines.extend(["## Heat Bias Check", _table_markdown(pd.DataFrame(tables.get("heat_bias_check", []))).rstrip(), ""])
     lines.extend(["## Overall By Spec Risk", _table_markdown(pd.DataFrame(tables.get("overall_by_spec_risk", []))).rstrip(), ""])
     lines.extend(["## Overall By Spec Subtype", _table_markdown(pd.DataFrame(tables.get("overall_by_spec_subtype", []))).rstrip(), ""])

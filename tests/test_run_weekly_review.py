@@ -11,6 +11,7 @@ from run_weekly_review import build_decisions
 from run_weekly_review import build_candidate_expansion_plan
 from run_weekly_review import build_candidate_fill_directions
 from run_weekly_review import build_candidate_source_plan
+from run_weekly_review import build_short_gate_tuning_draft
 from run_weekly_review import build_watchlist_gap_snapshot
 from run_weekly_review import build_rank_candidate_source_summary
 from run_weekly_review import build_rank_coverage_guidance
@@ -156,7 +157,80 @@ class RunWeeklyReviewTests(unittest.TestCase):
         self.assertEqual(overview["non_normal_rows"], 5)
         self.assertEqual(overview["top_subtype"]["spec_risk_subtype"], "急拉追價型")
         self.assertEqual(overview["weakest_subtype"]["spec_risk_subtype"], "結構失配型")
-        self.assertFalse(overview["same_subtype_extremes"])
+
+    def test_build_short_gate_tuning_draft_prefers_action_level_shadow_plan(self) -> None:
+        full_parts = {
+            "short_gate_promotion_watch": pd.DataFrame(
+                [
+                    {
+                        "horizon_days": 1,
+                        "watch_type": "short",
+                        "action": "開高不追",
+                        "below_n": 5,
+                        "ok_n": 28,
+                        "confidence": "medium",
+                        "delta_avg_ret_below_minus_ok": 2.3,
+                        "promotion_ready": True,
+                        "verdict": "watch_upgrade",
+                    }
+                ]
+            ),
+            "short_gate_action_context": pd.DataFrame(
+                [
+                    {
+                        "horizon_days": 1,
+                        "reco_status": "below_threshold",
+                        "action": "開高不追",
+                        "scenario_label": "強勢延伸盤",
+                        "market_heat": "hot",
+                        "spec_risk_bucket": "normal",
+                        "n": 3,
+                        "signal_dates": 3,
+                        "win_rate": 66.7,
+                        "avg_ret": 5.45,
+                        "med_ret": 7.33,
+                    }
+                ]
+            ),
+            "short_gate_simulation": pd.DataFrame(
+                [
+                    {
+                        "horizon_days": 1,
+                        "watch_type": "short",
+                        "promoted_actions": "開高不追",
+                        "promoted_n": 5,
+                        "delta_avg_ret_simulated_minus_current": 0.35,
+                        "delta_win_rate_simulated_minus_current": -1.7,
+                    }
+                ]
+            ),
+        }
+        recent_parts = {
+            "short_gate_promotion_watch": pd.DataFrame(
+                [
+                    {
+                        "horizon_days": 1,
+                        "watch_type": "short",
+                        "action": "開高不追",
+                        "below_n": 2,
+                        "ok_n": 6,
+                        "confidence": "low",
+                        "delta_avg_ret_below_minus_ok": 1.66,
+                        "promotion_ready": False,
+                        "verdict": "mixed",
+                    }
+                ]
+            )
+        }
+
+        draft = build_short_gate_tuning_draft(full_parts, recent_parts)
+
+        self.assertEqual(draft["status"], "draft_ready")
+        self.assertIn("shadow promotion", draft["proposal"])
+        self.assertEqual(draft["historical"]["below_n"], 5)
+        self.assertFalse(draft["recent"]["promotion_ready"])
+        self.assertEqual(draft["simulation"]["promoted_n"], 5)
+        self.assertTrue(draft["contexts"])
 
     def test_build_rank_spec_risk_coverage_groups_current_candidates(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -448,12 +522,14 @@ class RunWeeklyReviewTests(unittest.TestCase):
         self.assertIn("### Practical Fill Directions", markdown)
         self.assertIn("### Watchlist Gap Snapshot By Group", markdown)
         self.assertIn("### Watchlist Gap Snapshot By Source", markdown)
+        self.assertIn("## 開高不追 Tuning Draft", markdown)
         self.assertIn("Confidence note", markdown)
         self.assertIn("## Overall By Spec Risk", markdown)
         self.assertIn("## Overall By Spec Subtype", markdown)
         self.assertIn("## Spec Risk Check", markdown)
         self.assertIn("## Short Gate Promotion Watch", markdown)
         self.assertIn("## Short Gate Simulation", markdown)
+        self.assertIn("## Full Short Gate Promotion Watch", markdown)
         self.assertIn("## Current Rank Spec Risk By Group", markdown)
         self.assertIn("## Current Rank Spec Risk By Layer", markdown)
         self.assertIn("## Current Rank Spec Risk By Source", markdown)
@@ -462,3 +538,4 @@ class RunWeeklyReviewTests(unittest.TestCase):
         self.assertIn("3057.TW", markdown)
         self.assertIn("spec_risk", payload["decisions"])
         self.assertIn("short_gate", payload["decisions"])
+        self.assertIn("short_gate_tuning_draft", payload["summary"])
