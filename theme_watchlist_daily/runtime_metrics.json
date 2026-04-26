@@ -1,23 +1,23 @@
 {
-  "generated_at": "2026-04-26 09:07:04",
+  "generated_at": "2026-04-26 13:32:13",
   "status": "ok",
   "step_timings": {
-    "market_regime": 0.2081119300000296,
-    "us_market": 0.6649173319999591,
-    "cache_warmup": 0.8485605040000337,
-    "watchlist": 0.24098064099996463,
-    "backtest": 25.768025864000037,
-    "candidate_sets": 0.19066294699996433,
-    "reports": 0.5227285489999645,
-    "alert_tracking": 0.07365394999999353,
-    "should_alert": 2.0229999790899456e-06,
-    "notifications": 9.55956458999998,
-    "persist_state": 0.00021521000002167057,
-    "persist_success": 0.0003207369999813636
+    "market_regime": 0.26706954499999824,
+    "us_market": 0.7027116989999911,
+    "cache_warmup": 0.8936355029999845,
+    "watchlist": 0.2638476709999793,
+    "backtest": 25.22749296400002,
+    "candidate_sets": 0.1894177579999905,
+    "reports": 0.5160043360000088,
+    "alert_tracking": 0.06886315199997739,
+    "should_alert": 1.5019999750620627e-06,
+    "notifications": 9.790208067999998,
+    "persist_state": 0.00018071799999574978,
+    "persist_success": 0.00031813300000749223
   },
   "warnings": [],
-  "total_seconds": 38.078,
-  "wall_seconds": 38.1,
+  "total_seconds": 37.92,
+  "wall_seconds": 37.942,
   "cache_stats": {
     "history_hit": 0,
     "history_disk_hit": 51,
@@ -28,7 +28,7 @@
     "indicator_miss": 57
   },
   "backtest_meta": {
-    "signature": "22e59746ae0b3fb3",
+    "signature": "e38ffa74c91c2c10",
     "backtest_period": "5y",
     "lookahead_days": [
       1,
