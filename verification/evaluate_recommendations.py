@@ -513,6 +513,38 @@ def dedupe_snapshots_by_key(df: pd.DataFrame) -> pd.DataFrame:
     return out.drop_duplicates(subset=key_cols, keep="last").copy()
 
 
+def dedupe_outcomes_by_key(df: pd.DataFrame) -> pd.DataFrame:
+    if df is None or df.empty:
+        return df
+    key_cols = ["signal_date", "horizon_days", "watch_type", "ticker"]
+    if any(col not in df.columns for col in key_cols):
+        return df
+
+    out = df.copy()
+    for col in key_cols:
+        out[col] = out[col].astype(str).str.strip()
+
+    if "status" in out.columns:
+        status_priority = {
+            "ok": 3,
+            "insufficient_forward_data": 2,
+            "no_price_series": 1,
+            "empty_series": 1,
+            "invalid_horizon": 1,
+        }
+        out["_status_priority"] = out["status"].astype(str).map(status_priority).fillna(0)
+    else:
+        out["_status_priority"] = 0
+
+    sort_cols = ["_status_priority"]
+    for col in ["evaluated_at", "scenario_label", "source_sha", "source"]:
+        if col in out.columns:
+            sort_cols.append(col)
+    out = out.sort_values(by=sort_cols, kind="stable")
+    out = out.drop_duplicates(subset=key_cols, keep="last").copy()
+    return out.drop(columns=["_status_priority"], errors="ignore")
+
+
 def is_valid_snapshot_ticker(raw: str) -> bool:
     t = str(raw or "").strip().upper()
     if not t or not _VALID_TICKER_RE.match(t):
@@ -705,6 +737,12 @@ def main(argv: list[str] | None = None) -> int:
             existing = pd.read_csv(outcomes_csv)
         except Exception:
             existing = pd.DataFrame()
+    existing_original = existing.copy()
+    existing_deduped = False
+    if not existing.empty:
+        deduped_existing = dedupe_outcomes_by_key(existing)
+        existing_deduped = len(deduped_existing) != len(existing)
+        existing = deduped_existing
 
     if not existing.empty:
         for c in key_cols + ["status"]:
@@ -728,9 +766,13 @@ def main(argv: list[str] | None = None) -> int:
         refreshed = existing.copy()
         refreshed = enrich_market_heat_columns(refreshed)
         refreshed = enrich_scenario_label_columns(refreshed, snapshots=snapshots)
-        if not refreshed.equals(existing):
+        refreshed = dedupe_outcomes_by_key(refreshed)
+        if existing_deduped or not refreshed.equals(existing_original):
             refreshed.to_csv(outcomes_csv, index=False, encoding="utf-8")
-            print(f"Refreshed metadata columns in {outcomes_csv} (no new outcome rows).")
+            if existing_deduped:
+                print(f"De-duplicated existing outcomes in {outcomes_csv} during re-run (no new outcome rows).")
+            else:
+                print(f"Refreshed metadata columns in {outcomes_csv} (no new outcome rows).")
             return 0
         print("No new outcome rows (already evaluated or already OK).")
         return 0
@@ -759,6 +801,7 @@ def main(argv: list[str] | None = None) -> int:
 
     final_df = enrich_market_heat_columns(final_df)
     final_df = enrich_scenario_label_columns(final_df, snapshots=snapshots)
+    final_df = dedupe_outcomes_by_key(final_df)
     final_df.to_csv(outcomes_csv, index=False, encoding="utf-8")
 
     ok_rows = out_df[out_df["status"] == "ok"]

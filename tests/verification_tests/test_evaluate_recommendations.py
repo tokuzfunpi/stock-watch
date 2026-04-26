@@ -3,10 +3,13 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import pandas as pd
 
+from verification import evaluate_recommendations as er
 from verification.evaluate_recommendations import compute_forward_return_pct
+from verification.evaluate_recommendations import dedupe_outcomes_by_key
 from verification.evaluate_recommendations import dedupe_snapshots_by_key
 from verification.evaluate_recommendations import enrich_scenario_label_columns
 from verification.evaluate_recommendations import is_valid_signal_date
@@ -39,6 +42,45 @@ class EvaluateRecommendationsTests(unittest.TestCase):
 
         self.assertEqual(len(out), 1)
         self.assertEqual(out.iloc[0]["action"], "開高不追")
+
+    def test_dedupe_outcomes_by_key_prefers_ok_and_latest_evaluated_row(self) -> None:
+        outcomes = pd.DataFrame(
+            [
+                {
+                    "evaluated_at": "2026-04-24 14:00:00 CST",
+                    "signal_date": "2026-04-17",
+                    "horizon_days": 1,
+                    "watch_type": "short",
+                    "ticker": "2495.TW",
+                    "status": "insufficient_forward_data",
+                    "action": "開高不追",
+                },
+                {
+                    "evaluated_at": "2026-04-25 14:00:00 CST",
+                    "signal_date": "2026-04-17",
+                    "horizon_days": 1,
+                    "watch_type": "short",
+                    "ticker": "2495.TW",
+                    "status": "ok",
+                    "action": "開高不追",
+                },
+                {
+                    "evaluated_at": "2026-04-25 15:00:00 CST",
+                    "signal_date": "2026-04-17",
+                    "horizon_days": 1,
+                    "watch_type": "short",
+                    "ticker": "2495.TW",
+                    "status": "ok",
+                    "action": "分批落袋",
+                },
+            ]
+        )
+
+        out = dedupe_outcomes_by_key(outcomes)
+
+        self.assertEqual(len(out), 1)
+        self.assertEqual(out.iloc[0]["status"], "ok")
+        self.assertEqual(out.iloc[0]["action"], "分批落袋")
 
     def test_is_valid_signal_date_accepts_yyyy_mm_dd(self) -> None:
         self.assertTrue(is_valid_signal_date("2026-04-17"))
@@ -136,3 +178,104 @@ class EvaluateRecommendationsTests(unittest.TestCase):
         self.assertEqual(label, "疑似炒作風險高")
         self.assertEqual(subtype, "急拉爆量型")
         self.assertTrue(note)
+
+    def test_main_dedupes_existing_outcomes_on_rerun_without_new_rows(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            snapshot_csv = root / "reco_snapshots.csv"
+            outcomes_csv = root / "reco_outcomes.csv"
+
+            pd.DataFrame(
+                [
+                    {
+                        "generated_at": "2026-04-24 09:00:00 CST",
+                        "signal_date": "2026-04-17",
+                        "watch_type": "short",
+                        "ticker": "2495.TW",
+                        "name": "普安",
+                        "action": "開高不追",
+                        "reco_status": "below_threshold",
+                        "grade": "B",
+                        "setup_score": 5,
+                        "risk_score": 3,
+                        "ret5_pct": 3.0,
+                        "ret20_pct": 7.0,
+                        "volume_ratio20": 1.1,
+                        "signals": "ACCEL",
+                        "scenario_label": "強勢延伸盤",
+                    }
+                ]
+            ).to_csv(snapshot_csv, index=False)
+
+            duplicate_rows = pd.DataFrame(
+                [
+                    {
+                        "evaluated_at": "2026-04-25 14:00:00 CST",
+                        "signal_date": "2026-04-17",
+                        "horizon_days": 1,
+                        "watch_type": "short",
+                        "ticker": "2495.TW",
+                        "name": "普安",
+                        "reco_status": "below_threshold",
+                        "action": "開高不追",
+                        "grade": "B",
+                        "setup_score": 5,
+                        "risk_score": 3,
+                        "ret5_pct": 3.0,
+                        "ret20_pct": 7.0,
+                        "volume_ratio20": 1.1,
+                        "signals": "ACCEL",
+                        "scenario_label": "強勢延伸盤",
+                        "market_heat": "hot",
+                        "market_heat_reason": "",
+                        "out_close": 100.0,
+                        "realized_ret_pct": 1.23,
+                        "status": "ok",
+                        "status_detail": "",
+                    },
+                    {
+                        "evaluated_at": "2026-04-25 14:05:00 CST",
+                        "signal_date": "2026-04-17",
+                        "horizon_days": 1,
+                        "watch_type": "short",
+                        "ticker": "2495.TW",
+                        "name": "普安",
+                        "reco_status": "below_threshold",
+                        "action": "開高不追",
+                        "grade": "B",
+                        "setup_score": 5,
+                        "risk_score": 3,
+                        "ret5_pct": 3.0,
+                        "ret20_pct": 7.0,
+                        "volume_ratio20": 1.1,
+                        "signals": "ACCEL",
+                        "scenario_label": "強勢延伸盤",
+                        "market_heat": "hot",
+                        "market_heat_reason": "",
+                        "out_close": 100.0,
+                        "realized_ret_pct": 1.23,
+                        "status": "ok",
+                        "status_detail": "",
+                    },
+                ]
+            )
+            duplicate_rows.to_csv(outcomes_csv, index=False)
+
+            with patch.object(er, "fetch_close_series", return_value=({}, {})):
+                code = er.main(
+                    [
+                        "--snapshot-csv",
+                        str(snapshot_csv),
+                        "--outcomes-csv",
+                        str(outcomes_csv),
+                        "--horizons",
+                        "1",
+                        "--signal-date",
+                        "2026-04-17",
+                    ]
+                )
+
+            self.assertEqual(code, 0)
+            cleaned = pd.read_csv(outcomes_csv)
+            self.assertEqual(len(cleaned), 1)
+            self.assertEqual(cleaned.iloc[0]["ticker"], "2495.TW")
