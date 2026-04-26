@@ -75,6 +75,8 @@ class SummarizeOutcomesTests(unittest.TestCase):
         self.assertIn("delta_avg_ret", delta.columns)
         self.assertIn("confidence", delta.columns)
         self.assertIn("min_n", delta.columns)
+        self.assertIn("threshold_guard_check", parts)
+        self.assertFalse(parts["threshold_guard_check"].empty)
         self.assertIn("overall_by_market_heat", parts)
         self.assertFalse(parts["overall_by_market_heat"].empty)
 
@@ -350,8 +352,10 @@ class SummarizeOutcomesTests(unittest.TestCase):
         self.assertIn("## Heat Bias By Scenario (hot - normal)", md)
         self.assertIn("## Heat Bias By Date (hot - normal, top 20)", md)
         self.assertIn("## Spec Risk Check (high - normal)", md)
+        self.assertIn("## Threshold Guard Check (ok - below_threshold)", md)
         self.assertIn("## Weekly Checkpoint", md)
         self.assertIn("## Overall By Action", md)
+        self.assertIn("## Short Threshold Diagnostics", md)
         self.assertIn("## Overall By Scenario + Action", md)
         self.assertIn("reco_status", md)
         self.assertIn("Momentum Leader", md)
@@ -434,6 +438,41 @@ class SummarizeOutcomesTests(unittest.TestCase):
         self.assertIn("5D midlong", joined)
         self.assertIn("強勢延伸盤", joined)
         self.assertIn("2026-04-20", joined)
+
+    def test_build_key_findings_surfaces_threshold_guard_when_below_threshold_is_stronger(self) -> None:
+        rows = []
+        for idx in range(6):
+            rows.append(
+                {
+                    "signal_date": f"2026-04-{10 + idx:02d}",
+                    "horizon_days": 1,
+                    "watch_type": "short",
+                    "reco_status": "ok",
+                    "market_heat": "warm",
+                    "scenario_label": "強勢延伸盤",
+                    "action": "等拉回",
+                    "realized_ret_pct": 1.0,
+                    "status": "ok",
+                }
+            )
+            rows.append(
+                {
+                    "signal_date": f"2026-04-{10 + idx:02d}",
+                    "horizon_days": 1,
+                    "watch_type": "short",
+                    "reco_status": "below_threshold",
+                    "market_heat": "hot",
+                    "scenario_label": "強勢延伸盤",
+                    "action": "開高不追",
+                    "realized_ret_pct": 4.0,
+                    "status": "ok",
+                }
+            )
+
+        findings = build_key_findings(summarize_outcomes(pd.DataFrame(rows)))
+        joined = "\n".join(findings)
+        self.assertIn("below_threshold", joined)
+        self.assertIn("短線 `ok` 門檻可能偏保守", joined)
 
     def test_summarize_atr_band_checkpoints_tracks_maturity_and_levels(self) -> None:
         alert_tracking = pd.DataFrame(

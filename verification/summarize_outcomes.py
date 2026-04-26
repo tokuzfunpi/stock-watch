@@ -171,6 +171,31 @@ def build_key_findings(parts: dict[str, pd.DataFrame]) -> list[str]:
             f"勝率 `{_pct(spec_subtype_row['win_rate'])}%`，`n={int(spec_subtype_row['n'])}`。"
         )
 
+    threshold_rows = parts.get("threshold_guard_check", pd.DataFrame())
+    if not threshold_rows.empty:
+        short_rows = threshold_rows[threshold_rows["watch_type"].astype(str) == "short"].copy()
+        threshold_row = _pick_best_row(short_rows, min_samples=5, delta_col="delta_avg_ret_ok_minus_below")
+        if threshold_row is not None and float(threshold_row["delta_avg_ret_ok_minus_below"]) < 0:
+            findings.append(
+                f"`{int(threshold_row['horizon_days'])}D short` 目前是 `below_threshold` 樣本比 `ok` 樣本更強，"
+                f"`ok-below = {_pct(threshold_row['delta_avg_ret_ok_minus_below'])}%`，"
+                f"`min_n={int(threshold_row['min_n'])}`、`confidence={threshold_row['confidence']}`；"
+                "短線 `ok` 門檻可能偏保守。"
+            )
+
+    short_diag = parts.get("short_threshold_diagnostics", pd.DataFrame())
+    if not short_diag.empty:
+        below_short = short_diag[short_diag["reco_status"].astype(str) == "below_threshold"].copy()
+        below_short = below_short[pd.to_numeric(below_short["n"], errors="coerce") >= 2].copy()
+        if not below_short.empty:
+            below_short = below_short.sort_values(by=["avg_ret", "n"], ascending=[False, False])
+            top_below = below_short.iloc[0]
+            findings.append(
+                f"短線 `below_threshold` 裡目前最強的是 `{top_below['action']}`，"
+                f"平均報酬 `{_pct(top_below['avg_ret'])}%`、勝率 `{_pct(top_below['win_rate'])}%`，"
+                f"`n={int(top_below['n'])}`；這表示補滿用名單偏強，可能是近期強盤把保守動作也往上抬。"
+            )
+
     if not findings and not parts.get("overall_by_scenario", pd.DataFrame()).empty:
         findings.append("目前 scenario 資料已開始累積，但 `hot vs normal` 的可比較樣本還不夠，先以表格追蹤，不急著下規則結論。")
 
@@ -619,6 +644,8 @@ def summarize_outcomes(outcomes: pd.DataFrame) -> dict[str, pd.DataFrame]:
     heat_bias_by_scenario = pd.DataFrame()
     heat_bias_by_date = pd.DataFrame()
     spec_risk_check = pd.DataFrame()
+    threshold_guard_check = pd.DataFrame()
+    short_threshold_diagnostics = pd.DataFrame()
     try:
         delta_base = overall_by_signal_status.copy()
         delta_base = delta_base[delta_base["reco_status"].isin(["ok", "below_threshold"])].copy()
@@ -647,6 +674,13 @@ def summarize_outcomes(outcomes: pd.DataFrame) -> dict[str, pd.DataFrame]:
                         "delta_med_ret": (pd.to_numeric(merged["med_ret_ok"], errors="coerce") - pd.to_numeric(merged["med_ret_below"], errors="coerce")).round(2),
                     }
                 ).sort_values(by=["horizon_days", "watch_type"])
+                threshold_guard_check = delta_ok_minus_below.rename(
+                    columns={
+                        "delta_win_rate": "delta_win_rate_ok_minus_below",
+                        "delta_avg_ret": "delta_avg_ret_ok_minus_below",
+                        "delta_med_ret": "delta_med_ret_ok_minus_below",
+                    }
+                ).copy()
 
         # By date: find which days forced-fill is helping/hurting.
         date_base = by_signal.copy()
@@ -686,6 +720,21 @@ def summarize_outcomes(outcomes: pd.DataFrame) -> dict[str, pd.DataFrame]:
     except Exception:
         delta_ok_minus_below = pd.DataFrame()
         delta_ok_minus_below_by_date = pd.DataFrame()
+        threshold_guard_check = pd.DataFrame()
+
+    try:
+        short_threshold_diagnostics = overall_by_action_status.copy()
+        short_threshold_diagnostics = short_threshold_diagnostics[
+            (short_threshold_diagnostics["watch_type"].astype(str) == "short")
+            & (short_threshold_diagnostics["reco_status"].isin(["ok", "below_threshold"]))
+        ].copy()
+        if not short_threshold_diagnostics.empty:
+            short_threshold_diagnostics = short_threshold_diagnostics.sort_values(
+                by=["horizon_days", "reco_status", "avg_ret", "n"],
+                ascending=[True, True, False, False],
+            ).reset_index(drop=True)
+    except Exception:
+        short_threshold_diagnostics = pd.DataFrame()
 
     try:
         heat_base = overall_by_market_heat.copy()
@@ -861,6 +910,8 @@ def summarize_outcomes(outcomes: pd.DataFrame) -> dict[str, pd.DataFrame]:
         "overall_by_spec_subtype": overall_by_spec_subtype,
         "delta_ok_minus_below": delta_ok_minus_below,
         "delta_ok_minus_below_by_date": delta_ok_minus_below_by_date,
+        "threshold_guard_check": threshold_guard_check,
+        "short_threshold_diagnostics": short_threshold_diagnostics,
         "heat_bias_check": heat_bias_check,
         "heat_bias_by_scenario": heat_bias_by_scenario,
         "heat_bias_by_date": heat_bias_by_date,
@@ -1001,6 +1052,10 @@ def build_summary_markdown(
         lines.extend(["## Delta (ok - below_threshold) By Signal (all dates)", _table_markdown(parts["delta_ok_minus_below"]).rstrip(), ""])
     if not parts["delta_ok_minus_below_by_date"].empty:
         lines.extend(["## Delta (ok - below_threshold) By Signal Date (top 30)", _table_markdown(parts["delta_ok_minus_below_by_date"].head(30)).rstrip(), ""])
+    if not parts["threshold_guard_check"].empty:
+        lines.extend(["## Threshold Guard Check (ok - below_threshold)", _table_markdown(parts["threshold_guard_check"]).rstrip(), ""])
+    else:
+        lines.extend(["## Threshold Guard Check (ok - below_threshold)", "_None_", ""])
 
     # Weekly checkpoint: only show deltas with enough samples to be actionable.
     try:
@@ -1017,6 +1072,10 @@ def build_summary_markdown(
     lines.extend(["## Overall By Action (all dates, top 80)", _table_markdown(parts["overall_by_action"].head(80)).rstrip(), ""])
     if not parts["overall_by_action_status"].empty:
         lines.extend(["## Overall By Action + reco_status (all dates, top 80)", _table_markdown(parts["overall_by_action_status"].head(80)).rstrip(), ""])
+    if not parts["short_threshold_diagnostics"].empty:
+        lines.extend(["## Short Threshold Diagnostics", _table_markdown(parts["short_threshold_diagnostics"].head(20)).rstrip(), ""])
+    else:
+        lines.extend(["## Short Threshold Diagnostics", "_None_", ""])
     if not parts["overall_by_scenario_action"].empty:
         lines.extend(["## Overall By Scenario + Action (all dates, top 80)", _table_markdown(parts["overall_by_scenario_action"].head(80)).rstrip(), ""])
     lines.extend(["## By Signal (watch_type)", _table_markdown(parts["by_signal"].head(30)).rstrip(), ""])

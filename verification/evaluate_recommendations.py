@@ -790,14 +790,12 @@ def main(argv: list[str] | None = None) -> int:
             for k in existing[key_cols].astype(str).itertuples(index=False, name=None)
         ]
         keep_existing = existing[keep_existing_mask].copy()
-        # Align columns before concat.
-        for c in keep_existing.columns:
-            if c not in out_df.columns:
-                out_df[c] = pd.NA
-        for c in out_df.columns:
-            if c not in keep_existing.columns:
-                keep_existing[c] = pd.NA
-        final_df = pd.concat([keep_existing, out_df], ignore_index=True)
+        # Align columns before concat without creating all-NA warning-prone frames.
+        shared_cols = list(dict.fromkeys(keep_existing.columns.tolist() + out_df.columns.tolist()))
+        keep_existing = keep_existing.reindex(columns=shared_cols)
+        out_df = out_df.reindex(columns=shared_cols)
+        merged_records = keep_existing.to_dict(orient="records") + out_df.to_dict(orient="records")
+        final_df = pd.DataFrame.from_records(merged_records, columns=shared_cols)
 
     final_df = enrich_market_heat_columns(final_df)
     final_df = enrich_scenario_label_columns(final_df, snapshots=snapshots)
