@@ -1,34 +1,34 @@
 {
-  "generated_at": "2026-04-26 08:54:02",
+  "generated_at": "2026-04-26 09:07:04",
   "status": "ok",
   "step_timings": {
-    "market_regime": 3.915978595614433e-06,
-    "us_market": 2.874992787837982e-06,
-    "cache_warmup": 0.000556709012016654,
-    "watchlist": 4.9578957259655e-06,
-    "backtest": 3.416091203689575e-06,
-    "candidate_sets": 0.015175249893218279,
-    "reports": 0.00010204198770225048,
-    "alert_tracking": 5.0083035603165627e-05,
-    "should_alert": 3.2079406082630157e-06,
-    "notifications": 0.03560166689567268,
-    "persist_state": 0.00010645808652043343,
-    "persist_success": 6.258301436901093e-05
+    "market_regime": 0.2081119300000296,
+    "us_market": 0.6649173319999591,
+    "cache_warmup": 0.8485605040000337,
+    "watchlist": 0.24098064099996463,
+    "backtest": 25.768025864000037,
+    "candidate_sets": 0.19066294699996433,
+    "reports": 0.5227285489999645,
+    "alert_tracking": 0.07365394999999353,
+    "should_alert": 2.0229999790899456e-06,
+    "notifications": 9.55956458999998,
+    "persist_state": 0.00021521000002167057,
+    "persist_success": 0.0003207369999813636
   },
   "warnings": [],
-  "total_seconds": 0.052,
-  "wall_seconds": 0.053,
+  "total_seconds": 38.078,
+  "wall_seconds": 38.1,
   "cache_stats": {
     "history_hit": 0,
-    "history_disk_hit": 0,
-    "history_superset_hit": 0,
-    "history_miss": 0,
-    "indicator_hit": 45,
-    "indicator_superset_hit": 0,
-    "indicator_miss": 0
+    "history_disk_hit": 51,
+    "history_superset_hit": 39,
+    "history_miss": 6,
+    "indicator_hit": 52,
+    "indicator_superset_hit": 52,
+    "indicator_miss": 57
   },
   "backtest_meta": {
-    "signature": "0b6a94d5cb88e2c9",
+    "signature": "22e59746ae0b3fb3",
     "backtest_period": "5y",
     "lookahead_days": [
       1,
@@ -54,6 +54,9 @@
       "3231.TW": "2026-03-25",
       "2356.TW": "2026-03-25",
       "4919.TW": "2026-03-25",
+      "6182.TWO": "2026-03-25",
+      "2312.TW": "2026-03-25",
+      "5347.TWO": "2026-03-25",
       "2330.TW": "2026-03-25",
       "2317.TW": "2026-03-25",
       "2454.TW": "2026-03-25",
@@ -66,9 +69,10 @@
       "2886.TW": "2026-03-25",
       "2891.TW": "2026-03-25",
       "2892.TW": "2026-03-25",
-      "0050.TW": "2026-03-24",
-      "00878.TW": "2026-03-24",
-      "0052.TW": "2026-03-24",
+      "8064.TWO": "2026-03-25",
+      "0050.TW": "2026-03-25",
+      "00878.TW": "2026-03-25",
+      "0052.TW": "2026-03-25",
       "3014.TW": "2026-03-25",
       "3491.TWO": "2026-03-25",
       "3661.TW": "2026-03-25",
@@ -76,6 +80,9 @@
       "6147.TWO": "2026-03-25",
       "3035.TW": "2026-03-25",
       "5274.TWO": "2026-03-25",
+      "6962.TW": "2026-03-25",
+      "2340.TW": "2026-03-25",
+      "2464.TW": "2026-03-25",
       "00679B.TWO": "2026-03-25",
       "00687B.TWO": "2026-03-25",
       "00772B.TWO": "2026-03-25",
@@ -83,6 +90,6 @@
       "2412.TW": "2026-03-25"
     },
     "last_run_mode": "full_rebuild",
-    "last_run_scanned_cutoffs": 42484
+    "last_run_scanned_cutoffs": 48220
   }
 }
