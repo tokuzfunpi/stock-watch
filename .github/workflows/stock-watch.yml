@@ -60,6 +60,6 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add config.json watchlist.csv theme_watchlist_daily/
+          git add config.json watchlist.csv runs/theme_watchlist_daily/
           git diff --cached --quiet || git commit -m "Update stock watch artifacts [skip ci]"
           git push
