@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from verification.run_daily_verification import (
+from verification.workflows.run_daily_verification import (
     build_evaluate_argv,
     build_feedback_argv,
     build_summary_argv,
@@ -79,12 +79,12 @@ class RunDailyVerificationTests(unittest.TestCase):
                 return 0
             return _inner
 
-        with patch("verification.run_daily_verification.verify_recommendations.main", side_effect=_runner("verify")), patch(
-            "verification.run_daily_verification.evaluate_recommendations.main", side_effect=_runner("evaluate")
+        with patch("verification.workflows.run_daily_verification.verify_recommendations.main", side_effect=_runner("verify")), patch(
+            "verification.workflows.run_daily_verification.evaluate_recommendations.main", side_effect=_runner("evaluate")
         ), patch(
-            "verification.run_daily_verification.summarize_outcomes.main", side_effect=_runner("summary")
+            "verification.workflows.run_daily_verification.summarize_outcomes.main", side_effect=_runner("summary")
         ), patch(
-            "verification.run_daily_verification.feedback_weight_sensitivity.main", side_effect=_runner("feedback")
+            "verification.workflows.run_daily_verification.feedback_weight_sensitivity.main", side_effect=_runner("feedback")
         ):
             code = main([])
 
@@ -100,12 +100,12 @@ class RunDailyVerificationTests(unittest.TestCase):
                 return 0
             return _inner
 
-        with patch("verification.run_daily_verification.verify_recommendations.main", side_effect=_runner("verify")), patch(
-            "verification.run_daily_verification.evaluate_recommendations.main", side_effect=_runner("evaluate")
+        with patch("verification.workflows.run_daily_verification.verify_recommendations.main", side_effect=_runner("verify")), patch(
+            "verification.workflows.run_daily_verification.evaluate_recommendations.main", side_effect=_runner("evaluate")
         ), patch(
-            "verification.run_daily_verification.summarize_outcomes.main", side_effect=_runner("summary")
+            "verification.workflows.run_daily_verification.summarize_outcomes.main", side_effect=_runner("summary")
         ), patch(
-            "verification.run_daily_verification.feedback_weight_sensitivity.main", side_effect=_runner("feedback")
+            "verification.workflows.run_daily_verification.feedback_weight_sensitivity.main", side_effect=_runner("feedback")
         ):
             code = main(["--mode", "preopen"])
 
@@ -121,12 +121,12 @@ class RunDailyVerificationTests(unittest.TestCase):
                 return 0
             return _inner
 
-        with patch("verification.run_daily_verification.verify_recommendations.main", side_effect=_runner("verify")), patch(
-            "verification.run_daily_verification.evaluate_recommendations.main", side_effect=_runner("evaluate")
+        with patch("verification.workflows.run_daily_verification.verify_recommendations.main", side_effect=_runner("verify")), patch(
+            "verification.workflows.run_daily_verification.evaluate_recommendations.main", side_effect=_runner("evaluate")
         ), patch(
-            "verification.run_daily_verification.summarize_outcomes.main", side_effect=_runner("summary")
+            "verification.workflows.run_daily_verification.summarize_outcomes.main", side_effect=_runner("summary")
         ), patch(
-            "verification.run_daily_verification.feedback_weight_sensitivity.main", side_effect=_runner("feedback")
+            "verification.workflows.run_daily_verification.feedback_weight_sensitivity.main", side_effect=_runner("feedback")
         ):
             code = main(["--mode", "postclose"])
 
@@ -142,12 +142,12 @@ class RunDailyVerificationTests(unittest.TestCase):
                 return 0
             return _inner
 
-        with patch("verification.run_daily_verification.verify_recommendations.main", side_effect=_runner("verify")), patch(
-            "verification.run_daily_verification.evaluate_recommendations.main", side_effect=_runner("evaluate")
+        with patch("verification.workflows.run_daily_verification.verify_recommendations.main", side_effect=_runner("verify")), patch(
+            "verification.workflows.run_daily_verification.evaluate_recommendations.main", side_effect=_runner("evaluate")
         ), patch(
-            "verification.run_daily_verification.summarize_outcomes.main", side_effect=_runner("summary")
+            "verification.workflows.run_daily_verification.summarize_outcomes.main", side_effect=_runner("summary")
         ), patch(
-            "verification.run_daily_verification.feedback_weight_sensitivity.main", side_effect=_runner("feedback")
+            "verification.workflows.run_daily_verification.feedback_weight_sensitivity.main", side_effect=_runner("feedback")
         ):
             code = main(["--mode", "postclose", "--skip-summary", "--skip-feedback"])
 
@@ -165,10 +165,10 @@ class RunDailyVerificationTests(unittest.TestCase):
                 (cache_dir / "2330_TW.csv").write_text("Date,Close\n2026-04-24,1\n", encoding="utf-8")
                 return 0
 
-            with patch("verification.run_daily_verification.verify_recommendations.main", side_effect=_runner), patch(
-                "verification.run_daily_verification.evaluate_recommendations.main", side_effect=_runner
-            ), patch("verification.run_daily_verification.summarize_outcomes.main", side_effect=_runner), patch(
-                "verification.run_daily_verification.feedback_weight_sensitivity.main", side_effect=_runner
+            with patch("verification.workflows.run_daily_verification.verify_recommendations.main", side_effect=_runner), patch(
+                "verification.workflows.run_daily_verification.evaluate_recommendations.main", side_effect=_runner
+            ), patch("verification.workflows.run_daily_verification.summarize_outcomes.main", side_effect=_runner), patch(
+                "verification.workflows.run_daily_verification.feedback_weight_sensitivity.main", side_effect=_runner
             ):
                 code = main(
                     [

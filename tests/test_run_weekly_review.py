@@ -7,20 +7,22 @@ from pathlib import Path
 
 import pandas as pd
 
-from run_weekly_review import build_decisions
-from run_weekly_review import build_candidate_expansion_plan
-from run_weekly_review import build_candidate_fill_directions
-from run_weekly_review import build_candidate_source_plan
-from run_weekly_review import build_short_gate_tuning_draft
-from run_weekly_review import build_watchlist_gap_snapshot
-from run_weekly_review import build_rank_candidate_source_summary
-from run_weekly_review import build_rank_coverage_guidance
-from run_weekly_review import build_rank_spec_risk_coverage
-from run_weekly_review import build_spec_risk_overview
-from run_weekly_review import build_weekly_review_payload
-from run_weekly_review import filter_recent_signal_dates
-from run_weekly_review import render_weekly_review_markdown
-from run_weekly_review import write_outputs
+from stock_watch.cli.weekly_review import build_decisions
+from stock_watch.cli.weekly_review import build_candidate_expansion_plan
+from stock_watch.cli.weekly_review import build_candidate_fill_directions
+from stock_watch.cli.weekly_review import build_candidate_source_plan
+from stock_watch.cli.weekly_review import build_short_gate_tuning_draft
+from stock_watch.cli.weekly_review import build_watchlist_gap_snapshot
+from stock_watch.cli.weekly_review import build_rank_candidate_source_summary
+from stock_watch.cli.weekly_review import build_rank_coverage_guidance
+from stock_watch.cli.weekly_review import build_rank_spec_risk_coverage
+from stock_watch.cli.weekly_review import build_research_diagnostics
+from stock_watch.cli.weekly_review import build_data_quality_gate
+from stock_watch.cli.weekly_review import build_spec_risk_overview
+from stock_watch.cli.weekly_review import build_weekly_review_payload
+from stock_watch.cli.weekly_review import filter_recent_signal_dates
+from stock_watch.cli.weekly_review import render_weekly_review_markdown
+from stock_watch.cli.weekly_review import write_outputs
 
 
 class RunWeeklyReviewTests(unittest.TestCase):
@@ -232,6 +234,77 @@ class RunWeeklyReviewTests(unittest.TestCase):
         self.assertEqual(draft["simulation"]["promoted_n"], 5)
         self.assertTrue(draft["contexts"])
 
+    def test_build_research_diagnostics_picks_factor_sensitivity_and_tail(self) -> None:
+        parts = {
+            "factor_high_low_spread": pd.DataFrame(
+                [
+                    {
+                        "horizon_days": 5,
+                        "watch_type": "midlong",
+                        "factor_name": "ret5_pct",
+                        "min_n": 6,
+                        "confidence": "medium",
+                        "delta_avg_ret_high_minus_low": 4.2,
+                    }
+                ]
+            ),
+            "sensitivity_matrix": pd.DataFrame(
+                [
+                    {
+                        "horizon_days": 5,
+                        "watch_type": "midlong",
+                        "config_name": "ret5_ge_median_9.4",
+                        "n": 8,
+                        "avg_ret": 12.7,
+                        "delta_avg_ret_vs_baseline": 3.1,
+                    }
+                ]
+            ),
+            "tail_risk_by_action": pd.DataFrame(
+                [
+                    {
+                        "horizon_days": 1,
+                        "watch_type": "short",
+                        "reco_status": "below_threshold",
+                        "action": "只觀察不追",
+                        "n": 3,
+                        "tail25_ret": -7.3,
+                        "worst_ret": -9.9,
+                        "risk_label": "watch_drawdown",
+                    }
+                ]
+            ),
+        }
+
+        diagnostics = build_research_diagnostics(parts, parts)
+
+        self.assertEqual(diagnostics["full_factor"]["factor_name"], "ret5_pct")
+        self.assertEqual(diagnostics["full_sensitivity"]["config_name"], "ret5_ge_median_9.4")
+        self.assertEqual(diagnostics["full_tail"]["action"], "只觀察不追")
+        self.assertTrue(diagnostics["notes"])
+
+    def test_build_data_quality_gate_flags_clean_and_pending_rows(self) -> None:
+        snapshots = pd.DataFrame(
+            [
+                {"signal_date": "2026-04-20", "watch_type": "short", "ticker": "2330.TW"},
+                {"signal_date": "2026-04-21", "watch_type": "midlong", "ticker": "2317.TW"},
+            ]
+        )
+        outcomes = pd.DataFrame(
+            [
+                {"signal_date": "2026-04-20", "horizon_days": 1, "watch_type": "short", "ticker": "2330.TW", "status": "ok"},
+                {"signal_date": "2026-04-21", "horizon_days": 5, "watch_type": "midlong", "ticker": "2317.TW", "status": "insufficient_forward_data"},
+            ]
+        )
+
+        gate = build_data_quality_gate(outcomes, snapshots)
+
+        self.assertEqual(gate["status"], "ok")
+        self.assertEqual(gate["metrics"]["snapshot_dup_keys"], 0)
+        self.assertEqual(gate["metrics"]["outcome_dup_keys"], 0)
+        self.assertEqual(gate["metrics"]["pending_rows"], 1)
+        self.assertTrue(gate["coverage_by_horizon"])
+
     def test_build_rank_spec_risk_coverage_groups_current_candidates(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             rank_csv = Path(tmpdir) / "daily_rank.csv"
@@ -379,6 +452,7 @@ class RunWeeklyReviewTests(unittest.TestCase):
             root = Path(tmpdir)
             outcomes_csv = root / "reco_outcomes.csv"
             feedback_csv = root / "feedback_weight_sensitivity.csv"
+            snapshots_csv = root / "reco_snapshots.csv"
             alert_csv = root / "alert_tracking.csv"
             rank_csv = root / "daily_rank.csv"
             watchlist_csv = root / "watchlist.csv"
@@ -448,6 +522,15 @@ class RunWeeklyReviewTests(unittest.TestCase):
 
             pd.DataFrame(
                 [
+                    {"signal_date": "2026-04-20", "watch_type": "midlong", "ticker": "2330.TW"},
+                    {"signal_date": "2026-04-21", "watch_type": "midlong", "ticker": "2317.TW"},
+                    {"signal_date": "2026-04-21", "watch_type": "short", "ticker": "3057.TW"},
+                    {"signal_date": "2026-04-20", "watch_type": "short", "ticker": "2330.TW"},
+                ]
+            ).to_csv(snapshots_csv, index=False)
+
+            pd.DataFrame(
+                [
                     {"ticker": "3057.TW", "name": "喬鼎", "group": "theme", "layer": "short_attack", "spec_risk_score": 8, "spec_risk_label": "疑似炒作風險高", "spec_risk_subtype": "急拉爆量型", "ret5_pct": 24.0, "ret20_pct": 52.0, "rank": 1},
                     {"ticker": "6669.TW", "name": "緯穎", "group": "theme", "layer": "short_attack", "spec_risk_score": 4, "spec_risk_label": "投機偏高", "spec_risk_subtype": "急拉追價型", "ret5_pct": 19.0, "ret20_pct": 20.0, "rank": 2},
                     {"ticker": "2330.TW", "name": "台積電", "group": "core", "layer": "midlong_core", "spec_risk_score": 0, "spec_risk_label": "正常", "spec_risk_subtype": "正常", "ret5_pct": 4.0, "ret20_pct": 12.0, "rank": 3},
@@ -496,6 +579,7 @@ class RunWeeklyReviewTests(unittest.TestCase):
 
             payload = build_weekly_review_payload(
                 outcomes_csv=outcomes_csv,
+                snapshots_csv=snapshots_csv,
                 feedback_csv=feedback_csv,
                 alert_csv=alert_csv,
                 rank_csv=rank_csv,
@@ -513,6 +597,11 @@ class RunWeeklyReviewTests(unittest.TestCase):
         self.assertEqual(payload["summary"]["ok_rows"], 4)
         self.assertEqual(saved["summary"]["ok_rows"], 4)
         self.assertIn("spec_risk_overview", payload["summary"])
+        self.assertIn("research_diagnostics", payload["summary"])
+        self.assertIn("data_quality_gate", payload["summary"])
+        self.assertIn("## Data Quality Gate", markdown)
+        self.assertIn("## Data Quality Coverage By Horizon", markdown)
+        self.assertIn("## Research Diagnostics", markdown)
         self.assertIn("## Spec Risk Highlights", markdown)
         self.assertIn("## Candidate Mix Guidance", markdown)
         self.assertIn("## Candidate Expansion Targets", markdown)
@@ -530,6 +619,12 @@ class RunWeeklyReviewTests(unittest.TestCase):
         self.assertIn("## Short Gate Promotion Watch", markdown)
         self.assertIn("## Short Gate Simulation", markdown)
         self.assertIn("## Full Short Gate Promotion Watch", markdown)
+        self.assertIn("## Recent Factor High-Low Spread", markdown)
+        self.assertIn("## Full Factor High-Low Spread", markdown)
+        self.assertIn("## Recent Sensitivity Matrix", markdown)
+        self.assertIn("## Full Sensitivity Matrix", markdown)
+        self.assertIn("## Recent Tail Risk By Action", markdown)
+        self.assertIn("## Full Tail Risk By Action", markdown)
         self.assertIn("## Current Rank Spec Risk By Group", markdown)
         self.assertIn("## Current Rank Spec Risk By Layer", markdown)
         self.assertIn("## Current Rank Spec Risk By Source", markdown)

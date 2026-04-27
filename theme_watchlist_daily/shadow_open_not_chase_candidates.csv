@@ -1,2 +1,0 @@
-﻿rank,ticker,name,group,layer,grade,setup_score,risk_score,ret5_pct,ret20_pct,volume_ratio20,signals,spec_risk_label,scenario_label,market_heat,spec_risk_bucket,action_label,shadow_target,shadow_guardrail_scope,shadow_eligible,shadow_status,shadow_reason
-12,4919.TW,新唐,theme,short_attack,B,12,4,12.4,43.56,0.33,TREND,投機偏高,高檔震盪盤,hot,watch,開高不追,開高不追,1D short only,False,observe_only,spec_risk 非 normal

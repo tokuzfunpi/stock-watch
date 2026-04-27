@@ -8,12 +8,12 @@ from unittest.mock import patch
 
 import pandas as pd
 
-from run_local_daily import build_verification_argv
-from run_local_daily import collect_status_metrics
-from run_local_daily import main
-from run_local_daily import parse_args
-from run_local_daily import should_run_step
-from run_local_daily import write_local_status_dashboard
+from stock_watch.cli.local_daily import build_verification_argv
+from stock_watch.cli.local_daily import collect_status_metrics
+from stock_watch.cli.local_daily import main
+from stock_watch.cli.local_daily import parse_args
+from stock_watch.cli.local_daily import should_run_step
+from stock_watch.cli.local_daily import write_local_status_dashboard
 
 
 class RunLocalDailyTests(unittest.TestCase):
@@ -75,8 +75,14 @@ class RunLocalDailyTests(unittest.TestCase):
             ).to_csv(verification_outdir / "reco_snapshots.csv", index=False)
             pd.DataFrame(
                 [
-                    {"signal_date": "2026-04-22", "status": "ok"},
-                    {"signal_date": "2026-04-23", "status": "insufficient_forward_data"},
+                    {"signal_date": "2026-04-22", "horizon_days": 1, "watch_type": "short", "ticker": "2330.TW", "status": "ok"},
+                    {
+                        "signal_date": "2026-04-23",
+                        "horizon_days": 5,
+                        "watch_type": "midlong",
+                        "ticker": "2317.TW",
+                        "status": "insufficient_forward_data",
+                    },
                 ]
             ).to_csv(verification_outdir / "reco_outcomes.csv", index=False)
             (theme_outdir / "runtime_metrics.json").write_text(
@@ -101,6 +107,11 @@ class RunLocalDailyTests(unittest.TestCase):
         self.assertEqual(metrics["outcome_rows"], 2)
         self.assertEqual(metrics["outcome_ok_rows"], 1)
         self.assertEqual(metrics["outcome_pending_rows"], 1)
+        self.assertEqual(metrics["verification_gate_status"], "ok")
+        self.assertEqual(metrics["snapshot_dup_keys"], 0)
+        self.assertEqual(metrics["outcome_dup_keys"], 0)
+        self.assertEqual(metrics["signal_date_missing_rows"], 0)
+        self.assertEqual(metrics["no_price_series_rows"], 0)
         self.assertEqual(metrics["watchlist_runtime_status"], "ok")
         self.assertEqual(metrics["portfolio_runtime_status"], "ok")
         self.assertEqual(metrics["verification_runtime_status"], "ok")
@@ -126,6 +137,20 @@ class RunLocalDailyTests(unittest.TestCase):
                     {"ticker": "2330.TW", "spec_risk_score": 0, "spec_risk_label": "正常", "rank": 2},
                 ]
             ).to_csv(theme_outdir / "daily_rank.csv", index=False)
+            pd.DataFrame(
+                [{"signal_date": "2026-04-23", "watch_type": "short", "ticker": "3057.TW"}]
+            ).to_csv(verification_outdir / "reco_snapshots.csv", index=False)
+            pd.DataFrame(
+                [
+                    {
+                        "signal_date": "2026-04-23",
+                        "horizon_days": 1,
+                        "watch_type": "short",
+                        "ticker": "3057.TW",
+                        "status": "insufficient_forward_data",
+                    }
+                ]
+            ).to_csv(verification_outdir / "reco_outcomes.csv", index=False)
 
             args = parse_args(["--mode", "preopen"])
             steps = [{"name": "watchlist", "label": "Watchlist", "status": "completed", "detail": "OK"}]
@@ -147,6 +172,8 @@ class RunLocalDailyTests(unittest.TestCase):
         self.assertIn("Watchlist", markdown)
         self.assertIn("Watchlist runtime", markdown)
         self.assertIn("Verification runtime", markdown)
+        self.assertIn("Verification gate status", markdown)
+        self.assertIn("Verification duplicate keys", markdown)
         self.assertIn("Spec risk high rows", markdown)
         self.assertIn("3057.TW", markdown)
         self.assertEqual(payload["mode"], "preopen")
@@ -156,6 +183,7 @@ class RunLocalDailyTests(unittest.TestCase):
         self.assertIn("portfolio_runtime", payload["outputs"])
         self.assertIn("verification_runtime", payload["outputs"])
         self.assertEqual(payload["metrics"]["spec_risk_high_rows"], 1)
+        self.assertEqual(payload["metrics"]["verification_gate_status"], "ok")
 
     def test_main_runs_preopen_steps_in_order(self) -> None:
         calls: list[str] = []
@@ -167,10 +195,10 @@ class RunLocalDailyTests(unittest.TestCase):
 
             return _inner
 
-        with patch("run_local_daily.daily_theme_watchlist.main", side_effect=_runner("watchlist")), patch(
-            "run_local_daily.portfolio_check.main", side_effect=_runner("portfolio")
-        ), patch("run_local_daily.run_daily_verification.main", side_effect=_runner("verification")), patch(
-            "run_local_daily.write_local_status_dashboard"
+        with patch("stock_watch.cli.local_daily.daily_theme_watchlist.main", side_effect=_runner("watchlist")), patch(
+            "stock_watch.cli.local_daily.portfolio_check.main", side_effect=_runner("portfolio")
+        ), patch("stock_watch.cli.local_daily.run_daily_verification.main", side_effect=_runner("verification")), patch(
+            "stock_watch.cli.local_daily.write_local_status_dashboard"
         ) as mock_status:
             code = main(["--mode", "preopen"])
 
@@ -188,10 +216,10 @@ class RunLocalDailyTests(unittest.TestCase):
 
             return _inner
 
-        with patch("run_local_daily.daily_theme_watchlist.main", side_effect=_runner("watchlist")), patch(
-            "run_local_daily.portfolio_check.main", side_effect=_runner("portfolio")
-        ), patch("run_local_daily.run_daily_verification.main", side_effect=_runner("verification")), patch(
-            "run_local_daily.write_local_status_dashboard"
+        with patch("stock_watch.cli.local_daily.daily_theme_watchlist.main", side_effect=_runner("watchlist")), patch(
+            "stock_watch.cli.local_daily.portfolio_check.main", side_effect=_runner("portfolio")
+        ), patch("stock_watch.cli.local_daily.run_daily_verification.main", side_effect=_runner("verification")), patch(
+            "stock_watch.cli.local_daily.write_local_status_dashboard"
         ) as mock_status:
             code = main(["--mode", "postclose"])
 
@@ -209,10 +237,10 @@ class RunLocalDailyTests(unittest.TestCase):
 
             return _inner
 
-        with patch("run_local_daily.daily_theme_watchlist.main", side_effect=_runner("watchlist")), patch(
-            "run_local_daily.portfolio_check.main", side_effect=_runner("portfolio")
-        ), patch("run_local_daily.run_daily_verification.main", side_effect=_runner("verification")), patch(
-            "run_local_daily.write_local_status_dashboard"
+        with patch("stock_watch.cli.local_daily.daily_theme_watchlist.main", side_effect=_runner("watchlist")), patch(
+            "stock_watch.cli.local_daily.portfolio_check.main", side_effect=_runner("portfolio")
+        ), patch("stock_watch.cli.local_daily.run_daily_verification.main", side_effect=_runner("verification")), patch(
+            "stock_watch.cli.local_daily.write_local_status_dashboard"
         ) as mock_status:
             code = main(["--mode", "portfolio"])
 
@@ -227,8 +255,8 @@ class RunLocalDailyTests(unittest.TestCase):
             calls.append("watchlist")
             return 1
 
-        with patch("run_local_daily.daily_theme_watchlist.main", side_effect=_watchlist), patch(
-            "run_local_daily.write_local_status_dashboard"
+        with patch("stock_watch.cli.local_daily.daily_theme_watchlist.main", side_effect=_watchlist), patch(
+            "stock_watch.cli.local_daily.write_local_status_dashboard"
         ) as mock_status:
             code = main(["--mode", "postclose"])
 

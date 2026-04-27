@@ -7,14 +7,14 @@ from unittest.mock import patch
 
 import pandas as pd
 
-from verification import evaluate_recommendations as er
-from verification.evaluate_recommendations import compute_forward_return_pct
-from verification.evaluate_recommendations import dedupe_outcomes_by_key
-from verification.evaluate_recommendations import dedupe_snapshots_by_key
-from verification.evaluate_recommendations import enrich_scenario_label_columns
-from verification.evaluate_recommendations import is_valid_signal_date
-from verification.evaluate_recommendations import _spec_profile_from_snapshot_row
-from verification.evaluate_recommendations import _chunked
+from verification.workflows import evaluate_recommendations as er
+from verification.workflows.evaluate_recommendations import compute_forward_return_pct
+from verification.workflows.evaluate_recommendations import dedupe_outcomes_by_key
+from verification.workflows.evaluate_recommendations import dedupe_snapshots_by_key
+from verification.workflows.evaluate_recommendations import enrich_scenario_label_columns
+from verification.workflows.evaluate_recommendations import is_valid_signal_date
+from verification.workflows.evaluate_recommendations import _spec_profile_from_snapshot_row
+from verification.workflows.evaluate_recommendations import _chunked
 
 
 class EvaluateRecommendationsTests(unittest.TestCase):

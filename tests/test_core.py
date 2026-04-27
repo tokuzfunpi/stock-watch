@@ -67,7 +67,7 @@ from daily_theme_watchlist import (
     yf_download_one,
 )
 
-UPDATE_CHAT_ID_MAP_PATH = Path(__file__).resolve().parent.parent / "update_chat_id_map.py"
+UPDATE_CHAT_ID_MAP_PATH = Path(__file__).resolve().parent.parent / "tools" / "update_chat_id_map.py"
 UPDATE_CHAT_ID_MAP_SPEC = util.spec_from_file_location("update_chat_id_map", UPDATE_CHAT_ID_MAP_PATH)
 update_chat_id_map = util.module_from_spec(UPDATE_CHAT_ID_MAP_SPEC)
 assert UPDATE_CHAT_ID_MAP_SPEC and UPDATE_CHAT_ID_MAP_SPEC.loader

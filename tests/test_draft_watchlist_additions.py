@@ -6,9 +6,9 @@ from pathlib import Path
 
 import pandas as pd
 
-from draft_watchlist_additions import build_addition_draft
-from draft_watchlist_additions import load_existing_tickers
-from draft_watchlist_additions import render_markdown
+from tools.draft_watchlist_additions import build_addition_draft
+from tools.draft_watchlist_additions import load_existing_tickers
+from tools.draft_watchlist_additions import render_markdown
 
 
 class DraftWatchlistAdditionsTests(unittest.TestCase):

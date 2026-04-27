@@ -1,0 +1,5 @@
+﻿date,ticker,name,group,layer,close,ret1_pct,ret5_pct,ret10_pct,ret20_pct,volume,avg_vol20,volume_ratio20,ma20,ma60,ma120,drawdown120_pct,bias20_pct,setup_score,risk_score,signals,score_band,regime,spec_risk_score,spec_risk_label,atr_pct,volatility_tag,spec_risk_subtype,spec_risk_note,spec_risk_flags,spec_price_action_score,spec_crowding_score,spec_extension_score,spec_structure_score
+2026-04-22,3491.TWO,昇達科,satellite,midlong_core,1720.0,-3.1,-1.15,-3.91,30.3,1656197,2030914,0.82,1638.75,1396.35,977.04,-5.23,4.96,6,2,TREND,偏強可追蹤,中段延續中,1,正常,6.44,活潑,,,,,,,
+2026-04-23,3491.TWO,昇達科,satellite,midlong_core,1550.0,-9.88,-11.43,-11.93,20.62,3170698,2172053,1.46,1652.0,1407.35,986.12,-14.6,-6.17,4,0,NONE,開始轉強,還在觀察,0,正常,7.44,劇烈,,,,,,,
+2026-04-24,3491.TWO,昇達科,satellite,midlong_core,1570.0,1.29,-5.99,-13.5,11.35,2327210,2271196,1.02,1660.0,1418.18,995.33,-13.5,-5.42,2,0,NONE,一般觀察,還在觀察,2,正常,7.3,劇烈,正常,波動劇烈、震幅過大,"波動劇烈,震幅過大",0.0,2.0,0.0,0.0
+2026-04-27,3491.TWO,昇達科,satellite,midlong_core,1605.0,2.23,-5.31,-10.08,3.55,2078377,2256060,0.92,1662.75,1429.68,1004.89,-11.57,-3.47,3,0,NONE,一般觀察,還在觀察,2,正常,7.08,劇烈,正常,波動劇烈、震幅過大,"波動劇烈,震幅過大",0.0,2.0,0.0,0.0

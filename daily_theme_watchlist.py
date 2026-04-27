@@ -43,6 +43,8 @@ from stock_watch.reports.portfolio import (
     save_portfolio_reports as save_portfolio_reports_impl,
 )
 from stock_watch.state.alert_tracking import upsert_alert_tracking as upsert_alert_tracking_impl
+from stock_watch.paths import THEME_OUTDIR as STOCK_WATCH_THEME_OUTDIR
+from stock_watch.paths import VERIFICATION_OUTDIR as STOCK_WATCH_VERIFICATION_OUTDIR
 from stock_watch.signals.detect import (
     add_indicators as add_indicators_impl,
     apply_group_weight as apply_group_weight_impl,
@@ -61,7 +63,7 @@ CONFIG_PATH = Path(os.getenv("CONFIG_PATH", BASE_DIR / "config.json"))
 WATCHLIST_CSV = Path(os.getenv("WATCHLIST_CSV", BASE_DIR / "watchlist.csv"))
 PORTFOLIO_CSV = Path(os.getenv("PORTFOLIO_CSV", BASE_DIR / "portfolio.csv"))
 CHAT_IDS_PATH = Path(os.getenv("CHAT_IDS_PATH", BASE_DIR / "chat_ids"))
-OUTDIR = Path(os.getenv("OUTDIR", BASE_DIR / "theme_watchlist_daily"))
+OUTDIR = Path(os.getenv("OUTDIR", str(STOCK_WATCH_THEME_OUTDIR)))
 OUTDIR.mkdir(parents=True, exist_ok=True)
 
 YF_CACHE_DIR = OUTDIR / ".yfinance_cache"
@@ -86,8 +88,8 @@ FEEDBACK_SUMMARY_CSV = OUTDIR / "feedback_summary.csv"
 SHADOW_OPEN_NOT_CHASE_CSV = OUTDIR / "shadow_open_not_chase_candidates.csv"
 SHADOW_OPEN_NOT_CHASE_MD = OUTDIR / "shadow_open_not_chase.md"
 SUCCESS_FILE = OUTDIR / "last_success_date.txt"
-VERIFICATION_OUTCOMES_CSV = BASE_DIR / "verification" / "watchlist_daily" / "reco_outcomes.csv"
-SHADOW_OPEN_NOT_CHASE_SNAPSHOTS_CSV = BASE_DIR / "verification" / "watchlist_daily" / "shadow_open_not_chase_snapshots.csv"
+VERIFICATION_OUTCOMES_CSV = STOCK_WATCH_VERIFICATION_OUTDIR / "reco_outcomes.csv"
+SHADOW_OPEN_NOT_CHASE_SNAPSHOTS_CSV = STOCK_WATCH_VERIFICATION_OUTDIR / "shadow_open_not_chase_snapshots.csv"
 LOG_DIR = OUTDIR / "logs"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 

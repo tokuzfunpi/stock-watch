@@ -206,11 +206,24 @@ theme_watchlist_daily/portfolio_runtime_metrics.md
 theme_watchlist_daily/portfolio_runtime_metrics.json
 theme_watchlist_daily/local_*.md
 theme_watchlist_daily/local_*.json
+theme_watchlist_daily/local_site/
 theme_watchlist_daily/weekly_review.md
 theme_watchlist_daily/weekly_review.json
 theme_watchlist_daily/history_cache/
 theme_watchlist_daily/.yfinance_cache/
 verification/watchlist_daily/
+runs/theme_watchlist_daily/portfolio_report.md
+runs/theme_watchlist_daily/portfolio_report.html
+runs/theme_watchlist_daily/portfolio_runtime_metrics.md
+runs/theme_watchlist_daily/portfolio_runtime_metrics.json
+runs/theme_watchlist_daily/local_*.md
+runs/theme_watchlist_daily/local_*.json
+runs/theme_watchlist_daily/local_site/
+runs/theme_watchlist_daily/weekly_review.md
+runs/theme_watchlist_daily/weekly_review.json
+runs/theme_watchlist_daily/history_cache/
+runs/theme_watchlist_daily/.yfinance_cache/
+runs/verification/watchlist_daily/
 
 # Cursor
 #  Cursor is an AI-powered code editor. `.cursorignore` specifies files/directories to

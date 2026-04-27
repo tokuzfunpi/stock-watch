@@ -6,7 +6,7 @@ from datetime import datetime
 import pandas as pd
 
 from daily_theme_watchlist import LOCAL_TZ
-from verification.summarize_outcomes import (
+from verification.reports.summarize_outcomes import (
     build_atr_band_findings,
     build_key_findings,
     build_summary_markdown,
@@ -226,6 +226,55 @@ class SummarizeOutcomesTests(unittest.TestCase):
         self.assertIn("spec_risk_subtype", parts["overall_by_spec_subtype"].columns)
         self.assertIn("spec_risk_check", parts)
         self.assertFalse(parts["spec_risk_check"].empty)
+        self.assertIn("factor_quantile_analysis", parts)
+        self.assertFalse(parts["factor_quantile_analysis"].empty)
+        self.assertIn("factor_high_low_spread", parts)
+        self.assertFalse(parts["factor_high_low_spread"].empty)
+        self.assertIn("tail_risk_by_action", parts)
+        self.assertFalse(parts["tail_risk_by_action"].empty)
+        self.assertIn("sensitivity_matrix", parts)
+        self.assertFalse(parts["sensitivity_matrix"].empty)
+
+    def test_summarize_outcomes_builds_factor_and_tail_risk_tables(self) -> None:
+        rows = []
+        for idx, setup_score in enumerate([1, 2, 3, 8, 9, 10]):
+            rows.append(
+                {
+                    "signal_date": f"2026-04-{10 + idx:02d}",
+                    "horizon_days": 5,
+                    "watch_type": "short",
+                    "reco_status": "ok",
+                    "market_heat": "warm",
+                    "scenario_label": "強勢延伸盤",
+                    "signals": "ACCEL",
+                    "setup_score": setup_score,
+                    "risk_score": idx % 3,
+                    "spec_risk_score": 0,
+                    "volume_ratio20": 1.0 + idx,
+                    "ret5_pct": float(setup_score),
+                    "ret20_pct": float(setup_score * 2),
+                    "action": "等拉回",
+                    "realized_ret_pct": float(setup_score - 4),
+                    "status": "ok",
+                }
+            )
+
+        parts = summarize_outcomes(pd.DataFrame(rows))
+
+        spread = parts["factor_high_low_spread"]
+        self.assertFalse(spread.empty)
+        setup_spread = spread[spread["factor_name"] == "setup_score"].iloc[0]
+        self.assertGreater(float(setup_spread["delta_avg_ret_high_minus_low"]), 0.0)
+
+        tail = parts["tail_risk_by_action"]
+        self.assertFalse(tail.empty)
+        self.assertIn("tail25_ret", tail.columns)
+        self.assertIn("risk_label", tail.columns)
+
+        sensitivity = parts["sensitivity_matrix"]
+        self.assertFalse(sensitivity.empty)
+        self.assertIn("delta_avg_ret_vs_baseline", sensitivity.columns)
+        self.assertIn("baseline_all", sensitivity["config_name"].tolist())
 
     def test_summarize_outcomes_backfills_spec_risk_bucket_from_legacy_fields(self) -> None:
         df = pd.DataFrame(
@@ -340,12 +389,17 @@ class SummarizeOutcomesTests(unittest.TestCase):
         self.assertIn("## Coverage", md)
         self.assertIn("## Scenario Coverage", md)
         self.assertIn("## Notes", md)
+        self.assertIn("## Execution Assumptions", md)
         self.assertIn("## Key Findings", md)
         self.assertIn("market_heat", md)
         self.assertIn("## Overall By Market Heat", md)
         self.assertIn("## Overall By Signal Template", md)
         self.assertIn("## Overall By Spec Risk", md)
         self.assertIn("## Overall By Spec Subtype", md)
+        self.assertIn("## Factor High-Low Spread", md)
+        self.assertIn("## Factor Quantile Analysis", md)
+        self.assertIn("## Tail Risk By Action", md)
+        self.assertIn("## Sensitivity Matrix", md)
         self.assertIn("## Overall By Scenario", md)
         self.assertIn("## Overall By Scenario + Signal Template", md)
         self.assertIn("## Heat Bias Check (hot - normal)", md)

@@ -4,31 +4,43 @@
 
 ## 檔案與用途
 
+Stable runbook commands stay at `verification/*.py`.
+Implementation code is now split by role:
+
+- `verification/cli/`: thin module wrappers for `python3.11 -m verification.cli...`
+- `verification/reports/`: report/snapshot builders and analysis renderers
+- `verification/workflows/`: orchestration and data-update workflows
+
 - `verify_recommendations.py`
-  - 目的：用 `theme_watchlist_daily/daily_rank.csv` 的資料，產出當日短線/中線推薦驗算報告，並把推薦清單存成快照。
+  - 目的：用 `runs/theme_watchlist_daily/daily_rank.csv` 的資料，產出當日短線/中線推薦驗算報告，並把推薦清單存成快照。
+  - 實作：`verification/reports/verify_recommendations.py`
   - 輸出：
-    - `verification/watchlist_daily/verification_report.md`
-    - `verification/watchlist_daily/reco_snapshots.csv`
-    - `verification/watchlist_daily/codex_context.json`（給 Codex/人工分析用的結構化 JSON）
-    - `verification/watchlist_daily/contexts/codex_context_*.json`（每次執行留一份）
+    - `runs/verification/watchlist_daily/verification_report.md`
+    - `runs/verification/watchlist_daily/reco_snapshots.csv`
+    - `runs/verification/watchlist_daily/codex_context.json`（給 Codex/人工分析用的結構化 JSON）
+    - `runs/verification/watchlist_daily/contexts/codex_context_*.json`（每次執行留一份）
 - `evaluate_recommendations.py`
   - 目的：把 `reco_snapshots.csv` 的推薦，對照未來 N 個交易日的收盤價，回填 outcome（報酬% / 狀態）。
-  - 輸出：`verification/watchlist_daily/reco_outcomes.csv`
+  - 實作：`verification/workflows/evaluate_recommendations.py`
+  - 輸出：`runs/verification/watchlist_daily/reco_outcomes.csv`
   - 注意：需要網路能抓到 yfinance；抓不到會寫入 `status`（best effort）。
 - `summarize_outcomes.py`
   - 目的：把 `reco_outcomes.csv` 彙整成可讀的勝率/平均報酬/樣本數報告。
-  - 輸出：`verification/watchlist_daily/outcomes_summary.md`
+  - 實作：`verification/reports/summarize_outcomes.py`
+  - 輸出：`runs/verification/watchlist_daily/outcomes_summary.md`
 - `feedback_weight_sensitivity.py`
   - 目的：離線比較 `feedback_score` 的 `base/recent` 權重組合，不改 production 預設。
+  - 實作：`verification/reports/feedback_weight_sensitivity.py`
   - 輸出：
-    - `verification/watchlist_daily/feedback_weight_sensitivity.md`
-    - `verification/watchlist_daily/feedback_weight_sensitivity.csv`
+    - `runs/verification/watchlist_daily/feedback_weight_sensitivity.md`
+    - `runs/verification/watchlist_daily/feedback_weight_sensitivity.csv`
 - `run_daily_verification.py`
   - 目的：把 `verify -> evaluate -> summarize -> feedback sensitivity` 串成單一入口，並支援 `盤前 / 盤後 / 全流程` 模式。
+  - 實作：`verification/workflows/run_daily_verification.py`
   - 適合：想用同一支指令跑早上快照、收盤後回填，或完整 workflow 時使用。
   - 另外會輸出：
-    - `verification/watchlist_daily/runtime_metrics.md`
-    - `verification/watchlist_daily/runtime_metrics.json`
+    - `runs/verification/watchlist_daily/runtime_metrics.md`
+    - `runs/verification/watchlist_daily/runtime_metrics.json`
 
 ## 建議執行時機（台灣時間）
 
@@ -51,8 +63,8 @@ python3.11 verification/evaluate_recommendations.py --horizons 1,5,20
 # yfinance 偶爾不穩時，可提高穩定性（分批 + retry + backoff + 拉長 period）
 python3.11 verification/evaluate_recommendations.py --horizons 1,5,20 --period 180d --batch-size 25 --retries 3 --backoff-seconds 1
 
-# 用本機 cache（網路不穩時更容易補齊 OK rows；cache 會寫在 verification/watchlist_daily/ 下）
-python3.11 verification/evaluate_recommendations.py --horizons 1,5,20 --cache-dir verification/watchlist_daily/yfinance_cache
+# 用本機 cache（網路不穩時更容易補齊 OK rows；cache 會寫在 runs/verification/watchlist_daily/ 下）
+python3.11 verification/evaluate_recommendations.py --horizons 1,5,20 --cache-dir runs/verification/watchlist_daily/yfinance_cache
 
 # 一次把所有日期都補齊（會跑 snapshots 裡所有 signal_date）
 python3.11 verification/evaluate_recommendations.py --all-dates --horizons 1,5,20
@@ -96,7 +108,7 @@ python3.11 verification/run_daily_verification.py --mode postclose --skip-feedba
 ## 用 Git 歷史回填（補齊過去樣本）
 
 如果你之前沒有每天早上跑 `verify` 存快照，可以用 repo 裡歷史的
-`theme_watchlist_daily/daily_rank.csv`（artifact commits）來重建快照：
+`runs/theme_watchlist_daily/daily_rank.csv`（artifact commits）來重建快照：
 
 ```bash
 # 回填最近 30 天（每一天取最新一次 daily_rank.csv）
@@ -112,10 +124,12 @@ python3.11 verification/backfill_from_git.py --limit 0 --rebuild-snapshot
 python3.11 verification/backfill_from_git.py --since 2026-04-15 --until 2026-04-19
 ```
 
+`backfill_from_git.py` 的實作在 `verification/workflows/backfill_from_git.py`。
+
 會產生：
 
-- `verification/watchlist_daily/backfill_reports/verification_report_YYYY-MM-DD.md`
-- 並追加到 `verification/watchlist_daily/reco_snapshots.csv`
+- `runs/verification/watchlist_daily/backfill_reports/verification_report_YYYY-MM-DD.md`
+- 並追加到 `runs/verification/watchlist_daily/reco_snapshots.csv`
 
 ## 結果怎麼看
 
@@ -141,4 +155,4 @@ Repo 有一個手動 workflow 會跑 `verify_recommendations.py` 並上傳 artif
 
 ## 版本控制
 
-`verification/watchlist_daily/` 內是本機產出資料，預設已在 `.gitignore` 忽略，不會被 commit。
+`runs/verification/watchlist_daily/` 內是本機產出資料，預設已在 `.gitignore` 忽略，不會被 commit。

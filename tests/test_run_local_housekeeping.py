@@ -8,10 +8,10 @@ from datetime import datetime
 from datetime import timedelta
 from pathlib import Path
 
-from run_local_housekeeping import apply_housekeeping_actions
-from run_local_housekeeping import collect_housekeeping_actions
-from run_local_housekeeping import HousekeepingAction
-from run_local_housekeeping import main
+from stock_watch.cli.local_housekeeping import apply_housekeeping_actions
+from stock_watch.cli.local_housekeeping import collect_housekeeping_actions
+from stock_watch.cli.local_housekeeping import HousekeepingAction
+from stock_watch.cli.local_housekeeping import main
 
 
 class RunLocalHousekeepingTests(unittest.TestCase):

@@ -24,10 +24,14 @@
 - `watchlist.csv`
 - `portfolio.csv.example`
 - `.github/workflows/stock-watch.yml`
-- `SIGNAL_GLOSSARY.md`
+- `docs/runbooks/SIGNAL_GLOSSARY.md`
   - 訊號規則與報表語意對照
   - 也包含 template bundles（例如 `Momentum Leader`、`Reclaim Breakout`）
   - 以及 first-pass 的 `spec_risk_score / spec_risk_subtype / spec_risk_note` 說明
+- `docs/runbooks/LOCAL_RUNBOOK.md`
+  - 本機日常流程與 local website 閱讀入口
+- `docs/refactor/STRUCTURE_PLAN.md`
+  - folder structure 分階段整理計畫
 
 安裝與執行：
 - `python3 -m venv .venv`
@@ -52,7 +56,7 @@
 - 清理舊的 local verification 產物也可以：
   - `python3 run_local_housekeeping.py`
   - `python3 run_local_housekeeping.py --apply`
-  - `python3 run_local_housekeeping.py --verification-outdir verification/watchlist_daily --apply`
+  - `python3 run_local_housekeeping.py --verification-outdir runs/verification/watchlist_daily --apply`
 
 說明：
 - `preopen`：跑 `daily_theme_watchlist.py` + verification snapshot
@@ -60,22 +64,22 @@
 - `full`：整套本機流程一次跑完
 - `portfolio`：只跑本機持股檢查
 - 每次執行後會更新：
-  - `theme_watchlist_daily/local_run_status.md`
-  - `theme_watchlist_daily/local_run_status.json`
+  - `runs/theme_watchlist_daily/local_run_status.md`
+  - `runs/theme_watchlist_daily/local_run_status.json`
   - 用來快速看本次哪些 step 有跑、成功與否、最新 verification row 狀態，以及 watchlist / portfolio / verification runtime
   - 也會列出目前 daily rank 的 `spec_risk` 高風險/觀察名單數量與前幾檔 ticker
 - `run_local_doctor.py` 會更新：
-  - `theme_watchlist_daily/local_doctor.md`
-  - `theme_watchlist_daily/local_doctor.json`
+  - `runs/theme_watchlist_daily/local_doctor.md`
+  - `runs/theme_watchlist_daily/local_doctor.json`
   - 用來檢查 Python / 本機設定檔 / Telegram / cache / Yahoo DNS readiness
   - 也會列出 `history_cache` 的檔案數與總容量，以及目前 `spec_risk` 的高風險/觀察名單摘要
 - `run_weekly_review.py` 會更新：
-  - `theme_watchlist_daily/weekly_review.md`
-  - `theme_watchlist_daily/weekly_review.json`
+  - `runs/theme_watchlist_daily/weekly_review.md`
+  - `runs/theme_watchlist_daily/weekly_review.json`
   - 用來整理最近幾個 `signal_date` 的 threshold / ATR / feedback / `spec_risk` 決策建議
 - `run_local_housekeeping.py` 會更新：
-  - `theme_watchlist_daily/local_housekeeping.md`
-  - `theme_watchlist_daily/local_housekeeping.json`
+  - `runs/theme_watchlist_daily/local_housekeeping.md`
+  - `runs/theme_watchlist_daily/local_housekeeping.json`
   - 預設是 dry-run，先列出會刪掉哪些舊 `contexts`、`backfill_reports`、`*.bak*`、verification cache、`history_cache`；加 `--apply` 才會真的刪
 
 如果要跑持股檢查：
@@ -83,8 +87,8 @@
 - 填入自己的持股資料
 - `python3 portfolio_check.py`
 - 執行後會：
-  - 更新 `theme_watchlist_daily/portfolio_report.md`
-  - 更新 `theme_watchlist_daily/portfolio_report.html`
+  - 更新 `runs/theme_watchlist_daily/portfolio_report.md`
+  - 更新 `runs/theme_watchlist_daily/portfolio_report.html`
   - 直接在 CLI 印出大盤摘要與持股建議
 
 Telegram chat id 也支援本機 fallback：
@@ -111,7 +115,7 @@ Telegram chat id 也支援本機 fallback：
 補充：
 - `daily_report.md` 會包含 Signals 對照表與 Regime 解釋，方便直接看報表判讀
 - `portfolio.csv` 是本機私有檔，不進 git
-- `theme_watchlist_daily/portfolio_report.md` 與 `portfolio_report.html` 由 `portfolio_check.py` 產生
+- `runs/theme_watchlist_daily/portfolio_report.md` 與 `portfolio_report.html` 由 `portfolio_check.py` 產生
 - 資料抓取目前支援 provider fallback：
   - 預設主來源：`yahoo`
   - 預設備援：`finmind`
@@ -125,22 +129,22 @@ Telegram chat id 也支援本機 fallback：
     - `ENABLE_DISK_HISTORY_CACHE`
 
 - 每次 `daily_theme_watchlist.py` 執行後也會更新：
-  - `theme_watchlist_daily/runtime_metrics.md`
-  - `theme_watchlist_daily/runtime_metrics.json`
+  - `runs/theme_watchlist_daily/runtime_metrics.md`
+  - `runs/theme_watchlist_daily/runtime_metrics.json`
   - 可快速看 warmup / watchlist / backtest / notifications 各階段耗時
   - 也會顯示 history cache、disk cache、superset cache 命中情況
   - `backtest_state.json` 會記錄 incremental backtest 的模式與掃描範圍
   - daily rank / report 內的 `spec_risk` 現在會進一步拆出 `spec_risk_note`，方便辨識「急漲、爆量、乖離大、缺少結構支撐」這類疑似炒作型態
 - 每次 `portfolio_check.py` 執行後也會更新：
-  - `theme_watchlist_daily/portfolio_runtime_metrics.md`
-  - `theme_watchlist_daily/portfolio_runtime_metrics.json`
+  - `runs/theme_watchlist_daily/portfolio_runtime_metrics.md`
+  - `runs/theme_watchlist_daily/portfolio_runtime_metrics.json`
   - 用來看持股檢查的 market / watchlist / report / print 各階段耗時
 - 每次 `verification/run_daily_verification.py` 執行後也會更新：
-  - `verification/watchlist_daily/runtime_metrics.md`
-  - `verification/watchlist_daily/runtime_metrics.json`
+  - `runs/verification/watchlist_daily/runtime_metrics.md`
+  - `runs/verification/watchlist_daily/runtime_metrics.json`
   - 用來看 verify / evaluate / summary / feedback 各階段耗時，以及 verification cache 檔數/容量
 
 新增：
 - daily_report.md 內含 Grade 對照表
 - Telegram 推播前面會先給你一段盤面總結
-- theme_watchlist_daily/alert_tracking.csv 會追蹤提醒後 1D / 5D / 20D 表現
+- `runs/theme_watchlist_daily/alert_tracking.csv` 會追蹤提醒後 1D / 5D / 20D 表現

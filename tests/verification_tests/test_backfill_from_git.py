@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 import pandas as pd
 
-from verification.backfill_from_git import (
+from verification.workflows.backfill_from_git import (
     append_snapshot_rows,
     build_market_regime_from_history,
     build_us_market_reference_from_histories,
@@ -68,7 +68,7 @@ class BackfillFromGitTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmpdir:
             snapshot_csv = Path(tmpdir) / "reco_snapshots.csv"
-            with patch("verification.backfill_from_git.select_forced_recommendations", return_value=forced):
+            with patch("verification.workflows.backfill_from_git.select_forced_recommendations", return_value=forced):
                 rows = append_snapshot_rows(
                     forced,
                     generated_at=datetime(2026, 4, 22),

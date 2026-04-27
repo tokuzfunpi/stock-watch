@@ -6,10 +6,11 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from run_local_doctor import DoctorCheck
-from run_local_doctor import main
-from run_local_doctor import overall_status
-from run_local_doctor import write_doctor_outputs
+from stock_watch.cli.local_doctor import DoctorCheck
+from stock_watch.cli.local_doctor import _check_verification_health
+from stock_watch.cli.local_doctor import main
+from stock_watch.cli.local_doctor import overall_status
+from stock_watch.cli.local_doctor import write_doctor_outputs
 
 
 class RunLocalDoctorTests(unittest.TestCase):
@@ -28,6 +29,15 @@ class RunLocalDoctorTests(unittest.TestCase):
             "alert_tracking_rows": 2,
             "snapshot_rows": 3,
             "outcome_rows": 4,
+            "verification_gate_status": "ok",
+            "latest_snapshot_signal_date": "2026-04-27",
+            "latest_outcome_signal_date": "2026-04-27",
+            "snapshot_dup_keys": 0,
+            "outcome_dup_keys": 0,
+            "outcome_ok_rows": 2,
+            "outcome_pending_rows": 2,
+            "signal_date_missing_rows": 0,
+            "no_price_series_rows": 0,
             "history_cache_files": 5,
             "history_cache_bytes": 600,
             "spec_risk_high_rows": 1,
@@ -52,8 +62,27 @@ class RunLocalDoctorTests(unittest.TestCase):
         self.assertIn("Spec risk high rows", markdown)
         self.assertIn("3057.TW", markdown)
         self.assertIn("Verification runtime seconds", markdown)
+        self.assertIn("Verification gate status", markdown)
+        self.assertIn("Verification duplicate keys", markdown)
         self.assertEqual(payload["overall"], "ok")
         self.assertEqual(payload["checks"][0]["status"], "ok")
+
+    def test_check_verification_health_reports_clean_gate(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            snapshots = root / "reco_snapshots.csv"
+            outcomes = root / "reco_outcomes.csv"
+            snapshots.write_text("signal_date,watch_type,ticker\n2026-04-27,short,2330.TW\n", encoding="utf-8")
+            outcomes.write_text(
+                "signal_date,horizon_days,watch_type,ticker,status\n2026-04-27,1,short,2330.TW,insufficient_forward_data\n",
+                encoding="utf-8",
+            )
+
+            check = _check_verification_health(snapshots, outcomes)
+
+        self.assertEqual(check.name, "verification_health")
+        self.assertEqual(check.status, "ok")
+        self.assertIn("pending=1", check.detail)
 
     def test_main_returns_zero_for_warn_only_state(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -89,11 +118,21 @@ class RunLocalDoctorTests(unittest.TestCase):
             (theme_outdir / "runtime_metrics.json").write_text(json.dumps({"wall_seconds": 1.1}), encoding="utf-8")
             (theme_outdir / "portfolio_runtime_metrics.json").write_text(json.dumps({"wall_seconds": 0.7}), encoding="utf-8")
             (verification_outdir / "runtime_metrics.json").write_text(json.dumps({"wall_seconds": 2.2}), encoding="utf-8")
+            (verification_outdir / "reco_snapshots.csv").write_text(
+                "signal_date,watch_type,ticker\n2026-04-27,short,2330.TW\n",
+                encoding="utf-8",
+            )
+            (verification_outdir / "reco_outcomes.csv").write_text(
+                "signal_date,horizon_days,watch_type,ticker,status\n2026-04-27,1,short,2330.TW,insufficient_forward_data\n",
+                encoding="utf-8",
+            )
 
-            with patch("run_local_doctor.REPO_ROOT", root), patch("run_local_doctor.THEME_OUTDIR", theme_outdir), patch(
-                "run_local_doctor.VERIFICATION_OUTDIR", verification_outdir
-            ), patch("run_local_doctor.DOCTOR_MD", theme_outdir / "local_doctor.md"), patch(
-                "run_local_doctor.DOCTOR_JSON", theme_outdir / "local_doctor.json"
+            with patch("stock_watch.cli.local_doctor.REPO_ROOT", root), patch(
+                "stock_watch.cli.local_doctor.THEME_OUTDIR", theme_outdir
+            ), patch("stock_watch.cli.local_doctor.VERIFICATION_OUTDIR", verification_outdir), patch(
+                "stock_watch.cli.local_doctor.DOCTOR_MD", theme_outdir / "local_doctor.md"
+            ), patch(
+                "stock_watch.cli.local_doctor.DOCTOR_JSON", theme_outdir / "local_doctor.json"
             ):
                 code = main(["--skip-network"])
 
@@ -109,6 +148,9 @@ class RunLocalDoctorTests(unittest.TestCase):
         self.assertEqual(payload["metrics"]["spec_risk_watch_rows"], 1)
         self.assertEqual(payload["metrics"]["spec_risk_top_tickers"], ["3057.TW", "6669.TW"])
         self.assertEqual(payload["metrics"]["verification_runtime_seconds"], 2.2)
+        self.assertEqual(payload["metrics"]["verification_gate_status"], "ok")
+        self.assertEqual(payload["metrics"]["outcome_pending_rows"], 1)
+        self.assertIn("verification_health", check_names)
 
     def test_main_returns_one_for_fail_state(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -123,10 +165,12 @@ class RunLocalDoctorTests(unittest.TestCase):
             (root / "chat_id_map.csv.example").write_text("chat_id,name\n", encoding="utf-8")
             (root / "telegram_getupdates_url.example").write_text("https://example.com\n", encoding="utf-8")
 
-            with patch("run_local_doctor.REPO_ROOT", root), patch("run_local_doctor.THEME_OUTDIR", theme_outdir), patch(
-                "run_local_doctor.VERIFICATION_OUTDIR", verification_outdir
-            ), patch("run_local_doctor.DOCTOR_MD", theme_outdir / "local_doctor.md"), patch(
-                "run_local_doctor.DOCTOR_JSON", theme_outdir / "local_doctor.json"
+            with patch("stock_watch.cli.local_doctor.REPO_ROOT", root), patch(
+                "stock_watch.cli.local_doctor.THEME_OUTDIR", theme_outdir
+            ), patch("stock_watch.cli.local_doctor.VERIFICATION_OUTDIR", verification_outdir), patch(
+                "stock_watch.cli.local_doctor.DOCTOR_MD", theme_outdir / "local_doctor.md"
+            ), patch(
+                "stock_watch.cli.local_doctor.DOCTOR_JSON", theme_outdir / "local_doctor.json"
             ):
                 code = main(["--skip-network"])
 
