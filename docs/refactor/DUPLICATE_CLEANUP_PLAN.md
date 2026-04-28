@@ -57,10 +57,11 @@
 - Feedback scoring/weighting helpers 已移到 `stock_watch/strategy/feedback.py`；daily legacy module 只保留相容 wrappers 與 runtime path wiring。
 - Message formatting helpers（layer/volatility badge、ticker display、candidate summary lines、compact briefing、ETF summary）已移到 `stock_watch/reports/messages.py`。
 - Full Telegram message builders（macro、short、midlong、early gem、special ETF、portfolio）已移到 `stock_watch/reports/telegram.py`。
+- Package workflows 現在直接呼叫 `stock_watch/reports/daily.py`、`stock_watch/reports/portfolio.py` 與 `stock_watch/reports/telegram.py`，不再透過 legacy daily 的 report/message wrapper。
 
 下一階段才拆：
 
-- 把仍留在 `daily_theme_watchlist.py` 的 report wiring 與 portfolio/watchlist workflow dependencies 抽到 package modules。
+- 把仍留在 `daily_theme_watchlist.py` 的 watchlist scan/data-fetch workflow dependencies 抽到 package modules。
 - 等 package workflows 不再 import `daily_theme_watchlist.py` helpers/globals 時，再刪或改成內部相容層。
 
 ## 3) Generated artifact duplicates

@@ -5,6 +5,8 @@ import time
 from pathlib import Path
 
 from stock_watch.paths import REPO_ROOT
+from stock_watch.reports import daily as daily_reports
+from stock_watch.reports import telegram as telegram_reports
 from stock_watch.state import run_state
 from stock_watch.strategy import scenario as strategy_scenario
 from stock_watch.workflows import runtime_metrics
@@ -25,6 +27,86 @@ def _load_legacy_daily_workflow():
     import daily_theme_watchlist
 
     return daily_theme_watchlist
+
+
+def _build_macro_message(daily_theme_watchlist, market_regime: dict, us_market: dict, df_rank):
+    return telegram_reports.build_macro_message(
+        market_regime,
+        us_market,
+        df_rank,
+        build_market_scenario=strategy_scenario.build_market_scenario,
+        heat_bias_message=daily_theme_watchlist.heat_bias_message,
+        correction_sample_warning_message=daily_theme_watchlist.correction_sample_warning_message,
+        runtime_context_lines=daily_theme_watchlist.runtime_context_lines,
+        build_candidate_sets=daily_theme_watchlist.build_candidate_sets,
+        short_term_action_label=daily_theme_watchlist.short_term_action_label,
+        midlong_action_label=daily_theme_watchlist.midlong_action_label,
+        auto_added_tickers=daily_theme_watchlist.AUTO_ADDED_TICKERS,
+        new_watch_spotlight_limit=daily_theme_watchlist.CONFIG.scenario_policy.new_watch_spotlight_limit,
+        prev_rank_csv=daily_theme_watchlist.PREV_RANK_CSV,
+    )
+
+
+def _build_short_term_message(daily_theme_watchlist, df_rank, market_regime: dict, us_market: dict):
+    return telegram_reports.build_short_term_message(
+        df_rank,
+        market_regime,
+        us_market,
+        build_candidate_sets=daily_theme_watchlist.build_candidate_sets,
+        build_market_scenario=strategy_scenario.build_market_scenario,
+        effective_short_top_n=daily_theme_watchlist.effective_short_top_n,
+        short_term_action_label=daily_theme_watchlist.short_term_action_label,
+        midlong_action_label=daily_theme_watchlist.midlong_action_label,
+        watch_price_plan_text=daily_theme_watchlist.watch_price_plan_text,
+    )
+
+
+def _build_early_gem_message(daily_theme_watchlist, df_rank):
+    return telegram_reports.build_early_gem_message(
+        df_rank,
+        select_early_gem_candidates=daily_theme_watchlist.select_early_gem_candidates,
+        early_gem_reason=daily_theme_watchlist.early_gem_reason,
+        watch_price_plan_text=daily_theme_watchlist.watch_price_plan_text,
+    )
+
+
+def _build_midlong_message(daily_theme_watchlist, df_rank, market_regime: dict, us_market: dict):
+    return telegram_reports.build_midlong_message(
+        df_rank,
+        market_regime,
+        us_market,
+        build_candidate_sets=daily_theme_watchlist.build_candidate_sets,
+        build_market_scenario=strategy_scenario.build_market_scenario,
+        effective_midlong_top_n=daily_theme_watchlist.effective_midlong_top_n,
+        short_term_action_label=daily_theme_watchlist.short_term_action_label,
+        midlong_action_label=daily_theme_watchlist.midlong_action_label,
+        watch_price_plan_text=daily_theme_watchlist.watch_price_plan_text,
+    )
+
+
+def _save_reports(daily_theme_watchlist, df_rank, market_regime: dict, bt_steady, bt_attack, us_market: dict) -> None:
+    daily_reports.save_reports(
+        df_rank,
+        market_regime,
+        bt_steady,
+        bt_attack,
+        markdown_path=daily_theme_watchlist.REPORT_MD,
+        html_path=daily_theme_watchlist.REPORT_HTML,
+        us_market=us_market,
+        build_market_scenario=strategy_scenario.build_market_scenario,
+        layer_label=daily_theme_watchlist.layer_label,
+        build_candidate_sets=daily_theme_watchlist.build_candidate_sets,
+        build_feedback_summary=daily_theme_watchlist.build_feedback_summary,
+        watch_price_plan_text=daily_theme_watchlist.watch_price_plan_text,
+        select_special_etf_candidates=daily_theme_watchlist.select_special_etf_candidates,
+        build_special_etf_summary=daily_theme_watchlist.build_special_etf_summary,
+        special_etf_action_label=daily_theme_watchlist.special_etf_action_label,
+        select_early_gem_candidates=daily_theme_watchlist.select_early_gem_candidates,
+        early_gem_reason=daily_theme_watchlist.early_gem_reason,
+        strategy_preview_lines=strategy_scenario.strategy_preview_lines,
+        config_strategy=daily_theme_watchlist.CONFIG.strategy,
+        alert_track_csv=daily_theme_watchlist.ALERT_TRACK_CSV,
+    )
 
 
 def run_daily_watchlist(*, force_run: bool | None = False) -> int:
@@ -101,7 +183,8 @@ def run_daily_watchlist(*, force_run: bool | None = False) -> int:
         _timed_call(
             step_timings,
             "reports",
-            daily_theme_watchlist.save_reports,
+            _save_reports,
+            daily_theme_watchlist,
             df_rank,
             market_regime,
             bt_steady,
@@ -161,16 +244,16 @@ def run_daily_watchlist(*, force_run: bool | None = False) -> int:
 
             def _send_notifications() -> None:
                 daily_theme_watchlist.send_telegram_message(
-                    daily_theme_watchlist.build_macro_message(market_regime, us_market, df_rank)
+                    _build_macro_message(daily_theme_watchlist, market_regime, us_market, df_rank)
                 )
                 daily_theme_watchlist.send_telegram_message(
-                    daily_theme_watchlist.build_short_term_message(df_rank, market_regime, us_market)
+                    _build_short_term_message(daily_theme_watchlist, df_rank, market_regime, us_market)
                 )
                 daily_theme_watchlist.send_telegram_message(
-                    daily_theme_watchlist.build_early_gem_message(df_rank, market_regime, us_market)
+                    _build_early_gem_message(daily_theme_watchlist, df_rank)
                 )
                 daily_theme_watchlist.send_telegram_message(
-                    daily_theme_watchlist.build_midlong_message(df_rank, market_regime, us_market)
+                    _build_midlong_message(daily_theme_watchlist, df_rank, market_regime, us_market)
                 )
 
             _timed_call(step_timings, "notifications", _send_notifications)

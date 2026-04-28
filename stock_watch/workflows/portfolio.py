@@ -10,6 +10,8 @@ from typing import Callable, Optional
 import pandas as pd
 
 from stock_watch.paths import REPO_ROOT
+from stock_watch.reports import portfolio as portfolio_reports
+from stock_watch.reports import telegram as telegram_reports
 from stock_watch.strategy import scenario as strategy_scenario
 
 
@@ -99,6 +101,51 @@ def _write_runtime_metrics(
             ),
             encoding="utf-8",
         )
+
+
+def _build_macro_message(daily_theme_watchlist, market_regime: dict, us_market: dict, df_rank: pd.DataFrame) -> str:
+    return telegram_reports.build_macro_message(
+        market_regime,
+        us_market,
+        df_rank,
+        build_market_scenario=strategy_scenario.build_market_scenario,
+        heat_bias_message=daily_theme_watchlist.heat_bias_message,
+        correction_sample_warning_message=daily_theme_watchlist.correction_sample_warning_message,
+        runtime_context_lines=daily_theme_watchlist.runtime_context_lines,
+        build_candidate_sets=daily_theme_watchlist.build_candidate_sets,
+        short_term_action_label=daily_theme_watchlist.short_term_action_label,
+        midlong_action_label=daily_theme_watchlist.midlong_action_label,
+        auto_added_tickers=daily_theme_watchlist.AUTO_ADDED_TICKERS,
+        new_watch_spotlight_limit=daily_theme_watchlist.CONFIG.scenario_policy.new_watch_spotlight_limit,
+        prev_rank_csv=daily_theme_watchlist.PREV_RANK_CSV,
+    )
+
+
+def _build_portfolio_message(daily_theme_watchlist, df_rank: pd.DataFrame, market_regime: dict, us_market: dict) -> str:
+    return telegram_reports.build_portfolio_message(
+        df_rank,
+        market_regime,
+        us_market,
+        build_portfolio_review_df=daily_theme_watchlist.build_portfolio_review_df,
+        build_market_scenario=strategy_scenario.build_market_scenario,
+        heat_bias_message=daily_theme_watchlist.heat_bias_message,
+    )
+
+
+def _save_portfolio_reports(daily_theme_watchlist, df_rank: pd.DataFrame, market_regime: dict, us_market: dict) -> None:
+    portfolio_reports.save_portfolio_reports(
+        df_rank,
+        market_regime,
+        us_market,
+        markdown_path=daily_theme_watchlist.PORTFOLIO_REPORT_MD,
+        html_path=daily_theme_watchlist.PORTFOLIO_REPORT_HTML,
+        build_portfolio_review_df=daily_theme_watchlist.build_portfolio_review_df,
+        build_market_scenario=strategy_scenario.build_market_scenario,
+        realtime_quote_interval=daily_theme_watchlist.REALTIME_QUOTE_INTERVAL,
+        realtime_quotes_enabled=daily_theme_watchlist.realtime_quotes_enabled(),
+        auto_added_tickers=daily_theme_watchlist.AUTO_ADDED_TICKERS,
+        volatility_badge_text=daily_theme_watchlist.volatility_badge_text,
+    )
 
 
 def run_portfolio_check(
@@ -215,9 +262,15 @@ def run_default_portfolio_check(
             build_market_scenario=strategy_scenario.build_market_scenario,
             adjust_strategy_by_scenario=strategy_scenario.adjust_strategy_by_scenario,
             run_watchlist=daily_theme_watchlist.run_watchlist,
-            save_portfolio_reports=daily_theme_watchlist.save_portfolio_reports,
-            build_macro_message=daily_theme_watchlist.build_macro_message,
-            build_portfolio_message=daily_theme_watchlist.build_portfolio_message,
+            save_portfolio_reports=lambda df_rank, market_regime, us_market: _save_portfolio_reports(
+                daily_theme_watchlist, df_rank, market_regime, us_market
+            ),
+            build_macro_message=lambda market_regime, us_market, df_rank: _build_macro_message(
+                daily_theme_watchlist, market_regime, us_market, df_rank
+            ),
+            build_portfolio_message=lambda df_rank, market_regime, us_market: _build_portfolio_message(
+                daily_theme_watchlist, df_rank, market_regime, us_market
+            ),
             runtime_metrics_md=runtime_metrics_md,
             runtime_metrics_json=runtime_metrics_json,
             print_fn=print_fn,

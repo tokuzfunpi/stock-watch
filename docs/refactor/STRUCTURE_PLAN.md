@@ -93,12 +93,13 @@ Completed:
 - Moved feedback scoring/weighting helpers into `stock_watch/strategy/feedback.py`.
 - Moved message formatting helpers into `stock_watch/reports/messages.py`.
 - Moved full Telegram message builders into `stock_watch/reports/telegram.py`.
+- Rewired package workflows to call package report/message modules directly instead of legacy daily report/message wrappers.
 - Updated GitHub Actions and runbooks to use `python -m stock_watch`.
 - Stopped local website generation from copying artifact files into root compatibility paths.
 
 Still intentionally present:
 
-- `daily_theme_watchlist.py`: still owns legacy helper globals, report wiring, and workflow dependency glue.
+- `daily_theme_watchlist.py`: still owns legacy helper globals and watchlist scan/data-fetch workflow dependency glue.
 - `stock_watch/runtime.py`: owns shared runtime constants/logger used across daily, weekly, and verification workflows.
 - `stock_watch/state/run_state.py`: owns last-state, success-signature, and rank-state helpers.
 - `stock_watch/strategy/scenario.py`: owns market scenario classification and scenario-adjusted strategy preview.
@@ -114,7 +115,7 @@ Still intentionally present:
 
 The next safe migration is not more wrapper deletion; it is splitting `daily_theme_watchlist.py`:
 
-1. Move remaining report wiring and workflow dependency glue into package modules.
+1. Move remaining watchlist scan/data-fetch workflow dependency glue into package modules.
 2. Make `stock_watch/workflows/daily_watchlist.py` depend on package modules instead of legacy globals.
 3. Keep `python -m stock_watch daily` calling package workflows directly.
 4. Delete or shrink `daily_theme_watchlist.py` after parity tests pass.

@@ -135,7 +135,7 @@ class DetectRowTests(unittest.TestCase):
             "daily_theme_watchlist.build_candidate_sets",
             return_value=(pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()),
         ), patch(
-            "daily_theme_watchlist.save_reports"
+            "stock_watch.workflows.daily_watchlist._save_reports"
         ), patch(
             "daily_theme_watchlist.upsert_alert_tracking"
         ), patch(
@@ -764,7 +764,7 @@ class FeedbackTests(unittest.TestCase):
             "daily_theme_watchlist.build_candidate_sets",
             return_value=(pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()),
         ), patch(
-            "daily_theme_watchlist.save_reports"
+            "stock_watch.workflows.daily_watchlist._save_reports"
         ) as mock_save_reports, patch(
             "daily_theme_watchlist.upsert_alert_tracking", side_effect=RuntimeError("tracking failed")
         ), patch(
@@ -2436,7 +2436,7 @@ class PushMessageTests(unittest.TestCase):
         ), patch("daily_theme_watchlist.run_watchlist", return_value=df) as run_watchlist_mock, patch(
             "daily_theme_watchlist.run_backtest_dual", return_value=(None, None)
         ), patch("daily_theme_watchlist.upsert_alert_tracking"), patch(
-            "daily_theme_watchlist.save_reports"
+            "stock_watch.workflows.daily_watchlist._save_reports"
         ), patch("stock_watch.workflows.daily_watchlist.run_state.build_rank_state", return_value="state"), patch(
             "stock_watch.workflows.daily_watchlist.run_state.load_last_state", return_value=""
         ), patch("daily_theme_watchlist.should_alert", return_value=False), patch(
@@ -2490,7 +2490,7 @@ class PushMessageTests(unittest.TestCase):
         ), patch("daily_theme_watchlist.run_watchlist", return_value=df), patch(
             "daily_theme_watchlist.run_backtest_dual", return_value=(None, None)
         ), patch("daily_theme_watchlist.upsert_alert_tracking"), patch(
-            "daily_theme_watchlist.save_reports"
+            "stock_watch.workflows.daily_watchlist._save_reports"
         ), patch("stock_watch.workflows.daily_watchlist.run_state.build_rank_state", return_value="state"), patch(
             "stock_watch.workflows.daily_watchlist.run_state.load_last_state", return_value=""
         ), patch("daily_theme_watchlist.should_alert", return_value=True), patch(
@@ -2561,7 +2561,7 @@ class PortfolioStepTests(unittest.TestCase):
             "daily_theme_watchlist.get_market_regime", return_value=market_regime
         ), patch("daily_theme_watchlist.get_us_market_reference", return_value=us_market), patch(
             "daily_theme_watchlist.run_watchlist", return_value=df_rank
-        ) as run_watchlist_mock, patch("daily_theme_watchlist.save_portfolio_reports"), patch(
+        ) as run_watchlist_mock, patch("stock_watch.workflows.portfolio._save_portfolio_reports"), patch(
             "builtins.print"
         ), patch("daily_theme_watchlist.logger"):
             result = local_daily_module.run_portfolio_step()
@@ -2608,7 +2608,7 @@ class PortfolioStepTests(unittest.TestCase):
         ), patch("daily_theme_watchlist.get_market_regime", return_value=market_regime), patch(
             "daily_theme_watchlist.get_us_market_reference", return_value=us_market
         ), patch("daily_theme_watchlist.run_watchlist", return_value=df_rank), patch(
-            "daily_theme_watchlist.save_portfolio_reports"
+            "stock_watch.workflows.portfolio._save_portfolio_reports"
         ), patch(
             "builtins.print"
         ), patch("daily_theme_watchlist.logger"), patch.object(

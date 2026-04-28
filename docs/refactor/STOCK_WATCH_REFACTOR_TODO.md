@@ -19,12 +19,13 @@ This document is the forward-looking refactor queue after single CLI consolidati
 - Feedback scoring/weighting helpers live in `stock_watch/strategy/feedback.py`.
 - Reusable message formatting helpers live in `stock_watch/reports/messages.py`.
 - Full Telegram message builders live in `stock_watch/reports/telegram.py`.
+- Package workflows call package report/message modules directly instead of legacy daily report/message wrappers.
 - GitHub Actions and runbooks point at the single CLI.
 - Local website no longer writes root compatibility artifact copies.
 
 ## Current constraints
 
-- `daily_theme_watchlist.py` still owns report wiring and several workflow helper functions.
+- `daily_theme_watchlist.py` still owns watchlist scan/data-fetch helpers and several workflow dependency hooks.
 - Verification is already split into `verification/cli/`, `verification/reports/`, and `verification/workflows/`; do not fold it back into the daily script.
 - `runs/theme_watchlist_daily/daily_rank.csv`, `runs/verification/watchlist_daily/reco_snapshots.csv`, and `runs/verification/watchlist_daily/reco_outcomes.csv` are canonical local state, not disposable duplicates.
 - Cache/log/report files under `runs/` should be handled by regeneration or housekeeping, not ad-hoc deletion.
@@ -37,7 +38,7 @@ Objective: make `stock_watch/workflows/daily_watchlist.py` depend on package mod
 
 Tasks:
 
-- Move report wiring and workflow helper dependencies used by `stock_watch/workflows/daily_watchlist.py` into package modules.
+- Move watchlist scan/data-fetch dependencies used by `stock_watch/workflows/daily_watchlist.py` into package modules.
 - Keep output files and schemas identical.
 - Keep `daily_theme_watchlist.py` importable only as a temporary legacy helper holder.
 
