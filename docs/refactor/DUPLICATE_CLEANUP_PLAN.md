@@ -34,6 +34,7 @@
 保留的內部實作入口：
 
 - `stock_watch/cli/*.py`：single CLI dispatch 的目標模組。
+- `stock_watch/workflows/daily_watchlist.py`、`stock_watch/workflows/portfolio.py`：daily CLI 呼叫的 package workflow adapters。
 - `verification/cli/*.py`：verification subcommands 的 module wrappers。
 - `verification/reports/*.py`、`verification/workflows/*.py`：真正的 implementation modules。
 
@@ -41,11 +42,16 @@
 
 `daily_theme_watchlist.py` 目前不是「可直接刪的 duplicate」。它仍是 watchlist/ranking orchestration 與多個共用 helper 的主要來源。
 
+已完成的下一步：
+
+- `stock_watch.cli.local_daily` 不再直接 import `daily_theme_watchlist.py`。
+- Watchlist 與 portfolio 的 legacy 呼叫集中在 `stock_watch/workflows/` adapters。
+
 下一階段才拆：
 
-- 把 watchlist orchestration 移到 `stock_watch/workflows/`。
+- 把 watchlist orchestration 從 adapter 委派，真正搬進 `stock_watch/workflows/`。
 - 把仍留在 `daily_theme_watchlist.py` 的 report/state/helper 邏輯抽到 package modules。
-- 等 `python -m stock_watch daily` 不再 import `daily_theme_watchlist.py` 時，再刪或改成內部相容層。
+- 等 workflow adapters 不再 import `daily_theme_watchlist.py` 時，再刪或改成內部相容層。
 
 ## 3) Generated artifact duplicates
 

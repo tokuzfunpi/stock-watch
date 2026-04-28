@@ -8,16 +8,11 @@ from pathlib import Path
 
 import pandas as pd
 
-from stock_watch.paths import REPO_ROOT
 from stock_watch.paths import THEME_OUTDIR
 from stock_watch.paths import VERIFICATION_OUTDIR
-
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
-
-import daily_theme_watchlist
 from stock_watch.cli.weekly_review import build_data_quality_gate
-from stock_watch.workflows.portfolio import run_portfolio_check
+from stock_watch.workflows.daily_watchlist import run_daily_watchlist
+from stock_watch.workflows.portfolio import run_default_portfolio_check
 from verification.reports.summarize_outcomes import summarize_outcomes
 from verification.workflows import run_daily_verification
 
@@ -126,29 +121,12 @@ def build_verification_argv(args: argparse.Namespace) -> list[str]:
 
 
 def run_portfolio_step() -> int:
-    try:
-        return run_portfolio_check(
-            portfolio=daily_theme_watchlist.PORTFOLIO,
-            base_strategy=daily_theme_watchlist.CONFIG.strategy,
-            logger=daily_theme_watchlist.logger,
-            get_market_regime=daily_theme_watchlist.get_market_regime,
-            get_us_market_reference=daily_theme_watchlist.get_us_market_reference,
-            build_market_scenario=daily_theme_watchlist.build_market_scenario,
-            adjust_strategy_by_scenario=daily_theme_watchlist.adjust_strategy_by_scenario,
-            run_watchlist=daily_theme_watchlist.run_watchlist,
-            save_portfolio_reports=daily_theme_watchlist.save_portfolio_reports,
-            build_macro_message=daily_theme_watchlist.build_macro_message,
-            build_portfolio_message=daily_theme_watchlist.build_portfolio_message,
-            runtime_metrics_md=PORTFOLIO_RUNTIME_METRICS_MD,
-            runtime_metrics_json=PORTFOLIO_RUNTIME_METRICS_JSON,
-            print_fn=print,
-            stderr=sys.stderr,
-        )
-    except Exception as exc:
-        err_msg = f"Portfolio check failed: {exc}"
-        daily_theme_watchlist.logger.exception(err_msg)
-        print(err_msg, file=sys.stderr)
-        return 1
+    return run_default_portfolio_check(
+        runtime_metrics_md=PORTFOLIO_RUNTIME_METRICS_MD,
+        runtime_metrics_json=PORTFOLIO_RUNTIME_METRICS_JSON,
+        print_fn=print,
+        stderr=sys.stderr,
+    )
 
 
 def _count_csv_rows(path: Path) -> int:
@@ -445,7 +423,7 @@ def main(argv: list[str] | None = None) -> int:
     overall_status = "ok"
 
     step_runners = {
-        "watchlist": lambda: daily_theme_watchlist.main(force_run=args.force_watchlist),
+        "watchlist": lambda: run_daily_watchlist(force_run=args.force_watchlist),
         "portfolio": run_portfolio_step,
         "verification": lambda: run_daily_verification.main(build_verification_argv(args)),
     }

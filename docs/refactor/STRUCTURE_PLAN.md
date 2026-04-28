@@ -83,6 +83,7 @@ Completed:
 - Removed root local workflow wrappers.
 - Removed root verification command wrappers.
 - Removed `portfolio_check.py` and moved portfolio-only execution into `stock_watch.cli.local_daily`.
+- Moved legacy watchlist/portfolio calls behind `stock_watch/workflows/` adapters so the daily CLI no longer imports `daily_theme_watchlist.py` directly.
 - Updated GitHub Actions and runbooks to use `python -m stock_watch`.
 - Stopped local website generation from copying artifact files into root compatibility paths.
 
@@ -96,7 +97,7 @@ Still intentionally present:
 
 The next safe migration is not more wrapper deletion; it is splitting `daily_theme_watchlist.py`:
 
-1. Move watchlist orchestration into `stock_watch/workflows/`.
+1. Replace the `stock_watch/workflows/` legacy adapters with native workflow orchestration.
 2. Move remaining report/state/helper logic into package modules.
-3. Make `python -m stock_watch daily` call package workflows directly.
+3. Keep `python -m stock_watch daily` calling package workflows directly.
 4. Delete or shrink `daily_theme_watchlist.py` after parity tests pass.

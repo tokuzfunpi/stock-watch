@@ -237,7 +237,7 @@ class RunLocalDailyTests(unittest.TestCase):
 
             return _inner
 
-        with patch("stock_watch.cli.local_daily.daily_theme_watchlist.main", side_effect=_runner("watchlist")), patch(
+        with patch("stock_watch.cli.local_daily.run_daily_watchlist", side_effect=_runner("watchlist")), patch(
             "stock_watch.cli.local_daily.run_portfolio_step", side_effect=_runner("portfolio")
         ), patch("stock_watch.cli.local_daily.run_daily_verification.main", side_effect=_runner("verification")), patch(
             "stock_watch.cli.local_daily.write_local_status_dashboard"
@@ -249,7 +249,7 @@ class RunLocalDailyTests(unittest.TestCase):
         mock_status.assert_called_once()
 
     def test_main_passes_force_watchlist_to_watchlist_step(self) -> None:
-        with patch("stock_watch.cli.local_daily.daily_theme_watchlist.main", return_value=0) as mock_watchlist, patch(
+        with patch("stock_watch.cli.local_daily.run_daily_watchlist", return_value=0) as mock_watchlist, patch(
             "stock_watch.cli.local_daily.run_daily_verification.main", return_value=0
         ), patch("stock_watch.cli.local_daily.write_local_status_dashboard"):
             code = main(["--mode", "preopen", "--force-watchlist"])
@@ -267,7 +267,7 @@ class RunLocalDailyTests(unittest.TestCase):
 
             return _inner
 
-        with patch("stock_watch.cli.local_daily.daily_theme_watchlist.main", side_effect=_runner("watchlist")), patch(
+        with patch("stock_watch.cli.local_daily.run_daily_watchlist", side_effect=_runner("watchlist")), patch(
             "stock_watch.cli.local_daily.run_portfolio_step", side_effect=_runner("portfolio")
         ), patch("stock_watch.cli.local_daily.run_daily_verification.main", side_effect=_runner("verification")), patch(
             "stock_watch.cli.local_daily.write_local_status_dashboard"
@@ -288,7 +288,7 @@ class RunLocalDailyTests(unittest.TestCase):
 
             return _inner
 
-        with patch("stock_watch.cli.local_daily.daily_theme_watchlist.main", side_effect=_runner("watchlist")), patch(
+        with patch("stock_watch.cli.local_daily.run_daily_watchlist", side_effect=_runner("watchlist")), patch(
             "stock_watch.cli.local_daily.run_portfolio_step", side_effect=_runner("portfolio")
         ), patch("stock_watch.cli.local_daily.run_daily_verification.main", side_effect=_runner("verification")), patch(
             "stock_watch.cli.local_daily.write_local_status_dashboard"
@@ -306,7 +306,7 @@ class RunLocalDailyTests(unittest.TestCase):
             calls.append("watchlist")
             return 1
 
-        with patch("stock_watch.cli.local_daily.daily_theme_watchlist.main", side_effect=_watchlist), patch(
+        with patch("stock_watch.cli.local_daily.run_daily_watchlist", side_effect=_watchlist), patch(
             "stock_watch.cli.local_daily.write_local_status_dashboard"
         ) as mock_status:
             code = main(["--mode", "postclose"])

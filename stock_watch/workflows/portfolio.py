@@ -9,6 +9,17 @@ from typing import Callable, Optional
 
 import pandas as pd
 
+from stock_watch.paths import REPO_ROOT
+
+
+def _load_legacy_daily_workflow():
+    if str(REPO_ROOT) not in sys.path:
+        sys.path.insert(0, str(REPO_ROOT))
+
+    import daily_theme_watchlist
+
+    return daily_theme_watchlist
+
 
 def _timed_call(step_timings: dict[str, float], name: str, func, *args, **kwargs):
     started = time.perf_counter()
@@ -183,3 +194,36 @@ def run_portfolio_check(
     )
     logger.debug("Portfolio review printed to CLI and reports saved.")
     return 0
+
+
+def run_default_portfolio_check(
+    *,
+    runtime_metrics_md: Path | None = None,
+    runtime_metrics_json: Path | None = None,
+    print_fn: Callable[..., None] = print,
+    stderr = sys.stderr,
+) -> int:
+    daily_theme_watchlist = _load_legacy_daily_workflow()
+    try:
+        return run_portfolio_check(
+            portfolio=daily_theme_watchlist.PORTFOLIO,
+            base_strategy=daily_theme_watchlist.CONFIG.strategy,
+            logger=daily_theme_watchlist.logger,
+            get_market_regime=daily_theme_watchlist.get_market_regime,
+            get_us_market_reference=daily_theme_watchlist.get_us_market_reference,
+            build_market_scenario=daily_theme_watchlist.build_market_scenario,
+            adjust_strategy_by_scenario=daily_theme_watchlist.adjust_strategy_by_scenario,
+            run_watchlist=daily_theme_watchlist.run_watchlist,
+            save_portfolio_reports=daily_theme_watchlist.save_portfolio_reports,
+            build_macro_message=daily_theme_watchlist.build_macro_message,
+            build_portfolio_message=daily_theme_watchlist.build_portfolio_message,
+            runtime_metrics_md=runtime_metrics_md,
+            runtime_metrics_json=runtime_metrics_json,
+            print_fn=print_fn,
+            stderr=stderr,
+        )
+    except Exception as exc:
+        err_msg = f"Portfolio check failed: {exc}"
+        daily_theme_watchlist.logger.exception(err_msg)
+        print_fn(err_msg, file=stderr)
+        return 1

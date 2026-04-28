@@ -2538,13 +2538,13 @@ class PortfolioStepTests(unittest.TestCase):
             ]
         )
 
-        with patch.object(local_daily_module.daily_theme_watchlist, "PORTFOLIO", pd.DataFrame([{"ticker": "2330.TW", "shares": 1, "avg_cost": 900, "target_profit_pct": 15}])), patch(
-            "stock_watch.cli.local_daily.daily_theme_watchlist.get_market_regime", return_value=market_regime
-        ), patch("stock_watch.cli.local_daily.daily_theme_watchlist.get_us_market_reference", return_value=us_market), patch(
-            "stock_watch.cli.local_daily.daily_theme_watchlist.run_watchlist", return_value=df_rank
-        ) as run_watchlist_mock, patch("stock_watch.cli.local_daily.daily_theme_watchlist.save_portfolio_reports"), patch(
+        with patch.object(dtw, "PORTFOLIO", pd.DataFrame([{"ticker": "2330.TW", "shares": 1, "avg_cost": 900, "target_profit_pct": 15}])), patch(
+            "daily_theme_watchlist.get_market_regime", return_value=market_regime
+        ), patch("daily_theme_watchlist.get_us_market_reference", return_value=us_market), patch(
+            "daily_theme_watchlist.run_watchlist", return_value=df_rank
+        ) as run_watchlist_mock, patch("daily_theme_watchlist.save_portfolio_reports"), patch(
             "builtins.print"
-        ), patch("stock_watch.cli.local_daily.daily_theme_watchlist.logger"):
+        ), patch("daily_theme_watchlist.logger"):
             result = local_daily_module.run_portfolio_step()
 
         self.assertEqual(result, 0)
@@ -2585,14 +2585,14 @@ class PortfolioStepTests(unittest.TestCase):
         )
 
         with tempfile.TemporaryDirectory() as tmpdir, patch.object(
-            local_daily_module.daily_theme_watchlist, "PORTFOLIO", pd.DataFrame([{"ticker": "2330.TW", "shares": 1, "avg_cost": 900, "target_profit_pct": 15}])
-        ), patch("stock_watch.cli.local_daily.daily_theme_watchlist.get_market_regime", return_value=market_regime), patch(
-            "stock_watch.cli.local_daily.daily_theme_watchlist.get_us_market_reference", return_value=us_market
-        ), patch("stock_watch.cli.local_daily.daily_theme_watchlist.run_watchlist", return_value=df_rank), patch(
-            "stock_watch.cli.local_daily.daily_theme_watchlist.save_portfolio_reports"
+            dtw, "PORTFOLIO", pd.DataFrame([{"ticker": "2330.TW", "shares": 1, "avg_cost": 900, "target_profit_pct": 15}])
+        ), patch("daily_theme_watchlist.get_market_regime", return_value=market_regime), patch(
+            "daily_theme_watchlist.get_us_market_reference", return_value=us_market
+        ), patch("daily_theme_watchlist.run_watchlist", return_value=df_rank), patch(
+            "daily_theme_watchlist.save_portfolio_reports"
         ), patch(
             "builtins.print"
-        ), patch("stock_watch.cli.local_daily.daily_theme_watchlist.logger"), patch.object(
+        ), patch("daily_theme_watchlist.logger"), patch.object(
             local_daily_module, "PORTFOLIO_RUNTIME_METRICS_MD", Path(tmpdir) / "portfolio_runtime_metrics.md"
         ), patch.object(
             local_daily_module, "PORTFOLIO_RUNTIME_METRICS_JSON", Path(tmpdir) / "portfolio_runtime_metrics.json"

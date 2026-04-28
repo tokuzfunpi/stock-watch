@@ -9,6 +9,7 @@ This document is the forward-looking refactor queue after single CLI consolidati
 - Root verification wrappers removed.
 - `portfolio_check.py` removed.
 - Portfolio-only workflow runs through `stock_watch.cli.local_daily.run_portfolio_step()`.
+- `stock_watch.cli.local_daily` delegates watchlist and portfolio work to `stock_watch/workflows/` instead of importing `daily_theme_watchlist.py` directly.
 - GitHub Actions and runbooks point at the single CLI.
 - Local website no longer writes root compatibility artifact copies.
 
@@ -27,7 +28,7 @@ Objective: make `python -m stock_watch daily` stop depending on `daily_theme_wat
 
 Tasks:
 
-- Add a workflow module under `stock_watch/workflows/`.
+- Replace the temporary `stock_watch/workflows/daily_watchlist.py` adapter with native orchestration.
 - Move the top-level daily pipeline from `daily_theme_watchlist.main()` into that workflow.
 - Keep output files and schemas identical.
 - Keep `daily_theme_watchlist.py` importable only as a temporary legacy helper holder.
