@@ -20,12 +20,12 @@ from stock_watch.signals.detect import (
     detect_row as module_detect_row,
     grade_signal as module_grade_signal,
 )
+from stock_watch.strategy import scenario as strategy_scenario
 from stock_watch.workflows import market_context
 
 from daily_theme_watchlist import (
     add_indicators,
     alternate_taiwan_ticker,
-    adjust_strategy_by_scenario,
     apply_feedback_adjustment,
     build_feedback_summary,
     build_daily_report_markdown,
@@ -121,10 +121,10 @@ class DetectRowTests(unittest.TestCase):
         ) as market_regime_mock, patch(
             "daily_theme_watchlist.get_us_market_reference", return_value={"summary": "ok", "rows": []}
         ), patch(
-            "daily_theme_watchlist.build_market_scenario",
+            "stock_watch.workflows.daily_watchlist.strategy_scenario.build_market_scenario",
             return_value={"label": "正常盤", "stance": "中性", "exit_note": "照計畫"},
         ), patch(
-            "daily_theme_watchlist.adjust_strategy_by_scenario", return_value=dtw.CONFIG.strategy
+            "stock_watch.workflows.daily_watchlist.strategy_scenario.adjust_strategy_by_scenario", return_value=dtw.CONFIG.strategy
         ), patch(
             "daily_theme_watchlist.prewarm_watchlist_indicator_cache"
         ), patch(
@@ -139,7 +139,7 @@ class DetectRowTests(unittest.TestCase):
         ), patch(
             "daily_theme_watchlist.upsert_alert_tracking"
         ), patch(
-            "daily_theme_watchlist.strategy_preview_lines", return_value=["- noop"]
+            "stock_watch.workflows.daily_watchlist.strategy_scenario.strategy_preview_lines", return_value=["- noop"]
         ), patch(
             "stock_watch.workflows.daily_watchlist.run_state.build_rank_state", return_value="STATE"
         ), patch(
@@ -216,7 +216,7 @@ class DetectRowTests(unittest.TestCase):
 
     def test_adjust_strategy_by_scenario_is_preview_only_helper(self) -> None:
         scenario = {"label": "明顯修正盤"}
-        adjusted = adjust_strategy_by_scenario(CONFIG.strategy, scenario)
+        adjusted = strategy_scenario.adjust_strategy_by_scenario(CONFIG.strategy, scenario)
 
         self.assertGreater(adjusted.rebreak_vol_ratio, CONFIG.strategy.rebreak_vol_ratio)
         self.assertGreater(adjusted.accel_vol_ratio_fast, CONFIG.strategy.accel_vol_ratio_fast)
@@ -497,7 +497,7 @@ class MarketRegimeTests(unittest.TestCase):
         }
         us_market = {"summary": "美股昨晚偏弱，台股早盤要提防開高走低或續殺。"}
 
-        scenario = dtw.build_market_scenario(market_regime, us_market, pd.DataFrame())
+        scenario = strategy_scenario.build_market_scenario(market_regime, us_market, pd.DataFrame())
 
         self.assertEqual(scenario["label"], "盤中保守觀察")
 
@@ -752,10 +752,10 @@ class FeedbackTests(unittest.TestCase):
         ), patch("daily_theme_watchlist.get_market_regime", return_value={"comment": "ok", "is_bullish": True}), patch(
             "daily_theme_watchlist.get_us_market_reference", return_value={"summary": "ok", "rows": []}
         ), patch(
-            "daily_theme_watchlist.build_market_scenario",
+            "stock_watch.workflows.daily_watchlist.strategy_scenario.build_market_scenario",
             return_value={"label": "正常盤", "stance": "中性", "exit_note": "照計畫"},
         ), patch(
-            "daily_theme_watchlist.adjust_strategy_by_scenario", return_value=dtw.CONFIG.strategy
+            "stock_watch.workflows.daily_watchlist.strategy_scenario.adjust_strategy_by_scenario", return_value=dtw.CONFIG.strategy
         ), patch(
             "daily_theme_watchlist.run_watchlist", return_value=df_rank
         ), patch(
@@ -768,7 +768,7 @@ class FeedbackTests(unittest.TestCase):
         ) as mock_save_reports, patch(
             "daily_theme_watchlist.upsert_alert_tracking", side_effect=RuntimeError("tracking failed")
         ), patch(
-            "daily_theme_watchlist.strategy_preview_lines", return_value=["- noop"]
+            "stock_watch.workflows.daily_watchlist.strategy_scenario.strategy_preview_lines", return_value=["- noop"]
         ), patch(
             "stock_watch.workflows.daily_watchlist.run_state.build_rank_state", return_value="STATE"
         ), patch(

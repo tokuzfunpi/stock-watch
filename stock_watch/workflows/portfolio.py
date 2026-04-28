@@ -10,6 +10,7 @@ from typing import Callable, Optional
 import pandas as pd
 
 from stock_watch.paths import REPO_ROOT
+from stock_watch.strategy import scenario as strategy_scenario
 
 
 def _load_legacy_daily_workflow():
@@ -211,8 +212,8 @@ def run_default_portfolio_check(
             logger=daily_theme_watchlist.logger,
             get_market_regime=daily_theme_watchlist.get_market_regime,
             get_us_market_reference=daily_theme_watchlist.get_us_market_reference,
-            build_market_scenario=daily_theme_watchlist.build_market_scenario,
-            adjust_strategy_by_scenario=daily_theme_watchlist.adjust_strategy_by_scenario,
+            build_market_scenario=strategy_scenario.build_market_scenario,
+            adjust_strategy_by_scenario=strategy_scenario.adjust_strategy_by_scenario,
             run_watchlist=daily_theme_watchlist.run_watchlist,
             save_portfolio_reports=daily_theme_watchlist.save_portfolio_reports,
             build_macro_message=daily_theme_watchlist.build_macro_message,

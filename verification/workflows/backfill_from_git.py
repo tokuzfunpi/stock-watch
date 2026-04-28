@@ -18,8 +18,9 @@ if str(REPO_ROOT) not in sys.path:
 from stock_watch.paths import THEME_OUTDIR
 from stock_watch.paths import VERIFICATION_OUTDIR
 from stock_watch.runtime import LOCAL_TZ
+from stock_watch.strategy.scenario import build_market_scenario
 
-from daily_theme_watchlist import CONFIG, add_indicators, build_market_scenario
+from daily_theme_watchlist import CONFIG, add_indicators
 from verification.reports.verify_recommendations import (
     build_verification_report_markdown,
     select_forced_recommendations,

@@ -6,6 +6,7 @@ from pathlib import Path
 
 from stock_watch.paths import REPO_ROOT
 from stock_watch.state import run_state
+from stock_watch.strategy import scenario as strategy_scenario
 from stock_watch.workflows import runtime_metrics
 
 
@@ -71,8 +72,8 @@ def run_daily_watchlist(*, force_run: bool | None = False) -> int:
             daily_theme_watchlist.logger.exception("US market reference failed (best effort): %s", exc)
             us_market = {"summary": "美股參考暫時抓不到（best effort）。", "rows": []}
 
-        initial_scenario = daily_theme_watchlist.build_market_scenario(market_regime, us_market)
-        adjusted_strat = daily_theme_watchlist.adjust_strategy_by_scenario(
+        initial_scenario = strategy_scenario.build_market_scenario(market_regime, us_market)
+        adjusted_strat = strategy_scenario.adjust_strategy_by_scenario(
             daily_theme_watchlist.CONFIG.strategy, initial_scenario
         )
         _timed_call(
@@ -96,7 +97,7 @@ def run_daily_watchlist(*, force_run: bool | None = False) -> int:
             market_regime,
             us_market,
         )
-        market_scenario = daily_theme_watchlist.build_market_scenario(market_regime, us_market, df_rank)
+        market_scenario = strategy_scenario.build_market_scenario(market_regime, us_market, df_rank)
         _timed_call(
             step_timings,
             "reports",
@@ -136,7 +137,7 @@ def run_daily_watchlist(*, force_run: bool | None = False) -> int:
             initial_scenario["label"],
             " | ".join(
                 line.removeprefix("- ")
-                for line in daily_theme_watchlist.strategy_preview_lines(daily_theme_watchlist.CONFIG.strategy, initial_scenario)
+                for line in strategy_scenario.strategy_preview_lines(daily_theme_watchlist.CONFIG.strategy, initial_scenario)
             ),
         )
 
