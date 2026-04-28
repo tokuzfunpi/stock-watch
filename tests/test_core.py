@@ -11,7 +11,7 @@ from unittest.mock import patch
 
 import daily_theme_watchlist as dtw
 import pandas as pd
-import portfolio_check as portfolio_check_module
+from stock_watch.cli import local_daily as local_daily_module
 from stock_watch.backtesting.core import run_backtest_dual as run_backtest_dual_module
 from stock_watch.ranking.scoring import build_rank_table
 from stock_watch.signals.detect import (
@@ -2505,8 +2505,8 @@ class SplitMessageTests(unittest.TestCase):
         self.assertEqual(parts, [message])
 
 
-class PortfolioCheckTests(unittest.TestCase):
-    def test_portfolio_check_applies_scenario_adjusted_strategy(self) -> None:
+class PortfolioStepTests(unittest.TestCase):
+    def test_portfolio_step_applies_scenario_adjusted_strategy(self) -> None:
         market_regime = {"comment": "加權指數目前偏多", "ret20_pct": 12.0, "volume_ratio20": 1.2, "is_bullish": True, "session_phase": "postclose"}
         us_market = {"summary": "美股偏弱"}
         df_rank = pd.DataFrame(
@@ -2538,21 +2538,21 @@ class PortfolioCheckTests(unittest.TestCase):
             ]
         )
 
-        with patch.object(portfolio_check_module, "PORTFOLIO", pd.DataFrame([{"ticker": "2330.TW", "shares": 1, "avg_cost": 900, "target_profit_pct": 15}])), patch(
-            "portfolio_check.get_market_regime", return_value=market_regime
-        ), patch("portfolio_check.get_us_market_reference", return_value=us_market), patch(
-            "portfolio_check.run_watchlist", return_value=df_rank
-        ) as run_watchlist_mock, patch("portfolio_check.save_portfolio_reports"), patch(
+        with patch.object(local_daily_module.daily_theme_watchlist, "PORTFOLIO", pd.DataFrame([{"ticker": "2330.TW", "shares": 1, "avg_cost": 900, "target_profit_pct": 15}])), patch(
+            "stock_watch.cli.local_daily.daily_theme_watchlist.get_market_regime", return_value=market_regime
+        ), patch("stock_watch.cli.local_daily.daily_theme_watchlist.get_us_market_reference", return_value=us_market), patch(
+            "stock_watch.cli.local_daily.daily_theme_watchlist.run_watchlist", return_value=df_rank
+        ) as run_watchlist_mock, patch("stock_watch.cli.local_daily.daily_theme_watchlist.save_portfolio_reports"), patch(
             "builtins.print"
-        ), patch("portfolio_check.logger"):
-            result = portfolio_check_module.main()
+        ), patch("stock_watch.cli.local_daily.daily_theme_watchlist.logger"):
+            result = local_daily_module.run_portfolio_step()
 
         self.assertEqual(result, 0)
         _, kwargs = run_watchlist_mock.call_args
         self.assertIn("strat", kwargs)
         self.assertGreater(kwargs["strat"].rebreak_vol_ratio, CONFIG.strategy.rebreak_vol_ratio)
 
-    def test_portfolio_check_writes_runtime_metrics(self) -> None:
+    def test_portfolio_step_writes_runtime_metrics(self) -> None:
         market_regime = {"comment": "加權指數目前偏多", "ret20_pct": 12.0, "volume_ratio20": 1.2, "is_bullish": True, "session_phase": "postclose"}
         us_market = {"summary": "美股偏弱"}
         df_rank = pd.DataFrame(
@@ -2585,19 +2585,19 @@ class PortfolioCheckTests(unittest.TestCase):
         )
 
         with tempfile.TemporaryDirectory() as tmpdir, patch.object(
-            portfolio_check_module, "PORTFOLIO", pd.DataFrame([{"ticker": "2330.TW", "shares": 1, "avg_cost": 900, "target_profit_pct": 15}])
-        ), patch("portfolio_check.get_market_regime", return_value=market_regime), patch(
-            "portfolio_check.get_us_market_reference", return_value=us_market
-        ), patch("portfolio_check.run_watchlist", return_value=df_rank), patch(
-            "portfolio_check.save_portfolio_reports"
+            local_daily_module.daily_theme_watchlist, "PORTFOLIO", pd.DataFrame([{"ticker": "2330.TW", "shares": 1, "avg_cost": 900, "target_profit_pct": 15}])
+        ), patch("stock_watch.cli.local_daily.daily_theme_watchlist.get_market_regime", return_value=market_regime), patch(
+            "stock_watch.cli.local_daily.daily_theme_watchlist.get_us_market_reference", return_value=us_market
+        ), patch("stock_watch.cli.local_daily.daily_theme_watchlist.run_watchlist", return_value=df_rank), patch(
+            "stock_watch.cli.local_daily.daily_theme_watchlist.save_portfolio_reports"
         ), patch(
             "builtins.print"
-        ), patch("portfolio_check.logger"), patch.object(
-            portfolio_check_module, "PORTFOLIO_RUNTIME_METRICS_MD", Path(tmpdir) / "portfolio_runtime_metrics.md"
+        ), patch("stock_watch.cli.local_daily.daily_theme_watchlist.logger"), patch.object(
+            local_daily_module, "PORTFOLIO_RUNTIME_METRICS_MD", Path(tmpdir) / "portfolio_runtime_metrics.md"
         ), patch.object(
-            portfolio_check_module, "PORTFOLIO_RUNTIME_METRICS_JSON", Path(tmpdir) / "portfolio_runtime_metrics.json"
+            local_daily_module, "PORTFOLIO_RUNTIME_METRICS_JSON", Path(tmpdir) / "portfolio_runtime_metrics.json"
         ):
-            result = portfolio_check_module.main()
+            result = local_daily_module.run_portfolio_step()
             payload = json.loads((Path(tmpdir) / "portfolio_runtime_metrics.json").read_text(encoding="utf-8"))
 
         self.assertEqual(result, 0)

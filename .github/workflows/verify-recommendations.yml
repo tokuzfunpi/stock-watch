@@ -4,11 +4,11 @@ on:
   workflow_dispatch:
     inputs:
       run_watchlist_first:
-        description: "Run daily_theme_watchlist.py to refresh daily_rank.csv first"
+        description: "Run stock_watch daily preopen to refresh daily_rank.csv first"
         required: false
         default: "true"
       force_watchlist_run:
-        description: "Force rerun daily_theme_watchlist.py when refreshing daily_rank.csv first"
+        description: "Force rerun watchlist when refreshing daily_rank.csv first"
         required: false
         type: boolean
         default: false
@@ -49,16 +49,16 @@ jobs:
           REALTIME_QUOTES: "0"
         run: |
           if [ "${{ inputs.force_watchlist_run }}" = "true" ]; then
-            python daily_theme_watchlist.py --force || true
+            python -m stock_watch daily --mode preopen --force-watchlist || true
           else
-            python daily_theme_watchlist.py || true
+            python -m stock_watch daily --mode preopen || true
           fi
 
       - name: Verify recommendations from daily_rank.csv
         env:
           REALTIME_QUOTES: "0"
         run: |
-          python verification/verify_recommendations.py \
+          python -m stock_watch verification snapshot \
             --rank-csv runs/theme_watchlist_daily/daily_rank.csv \
             --out runs/verification/watchlist_daily/verification_report.md \
             --snapshot-csv runs/verification/watchlist_daily/reco_snapshots.csv

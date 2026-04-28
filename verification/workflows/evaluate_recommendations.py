@@ -599,7 +599,7 @@ def main(argv: list[str] | None = None) -> int:
             print(
                 "No valid tickers left after filtering. "
                 "Your reco_snapshots.csv is likely corrupted; consider regenerating via "
-                "`python3.11 verification/backfill_from_git.py` then re-run evaluate."
+                "`python3.11 -m stock_watch verification backfill` then re-run evaluate."
             )
             return 0
 

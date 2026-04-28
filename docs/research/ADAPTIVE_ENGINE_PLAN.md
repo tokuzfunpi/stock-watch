@@ -33,7 +33,7 @@
       - `明顯修正盤`：`top_n_short` 最多 1
       - `Heat Bias 偏強`：`top_n_short` 最多 2
 2.  **情境感知持股管理自動化**：
-    *   `portfolio_check.py` 的文字建議已依 scenario 調整，但更深的 `trim_price` / 出場價格自動化還沒做。
+    *   Portfolio-only 檢查現在走 `python -m stock_watch portfolio`；文字建議已依 scenario 調整，但更深的 `trim_price` / 出場價格自動化還沒做。
 
 ## Phase 4: 中長線與細節調優 (Fine-tuning)
 **關鍵點：** 基於大樣本進行最後的閾值校準。

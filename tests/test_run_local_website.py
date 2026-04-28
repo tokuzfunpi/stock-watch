@@ -126,7 +126,7 @@ class RunLocalWebsiteTests(unittest.TestCase):
         self.assertIn("Outcomes Summary", content)
         self.assertIn("views/daily_report.md.html", content)
         self.assertNotIn("../daily_report.md", content)
-        self.assertTrue(root_compat_exists)
+        self.assertFalse(root_compat_exists)
         self.assertTrue(copied_artifact_exists)
         self.assertTrue(review_page_exists)
         self.assertIn("<h1>Daily Watchlist</h1>", review_page_content)

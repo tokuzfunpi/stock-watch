@@ -178,9 +178,6 @@ def copy_site_artifacts(outdir: Path, theme_outdir: Path, verification_outdir: P
         destination = site_artifact_path(source, outdir)
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source, destination)
-        root_compat_destination = outdir / source.name
-        if root_compat_destination.name != "index.html":
-            shutil.copy2(source, root_compat_destination)
 
 
 def _site_chrome(title: str, body: str, *, back_href: str = "../index.html") -> str:

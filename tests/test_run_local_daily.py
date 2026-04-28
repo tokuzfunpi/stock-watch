@@ -231,14 +231,14 @@ class RunLocalDailyTests(unittest.TestCase):
         calls: list[str] = []
 
         def _runner(name: str):
-            def _inner(argv: list[str] | None = None) -> int:
+            def _inner(*args, **kwargs) -> int:
                 calls.append(name)
                 return 0
 
             return _inner
 
         with patch("stock_watch.cli.local_daily.daily_theme_watchlist.main", side_effect=_runner("watchlist")), patch(
-            "stock_watch.cli.local_daily.portfolio_check.main", side_effect=_runner("portfolio")
+            "stock_watch.cli.local_daily.run_portfolio_step", side_effect=_runner("portfolio")
         ), patch("stock_watch.cli.local_daily.run_daily_verification.main", side_effect=_runner("verification")), patch(
             "stock_watch.cli.local_daily.write_local_status_dashboard"
         ) as mock_status:
@@ -248,18 +248,27 @@ class RunLocalDailyTests(unittest.TestCase):
         self.assertEqual(calls, ["watchlist", "verification"])
         mock_status.assert_called_once()
 
+    def test_main_passes_force_watchlist_to_watchlist_step(self) -> None:
+        with patch("stock_watch.cli.local_daily.daily_theme_watchlist.main", return_value=0) as mock_watchlist, patch(
+            "stock_watch.cli.local_daily.run_daily_verification.main", return_value=0
+        ), patch("stock_watch.cli.local_daily.write_local_status_dashboard"):
+            code = main(["--mode", "preopen", "--force-watchlist"])
+
+        self.assertEqual(code, 0)
+        mock_watchlist.assert_called_once_with(force_run=True)
+
     def test_main_runs_postclose_steps_in_order(self) -> None:
         calls: list[str] = []
 
         def _runner(name: str):
-            def _inner(argv: list[str] | None = None) -> int:
+            def _inner(*args, **kwargs) -> int:
                 calls.append(name)
                 return 0
 
             return _inner
 
         with patch("stock_watch.cli.local_daily.daily_theme_watchlist.main", side_effect=_runner("watchlist")), patch(
-            "stock_watch.cli.local_daily.portfolio_check.main", side_effect=_runner("portfolio")
+            "stock_watch.cli.local_daily.run_portfolio_step", side_effect=_runner("portfolio")
         ), patch("stock_watch.cli.local_daily.run_daily_verification.main", side_effect=_runner("verification")), patch(
             "stock_watch.cli.local_daily.write_local_status_dashboard"
         ) as mock_status:
@@ -273,14 +282,14 @@ class RunLocalDailyTests(unittest.TestCase):
         calls: list[str] = []
 
         def _runner(name: str):
-            def _inner(argv: list[str] | None = None) -> int:
+            def _inner(*args, **kwargs) -> int:
                 calls.append(name)
                 return 0
 
             return _inner
 
         with patch("stock_watch.cli.local_daily.daily_theme_watchlist.main", side_effect=_runner("watchlist")), patch(
-            "stock_watch.cli.local_daily.portfolio_check.main", side_effect=_runner("portfolio")
+            "stock_watch.cli.local_daily.run_portfolio_step", side_effect=_runner("portfolio")
         ), patch("stock_watch.cli.local_daily.run_daily_verification.main", side_effect=_runner("verification")), patch(
             "stock_watch.cli.local_daily.write_local_status_dashboard"
         ) as mock_status:
@@ -293,7 +302,7 @@ class RunLocalDailyTests(unittest.TestCase):
     def test_main_writes_failed_status_when_step_errors(self) -> None:
         calls: list[str] = []
 
-        def _watchlist(argv: list[str] | None = None) -> int:
+        def _watchlist(*args, **kwargs) -> int:
             calls.append("watchlist")
             return 1
 

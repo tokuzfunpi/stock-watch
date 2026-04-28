@@ -51,9 +51,9 @@ jobs:
           WATCHLIST_CSV: watchlist.csv
         run: |
           if [ "${{ inputs.force_run }}" = "true" ]; then
-            python daily_theme_watchlist.py --force
+            python -m stock_watch daily --mode preopen --force-watchlist
           else
-            python daily_theme_watchlist.py
+            python -m stock_watch daily --mode preopen
           fi
 
       - name: Commit updated artifacts
