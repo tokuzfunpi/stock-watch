@@ -122,6 +122,47 @@ class RunLocalDailyTests(unittest.TestCase):
         self.assertEqual(metrics["spec_risk_watch_rows"], 1)
         self.assertEqual(metrics["spec_risk_top_tickers"], ["3057.TW", "6669.TW"])
 
+    def test_collect_status_metrics_reads_midlong_threshold_gate(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            theme_outdir = Path(tmpdir) / "theme_watchlist_daily"
+            verification_outdir = Path(tmpdir) / "verification" / "watchlist_daily"
+            theme_outdir.mkdir(parents=True, exist_ok=True)
+            verification_outdir.mkdir(parents=True, exist_ok=True)
+
+            pd.DataFrame(
+                [{"ticker": "2330.TW", "spec_risk_score": 0, "spec_risk_label": "正常", "rank": 1}]
+            ).to_csv(theme_outdir / "daily_rank.csv", index=False)
+            pd.DataFrame(
+                [
+                    {
+                        "signal_date": "2026-04-22",
+                        "horizon_days": 1,
+                        "watch_type": "midlong",
+                        "reco_status": "below_threshold",
+                        "market_heat": "hot",
+                        "action": "減碼觀察",
+                        "realized_ret_pct": 4.0,
+                        "status": "ok",
+                    },
+                    {
+                        "signal_date": "2026-04-22",
+                        "horizon_days": 1,
+                        "watch_type": "midlong",
+                        "reco_status": "ok",
+                        "market_heat": "normal",
+                        "action": "續抱",
+                        "realized_ret_pct": 1.0,
+                        "status": "ok",
+                    },
+                ]
+            ).to_csv(verification_outdir / "reco_outcomes.csv", index=False)
+
+            metrics = collect_status_metrics(theme_outdir, verification_outdir)
+
+        self.assertEqual(metrics["midlong_threshold_gate_status"], "block_loosening")
+        self.assertEqual(metrics["midlong_threshold_gate_horizon"], "1")
+        self.assertIn("normal_below_n=0", metrics["midlong_threshold_gate_detail"])
+
     def test_write_local_status_dashboard_writes_markdown_and_json(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             theme_outdir = Path(tmpdir) / "theme_watchlist_daily"
@@ -174,6 +215,7 @@ class RunLocalDailyTests(unittest.TestCase):
         self.assertIn("Verification runtime", markdown)
         self.assertIn("Verification gate status", markdown)
         self.assertIn("Verification duplicate keys", markdown)
+        self.assertIn("Midlong threshold gate", markdown)
         self.assertIn("Spec risk high rows", markdown)
         self.assertIn("3057.TW", markdown)
         self.assertEqual(payload["mode"], "preopen")

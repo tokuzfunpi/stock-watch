@@ -35,6 +35,7 @@ from daily_theme_watchlist import (
 )
 from stock_watch.signals import apply_signal_template_labels
 from stock_watch.signals import summarize_signal_templates
+from verification.reports.summarize_outcomes import summarize_outcomes
 
 
 @dataclass(frozen=True)
@@ -176,6 +177,7 @@ def _load_outcomes_aggregate(outcomes_csv: Path) -> dict:
         df["watch_type"] = df["watch_type"].astype(str).str.strip().str.lower()
     df["win"] = pd.to_numeric(df.get("realized_ret_pct"), errors="coerce") > 0
     try:
+        parts = summarize_outcomes(df)
         overall = (
             df.groupby(["horizon_days", "watch_type"], dropna=False)
             .agg(
@@ -192,7 +194,10 @@ def _load_outcomes_aggregate(outcomes_csv: Path) -> dict:
             overall[c] = overall[c].round(2)
     except Exception:
         return {}
-    return {"overall_by_signal": overall.to_dict(orient="records")}
+    return {
+        "overall_by_signal": overall.to_dict(orient="records"),
+        "midlong_threshold_gate": parts.get("midlong_threshold_gate", pd.DataFrame()).to_dict(orient="records"),
+    }
 
 
 CODEX_CONTEXT_DIR = VERIFICATION_OUTDIR / "contexts"

@@ -99,8 +99,95 @@ def _empty_summary_parts() -> dict[str, pd.DataFrame]:
         "heat_bias_check": empty,
         "heat_bias_by_scenario": empty,
         "heat_bias_by_date": empty,
+        "midlong_threshold_status_mix": empty,
+        "midlong_threshold_by_heat": empty,
+        "midlong_threshold_normal_only": empty,
+        "midlong_threshold_by_action": empty,
+        "midlong_threshold_by_date": empty,
+        "midlong_threshold_gate": empty,
         "spec_risk_check": empty,
     }
+
+
+def _aggregate_performance(df: pd.DataFrame, group_cols: list[str], sort_cols: list[str] | None = None) -> pd.DataFrame:
+    if df.empty:
+        return pd.DataFrame()
+    out = (
+        df.groupby(group_cols, dropna=False)
+        .agg(
+            n=("realized_ret_pct", "count"),
+            win_rate=("win", "mean"),
+            avg_ret=("realized_ret_pct", "mean"),
+            med_ret=("realized_ret_pct", "median"),
+            min_ret=("realized_ret_pct", "min"),
+            max_ret=("realized_ret_pct", "max"),
+        )
+        .reset_index()
+    )
+    out["win_rate"] = (out["win_rate"] * 100).round(1)
+    for col in ["avg_ret", "med_ret", "min_ret", "max_ret"]:
+        out[col] = pd.to_numeric(out[col], errors="coerce").round(2)
+    if sort_cols:
+        out = out.sort_values(by=sort_cols)
+    return out
+
+
+def build_midlong_threshold_gate(parts: dict[str, pd.DataFrame]) -> pd.DataFrame:
+    status_mix = parts.get("midlong_threshold_status_mix", pd.DataFrame())
+    normal_only = parts.get("midlong_threshold_normal_only", pd.DataFrame())
+    if status_mix.empty:
+        return pd.DataFrame()
+
+    rows: list[dict[str, object]] = []
+    horizons = pd.to_numeric(status_mix["horizon_days"], errors="coerce").dropna().astype(int).unique().tolist()
+    for horizon in sorted(horizons):
+        horizon_mix = status_mix[pd.to_numeric(status_mix["horizon_days"], errors="coerce") == horizon].copy()
+        below = horizon_mix[horizon_mix["reco_status"] == "below_threshold"]
+        ok = horizon_mix[horizon_mix["reco_status"] == "ok"]
+        if below.empty:
+            continue
+
+        below_row = below.iloc[0]
+        ok_row = ok.iloc[0] if not ok.empty else None
+        below_n = int(below_row["n"])
+        below_hot_share = float(below_row["hot_share_pct"])
+        ok_hot_share = float(ok_row["hot_share_pct"]) if ok_row is not None else 0.0
+        heat_share_gap = round(below_hot_share - ok_hot_share, 1)
+
+        normal = (
+            normal_only[
+                (pd.to_numeric(normal_only.get("horizon_days"), errors="coerce") == horizon)
+                & (normal_only.get("reco_status", "").astype(str) == "below_threshold")
+            ].copy()
+            if not normal_only.empty
+            else pd.DataFrame()
+        )
+        normal_below_n = int(normal.iloc[0]["n"]) if not normal.empty else 0
+
+        if normal_below_n < 10 or heat_share_gap >= 25.0:
+            decision = "block_loosening"
+            reason = "normal below_threshold samples are insufficient or below_threshold is heat-heavy"
+        elif normal_below_n < 30:
+            decision = "observe_only"
+            reason = "normal samples exist but are not stable enough for production tuning"
+        else:
+            decision = "eligible_for_review"
+            reason = "normal samples are large enough to review with drawdown/tail-risk checks"
+
+        rows.append(
+            {
+                "horizon_days": horizon,
+                "below_n": below_n,
+                "normal_below_n": normal_below_n,
+                "below_hot_share_pct": round(below_hot_share, 1),
+                "ok_hot_share_pct": round(ok_hot_share, 1),
+                "heat_share_gap_pct": heat_share_gap,
+                "decision": decision,
+                "reason": reason,
+            }
+        )
+
+    return pd.DataFrame(rows)
 
 
 def _spec_risk_bucket_from_row(row: pd.Series) -> str:
@@ -559,6 +646,53 @@ def build_key_findings(parts: dict[str, pd.DataFrame]) -> list[str]:
                 f"在 `{int(sens_row['horizon_days'])}D {sens_row['watch_type']}`，"
                 f"平均報酬相對 baseline `{_pct(sens_row['delta_avg_ret_vs_baseline'])}%`、"
                 f"`n={int(sens_row['n'])}`；先當研究線索，不直接改 live gate。"
+            )
+
+    return findings
+
+
+def build_midlong_threshold_findings(parts: dict[str, pd.DataFrame]) -> list[str]:
+    findings: list[str] = []
+    status_mix = parts.get("midlong_threshold_status_mix", pd.DataFrame())
+    if status_mix.empty:
+        return findings
+
+    for horizon in [1, 5, 20]:
+        horizon_rows = status_mix[status_mix["horizon_days"].astype(str) == str(horizon)].copy()
+        if horizon_rows.empty:
+            continue
+        below = horizon_rows[horizon_rows["reco_status"] == "below_threshold"]
+        ok = horizon_rows[horizon_rows["reco_status"] == "ok"]
+        if below.empty:
+            continue
+        below_row = below.iloc[0]
+        below_n = int(below_row["n"])
+        below_hot_share = float(below_row["hot_share_pct"])
+        sample_note = "樣本仍少" if below_n < 10 else "樣本已較可觀察"
+        if ok.empty:
+            findings.append(
+                f"`{horizon}D midlong below_threshold` 目前 `n={below_n}`、hot share `{below_hot_share:.1f}%`，"
+                f"{sample_note}，先不要單獨解讀成可放寬門檻。"
+            )
+            continue
+        ok_row = ok.iloc[0]
+        ok_hot_share = float(ok_row["hot_share_pct"])
+        heat_gap = below_hot_share - ok_hot_share
+        findings.append(
+            f"`{horizon}D midlong below_threshold` 的 hot share 是 `{below_hot_share:.1f}%`，"
+            f"`ok` 是 `{ok_hot_share:.1f}%`（差 `{heat_gap:.1f}pp`）；"
+            f"{sample_note}，優先把它當 heat-bias 檢查，不當調參依據。"
+        )
+        break
+
+    normal_only = parts.get("midlong_threshold_normal_only", pd.DataFrame())
+    if not normal_only.empty:
+        rows = normal_only[normal_only["reco_status"].isin(["ok", "below_threshold"])].copy()
+        if not rows.empty:
+            total_normal_n = int(pd.to_numeric(rows["n"], errors="coerce").fillna(0).sum())
+            findings.append(
+                f"`normal` 盤 midlong threshold 樣本目前共 `{total_normal_n}` 筆；"
+                "未累積到穩定樣本前，維持保守限流比放寬門檻更合理。"
             )
 
     return findings
@@ -1449,6 +1583,83 @@ def summarize_outcomes(outcomes: pd.DataFrame) -> dict[str, pd.DataFrame]:
     except Exception:
         spec_risk_check = pd.DataFrame()
 
+    midlong_threshold_status_mix = pd.DataFrame()
+    midlong_threshold_by_heat = pd.DataFrame()
+    midlong_threshold_normal_only = pd.DataFrame()
+    midlong_threshold_by_action = pd.DataFrame()
+    midlong_threshold_by_date = pd.DataFrame()
+    try:
+        midlong_base = df[
+            (df["watch_type"] == "midlong")
+            & (df["reco_status"].isin(["ok", "below_threshold"]))
+        ].copy()
+        if not midlong_base.empty:
+            status_mix = (
+                midlong_base.groupby(["horizon_days", "reco_status"], dropna=False)
+                .agg(
+                    n=("realized_ret_pct", "count"),
+                    win_rate=("win", "mean"),
+                    avg_ret=("realized_ret_pct", "mean"),
+                    med_ret=("realized_ret_pct", "median"),
+                    min_ret=("realized_ret_pct", "min"),
+                    max_ret=("realized_ret_pct", "max"),
+                    normal_n=("market_heat", lambda s: int((s.astype(str) == "normal").sum())),
+                    warm_n=("market_heat", lambda s: int((s.astype(str) == "warm").sum())),
+                    hot_n=("market_heat", lambda s: int((s.astype(str) == "hot").sum())),
+                    unknown_heat_n=("market_heat", lambda s: int((s.astype(str) == "unknown").sum())),
+                )
+                .reset_index()
+                .sort_values(by=["horizon_days", "reco_status"])
+            )
+            status_mix["win_rate"] = (status_mix["win_rate"] * 100).round(1)
+            for col in ["avg_ret", "med_ret", "min_ret", "max_ret"]:
+                status_mix[col] = pd.to_numeric(status_mix[col], errors="coerce").round(2)
+            status_mix["hot_share_pct"] = ((status_mix["hot_n"] / status_mix["n"]) * 100).round(1)
+            status_mix["normal_share_pct"] = ((status_mix["normal_n"] / status_mix["n"]) * 100).round(1)
+            midlong_threshold_status_mix = status_mix
+
+            midlong_threshold_by_heat = _aggregate_performance(
+                midlong_base,
+                ["horizon_days", "reco_status", "market_heat"],
+                ["horizon_days", "reco_status", "market_heat"],
+            )
+            midlong_threshold_normal_only = _aggregate_performance(
+                midlong_base[midlong_base["market_heat"] == "normal"].copy(),
+                ["horizon_days", "reco_status"],
+                ["horizon_days", "reco_status"],
+            )
+            midlong_threshold_by_action = _aggregate_performance(
+                midlong_base,
+                ["horizon_days", "reco_status", "action"],
+            )
+            if not midlong_threshold_by_action.empty:
+                midlong_threshold_by_action = midlong_threshold_by_action.sort_values(
+                    by=["horizon_days", "reco_status", "n", "avg_ret"],
+                    ascending=[True, True, False, False],
+                )
+            midlong_threshold_by_date = _aggregate_performance(
+                midlong_base,
+                ["signal_date", "horizon_days", "reco_status", "market_heat"],
+            )
+            if not midlong_threshold_by_date.empty:
+                midlong_threshold_by_date = midlong_threshold_by_date.sort_values(
+                    by=["signal_date", "horizon_days", "reco_status"],
+                    ascending=[False, True, True],
+                )
+    except Exception:
+        midlong_threshold_status_mix = pd.DataFrame()
+        midlong_threshold_by_heat = pd.DataFrame()
+        midlong_threshold_normal_only = pd.DataFrame()
+        midlong_threshold_by_action = pd.DataFrame()
+        midlong_threshold_by_date = pd.DataFrame()
+
+    midlong_threshold_gate = build_midlong_threshold_gate(
+        {
+            "midlong_threshold_status_mix": midlong_threshold_status_mix,
+            "midlong_threshold_normal_only": midlong_threshold_normal_only,
+        }
+    )
+
     return {
         "by_action": by_action,
         "by_signal": by_signal,
@@ -1478,6 +1689,12 @@ def summarize_outcomes(outcomes: pd.DataFrame) -> dict[str, pd.DataFrame]:
         "heat_bias_check": heat_bias_check,
         "heat_bias_by_scenario": heat_bias_by_scenario,
         "heat_bias_by_date": heat_bias_by_date,
+        "midlong_threshold_status_mix": midlong_threshold_status_mix,
+        "midlong_threshold_by_heat": midlong_threshold_by_heat,
+        "midlong_threshold_normal_only": midlong_threshold_normal_only,
+        "midlong_threshold_by_action": midlong_threshold_by_action,
+        "midlong_threshold_by_date": midlong_threshold_by_date,
+        "midlong_threshold_gate": midlong_threshold_gate,
         "spec_risk_check": spec_risk_check,
     }
 
@@ -1560,6 +1777,12 @@ def build_summary_markdown(
         lines.extend([f"- {item}" for item in key_findings])
         lines.append("")
 
+    midlong_threshold_findings = build_midlong_threshold_findings(parts)
+    if midlong_threshold_findings:
+        lines.append("## Midlong Threshold Findings")
+        lines.extend([f"- {item}" for item in midlong_threshold_findings])
+        lines.append("")
+
     band_parts = summarize_atr_band_checkpoints(alert_tracking if alert_tracking is not None else pd.DataFrame())
     band_findings = build_atr_band_findings(band_parts)
     if band_findings:
@@ -1632,6 +1855,18 @@ def build_summary_markdown(
         lines.extend(["## Threshold Guard Check (ok - below_threshold)", _table_markdown(parts["threshold_guard_check"]).rstrip(), ""])
     else:
         lines.extend(["## Threshold Guard Check (ok - below_threshold)", "_None_", ""])
+    if not parts["midlong_threshold_status_mix"].empty:
+        lines.extend(["## Midlong Threshold Status Mix", _table_markdown(parts["midlong_threshold_status_mix"]).rstrip(), ""])
+    if not parts["midlong_threshold_gate"].empty:
+        lines.extend(["## Midlong Threshold Gate", _table_markdown(parts["midlong_threshold_gate"]).rstrip(), ""])
+    if not parts["midlong_threshold_by_heat"].empty:
+        lines.extend(["## Midlong Threshold By Heat", _table_markdown(parts["midlong_threshold_by_heat"]).rstrip(), ""])
+    if not parts["midlong_threshold_normal_only"].empty:
+        lines.extend(["## Midlong Threshold Normal Only", _table_markdown(parts["midlong_threshold_normal_only"]).rstrip(), ""])
+    if not parts["midlong_threshold_by_action"].empty:
+        lines.extend(["## Midlong Threshold By Action (top 40)", _table_markdown(parts["midlong_threshold_by_action"].head(40)).rstrip(), ""])
+    if not parts["midlong_threshold_by_date"].empty:
+        lines.extend(["## Midlong Threshold By Signal Date (top 40)", _table_markdown(parts["midlong_threshold_by_date"].head(40)).rstrip(), ""])
 
     # Weekly checkpoint: only show deltas with enough samples to be actionable.
     try:

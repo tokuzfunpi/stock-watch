@@ -42,6 +42,7 @@ class RunWeeklyReviewTests(unittest.TestCase):
 
     def test_build_decisions_flags_threshold_review_and_feedback_hold(self) -> None:
         parts = {
+            "midlong_threshold_gate": pd.DataFrame(),
             "delta_ok_minus_below": pd.DataFrame(
                 [
                     {
@@ -137,6 +138,59 @@ class RunWeeklyReviewTests(unittest.TestCase):
         self.assertEqual(decisions["atr"]["status"], "hold")
         self.assertEqual(decisions["feedback"]["status"], "hold")
         self.assertEqual(decisions["spec_risk"]["status"], "review")
+
+    def test_build_decisions_blocks_when_midlong_gate_blocks_loosening(self) -> None:
+        parts = {
+            "midlong_threshold_gate": pd.DataFrame(
+                [
+                    {
+                        "horizon_days": 1,
+                        "below_n": 9,
+                        "normal_below_n": 0,
+                        "below_hot_share_pct": 88.9,
+                        "ok_hot_share_pct": 15.1,
+                        "heat_share_gap_pct": 73.8,
+                        "decision": "block_loosening",
+                    }
+                ]
+            ),
+            "delta_ok_minus_below": pd.DataFrame(
+                [
+                    {
+                        "horizon_days": 1,
+                        "watch_type": "midlong",
+                        "min_n": 9,
+                        "confidence": "medium",
+                        "delta_avg_ret": -2.62,
+                    }
+                ]
+            ),
+            "heat_bias_check": pd.DataFrame(),
+            "spec_risk_check": pd.DataFrame(),
+            "short_gate_promotion_watch": pd.DataFrame(),
+            "short_gate_simulation": pd.DataFrame(),
+        }
+        band_parts = {
+            "band_coverage": pd.DataFrame(
+                [
+                    {"horizon_days": 5, "watch_type": "midlong", "matured_rows": 0},
+                    {"horizon_days": 20, "watch_type": "midlong", "matured_rows": 0},
+                ]
+            )
+        }
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            feedback_csv = Path(tmpdir) / "feedback.csv"
+            pd.DataFrame(
+                [
+                    {"config_name": "70/30", "watch_type": "midlong", "action_label": "續抱", "rank_delta": 0, "score_delta": 0},
+                ]
+            ).to_csv(feedback_csv, index=False)
+
+            decisions = build_decisions(parts, band_parts, feedback_csv)
+
+        self.assertEqual(decisions["threshold"]["status"], "block")
+        self.assertIn("block_loosening", decisions["threshold"]["detail"])
 
     def test_build_spec_risk_overview_summarizes_top_and_weakest_subtypes(self) -> None:
         parts = {
@@ -594,6 +648,7 @@ class RunWeeklyReviewTests(unittest.TestCase):
             self.assertTrue(out_json.exists())
 
         self.assertIn("Weekly Review", markdown)
+        self.assertIn("Midlong Threshold Gate", markdown)
         self.assertEqual(payload["summary"]["ok_rows"], 4)
         self.assertEqual(saved["summary"]["ok_rows"], 4)
         self.assertIn("spec_risk_overview", payload["summary"])

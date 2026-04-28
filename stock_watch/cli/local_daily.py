@@ -18,6 +18,7 @@ if str(REPO_ROOT) not in sys.path:
 import daily_theme_watchlist
 import portfolio_check
 from stock_watch.cli.weekly_review import build_data_quality_gate
+from verification.reports.summarize_outcomes import summarize_outcomes
 from verification.workflows import run_daily_verification
 
 LOCAL_STATUS_MD = THEME_OUTDIR / "local_run_status.md"
@@ -239,12 +240,31 @@ def collect_status_metrics(theme_outdir: Path = THEME_OUTDIR, verification_outdi
     outcomes_total = 0
     outcomes_ok = 0
     outcomes_pending = 0
+    midlong_gate_status = ""
+    midlong_gate_horizon = ""
+    midlong_gate_detail = ""
     if not outcomes_df.empty:
         outcomes_total = int(len(outcomes_df))
         if "status" in outcomes_df.columns:
             status = outcomes_df["status"].astype(str).str.strip()
             outcomes_ok = int((status == "ok").sum())
             outcomes_pending = int((status == "insufficient_forward_data").sum())
+        try:
+            parts = summarize_outcomes(outcomes_df)
+            gate = parts.get("midlong_threshold_gate", pd.DataFrame())
+        except Exception:
+            gate = pd.DataFrame()
+        if not gate.empty:
+            blocked = gate[gate.get("decision", pd.Series(dtype=str)).astype(str) == "block_loosening"].copy()
+            selected = blocked.iloc[0] if not blocked.empty else gate.iloc[0]
+            midlong_gate_status = str(selected.get("decision", ""))
+            horizon = selected.get("horizon_days", "")
+            midlong_gate_horizon = "" if pd.isna(horizon) else str(int(horizon))
+            midlong_gate_detail = (
+                f"normal_below_n={int(selected.get('normal_below_n', 0))}, "
+                f"below_hot_share={float(selected.get('below_hot_share_pct', 0.0)):.1f}%, "
+                f"heat_gap={float(selected.get('heat_share_gap_pct', 0.0)):.1f}pp"
+            )
 
     return {
         "latest_snapshot_signal_date": _latest_signal_date(snapshots_csv),
@@ -254,6 +274,9 @@ def collect_status_metrics(theme_outdir: Path = THEME_OUTDIR, verification_outdi
         "outcome_rows": outcomes_total,
         "outcome_ok_rows": outcomes_ok,
         "outcome_pending_rows": outcomes_pending,
+        "midlong_threshold_gate_status": midlong_gate_status,
+        "midlong_threshold_gate_horizon": midlong_gate_horizon,
+        "midlong_threshold_gate_detail": midlong_gate_detail,
         "verification_gate_status": str(verification_gate.get("status", "unknown") or "unknown"),
         "snapshot_dup_keys": int(verification_gate_metrics.get("snapshot_dup_keys", 0) or 0),
         "outcome_dup_keys": int(verification_gate_metrics.get("outcome_dup_keys", 0) or 0),
@@ -305,6 +328,12 @@ def render_local_status_markdown(
             f"- Outcome rows: `{metrics.get('outcome_rows', 0)}`",
             f"- Outcome OK rows: `{metrics.get('outcome_ok_rows', 0)}`",
             f"- Outcome pending rows: `{metrics.get('outcome_pending_rows', 0)}`",
+            f"- Midlong threshold gate: `{metrics.get('midlong_threshold_gate_status') or 'n/a'}`"
+            + (
+                f" (`{metrics.get('midlong_threshold_gate_horizon')}D`, {metrics.get('midlong_threshold_gate_detail')})"
+                if metrics.get("midlong_threshold_gate_status")
+                else ""
+            ),
             f"- Verification gate status: `{metrics.get('verification_gate_status') or 'unknown'}`",
             f"- Verification duplicate keys: snapshots=`{metrics.get('snapshot_dup_keys', 0)}`, outcomes=`{metrics.get('outcome_dup_keys', 0)}`",
             f"- Verification missing price rows: signal_date_missing=`{metrics.get('signal_date_missing_rows', 0)}`, no_price_series=`{metrics.get('no_price_series_rows', 0)}`",

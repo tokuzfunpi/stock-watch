@@ -9,6 +9,7 @@ from daily_theme_watchlist import LOCAL_TZ
 from verification.reports.summarize_outcomes import (
     build_atr_band_findings,
     build_key_findings,
+    build_midlong_threshold_findings,
     build_summary_markdown,
     summarize_atr_band_checkpoints,
     summarize_outcomes,
@@ -149,6 +150,61 @@ class SummarizeOutcomesTests(unittest.TestCase):
         self.assertFalse(parts["heat_bias_by_date"].empty)
         self.assertEqual(float(parts["heat_bias_by_scenario"].iloc[0]["delta_avg_ret_hot_minus_normal"]), 4.0)
         self.assertEqual(float(parts["heat_bias_by_date"].iloc[0]["delta_avg_ret_hot_minus_normal"]), 4.0)
+
+    def test_midlong_threshold_tables_track_heat_mix(self) -> None:
+        df = pd.DataFrame(
+            [
+                {
+                    "signal_date": "2026-04-17",
+                    "horizon_days": 1,
+                    "watch_type": "midlong",
+                    "reco_status": "below_threshold",
+                    "market_heat": "hot",
+                    "scenario_label": "強勢延伸盤",
+                    "action": "減碼觀察",
+                    "realized_ret_pct": 4.0,
+                    "status": "ok",
+                },
+                {
+                    "signal_date": "2026-04-17",
+                    "horizon_days": 1,
+                    "watch_type": "midlong",
+                    "reco_status": "below_threshold",
+                    "market_heat": "normal",
+                    "scenario_label": "高檔震盪盤",
+                    "action": "減碼觀察",
+                    "realized_ret_pct": -1.0,
+                    "status": "ok",
+                },
+                {
+                    "signal_date": "2026-04-16",
+                    "horizon_days": 1,
+                    "watch_type": "midlong",
+                    "reco_status": "ok",
+                    "market_heat": "normal",
+                    "scenario_label": "高檔震盪盤",
+                    "action": "續抱",
+                    "realized_ret_pct": 1.0,
+                    "status": "ok",
+                },
+            ]
+        )
+        parts = summarize_outcomes(df)
+        mix = parts["midlong_threshold_status_mix"]
+        self.assertFalse(mix.empty)
+        below = mix[mix["reco_status"] == "below_threshold"].iloc[0]
+        self.assertEqual(int(below["hot_n"]), 1)
+        self.assertEqual(float(below["hot_share_pct"]), 50.0)
+        self.assertFalse(parts["midlong_threshold_by_heat"].empty)
+        self.assertFalse(parts["midlong_threshold_normal_only"].empty)
+        self.assertFalse(parts["midlong_threshold_by_action"].empty)
+        self.assertFalse(parts["midlong_threshold_by_date"].empty)
+        self.assertFalse(parts["midlong_threshold_gate"].empty)
+        self.assertEqual(parts["midlong_threshold_gate"].iloc[0]["decision"], "block_loosening")
+
+        findings = build_midlong_threshold_findings(parts)
+        self.assertTrue(findings)
+        self.assertIn("below_threshold", "\n".join(findings))
 
     def test_summarize_outcomes_builds_signal_template_slices(self) -> None:
         df = pd.DataFrame(
@@ -341,6 +397,20 @@ class SummarizeOutcomesTests(unittest.TestCase):
                     "status": "ok",
                 },
                 {
+                    "signal_date": "2026-04-17",
+                    "horizon_days": 1,
+                    "watch_type": "midlong",
+                    "reco_status": "below_threshold",
+                    "market_heat": "hot",
+                    "scenario_label": "強勢延伸盤",
+                    "signals": "ACCEL",
+                    "spec_risk_score": 4,
+                    "spec_risk_label": "投機偏高",
+                    "action": "減碼觀察",
+                    "realized_ret_pct": 4.0,
+                    "status": "ok",
+                },
+                {
                     "signal_date": "2026-04-16",
                     "horizon_days": 1,
                     "watch_type": "short",
@@ -407,6 +477,10 @@ class SummarizeOutcomesTests(unittest.TestCase):
         self.assertIn("## Heat Bias By Date (hot - normal, top 20)", md)
         self.assertIn("## Spec Risk Check (high - normal)", md)
         self.assertIn("## Threshold Guard Check (ok - below_threshold)", md)
+        self.assertIn("## Midlong Threshold Findings", md)
+        self.assertIn("## Midlong Threshold Status Mix", md)
+        self.assertIn("## Midlong Threshold Gate", md)
+        self.assertIn("## Midlong Threshold By Heat", md)
         self.assertIn("## Weekly Checkpoint", md)
         self.assertIn("## Overall By Action", md)
         self.assertIn("## Short Threshold Diagnostics", md)

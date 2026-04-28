@@ -1013,13 +1013,45 @@ def build_decisions(
     band_parts: dict[str, pd.DataFrame],
     feedback_csv: Path,
 ) -> dict[str, dict[str, object]]:
+    gate = parts.get("midlong_threshold_gate", pd.DataFrame())
     threshold_row = _find_single_row(parts.get("delta_ok_minus_below", pd.DataFrame()), horizon_days=1, watch_type="midlong")
     heat_row = _find_single_row(parts.get("heat_bias_check", pd.DataFrame()), horizon_days=1, watch_type="midlong")
     spec_risk_row = _find_single_row(parts.get("spec_risk_check", pd.DataFrame()), horizon_days=1, watch_type="short")
     short_gate_watch = parts.get("short_gate_promotion_watch", pd.DataFrame())
     short_gate_simulation = parts.get("short_gate_simulation", pd.DataFrame())
 
-    if threshold_row is None:
+    if not gate.empty and "decision" in gate.columns:
+        blocked = gate[gate["decision"].astype(str) == "block_loosening"].copy()
+        if not blocked.empty:
+            worst = blocked.sort_values(by=["heat_share_gap_pct"], ascending=[False]).iloc[0]
+            threshold_decision = {
+                "status": "block",
+                "detail": (
+                    f"`midlong threshold gate` 目前是 `{worst.get('decision')}`："
+                    f"`{int(worst.get('horizon_days'))}D` below_threshold 的 hot share "
+                    f"`{float(worst.get('below_hot_share_pct')):.1f}%`，"
+                    f"normal below_threshold 樣本 `{int(worst.get('normal_below_n'))}`；"
+                    "先禁止放寬門檻，只持續觀察。"
+                ),
+            }
+        else:
+            reviewable = gate[gate["decision"].astype(str) == "eligible_for_review"].copy()
+            if not reviewable.empty:
+                best = reviewable.iloc[0]
+                threshold_decision = {
+                    "status": "review",
+                    "detail": (
+                        f"`midlong threshold gate` 已達 `{best.get('decision')}`："
+                        f"`normal_below_n={int(best.get('normal_below_n'))}`；"
+                        "可以進一步看回撤與 tail risk，再決定是否調參。"
+                    ),
+                }
+            else:
+                threshold_decision = {
+                    "status": "hold",
+                    "detail": "`midlong threshold gate` 仍是 observe-only；先累積 normal 盤樣本。",
+                }
+    elif threshold_row is None:
         threshold_decision = {
             "status": "hold",
             "detail": "最近樣本還不足以判斷 `midlong threshold`；先持續累積。",
@@ -1229,6 +1261,7 @@ def build_weekly_review_payload(
     overall_by_signal = parts.get("overall_by_signal", pd.DataFrame())
     weekly_checkpoint = parts.get("delta_ok_minus_below", pd.DataFrame())
     heat_bias_check = parts.get("heat_bias_check", pd.DataFrame())
+    midlong_threshold_gate = parts.get("midlong_threshold_gate", pd.DataFrame())
     overall_by_spec_risk = parts.get("overall_by_spec_risk", pd.DataFrame())
     overall_by_spec_subtype = parts.get("overall_by_spec_subtype", pd.DataFrame())
     spec_risk_check = parts.get("spec_risk_check", pd.DataFrame())
@@ -1259,6 +1292,7 @@ def build_weekly_review_payload(
             "overall_by_signal": overall_by_signal.to_dict(orient="records"),
             "weekly_threshold_delta": weekly_checkpoint.to_dict(orient="records"),
             "heat_bias_check": heat_bias_check.to_dict(orient="records"),
+            "midlong_threshold_gate": midlong_threshold_gate.to_dict(orient="records"),
             "overall_by_spec_risk": overall_by_spec_risk.to_dict(orient="records"),
             "overall_by_spec_subtype": overall_by_spec_subtype.to_dict(orient="records"),
             "spec_risk_check": spec_risk_check.to_dict(orient="records"),
@@ -1427,6 +1461,7 @@ def render_weekly_review_markdown(payload: dict[str, object]) -> str:
 
     lines.extend(["", "## Overall By Signal", _table_markdown(pd.DataFrame(tables.get("overall_by_signal", []))).rstrip(), ""])
     lines.extend(["## Threshold Delta", _table_markdown(pd.DataFrame(tables.get("weekly_threshold_delta", []))).rstrip(), ""])
+    lines.extend(["## Midlong Threshold Gate", _table_markdown(pd.DataFrame(tables.get("midlong_threshold_gate", []))).rstrip(), ""])
     lines.extend(["## Short Gate Promotion Watch", _table_markdown(pd.DataFrame(tables.get("short_gate_promotion_watch", []))).rstrip(), ""])
     lines.extend(["## Short Gate Simulation", _table_markdown(pd.DataFrame(tables.get("short_gate_simulation", []))).rstrip(), ""])
     lines.extend(["## Full Short Gate Promotion Watch", _table_markdown(pd.DataFrame(tables.get("full_short_gate_promotion_watch", []))).rstrip(), ""])

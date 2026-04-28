@@ -8,6 +8,7 @@ from pathlib import Path
 import pandas as pd
 
 from daily_theme_watchlist import LOCAL_TZ
+from verification.reports.verify_recommendations import _load_outcomes_aggregate
 from verification.reports.verify_recommendations import build_verification_report_markdown
 from verification.reports.verify_recommendations import upsert_csv_with_existing_header
 
@@ -51,6 +52,39 @@ class VerifyRecommendationsTests(unittest.TestCase):
         self.assertEqual(len(out), 1)
         self.assertEqual(out.loc[0, "action"], "開高不追")
         self.assertEqual(out.loc[0, "reco_status"], "below_threshold")
+
+    def test_load_outcomes_aggregate_includes_midlong_threshold_gate(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            outcomes_csv = Path(tmpdir) / "reco_outcomes.csv"
+            pd.DataFrame(
+                [
+                    {
+                        "signal_date": "2026-04-22",
+                        "horizon_days": 1,
+                        "watch_type": "midlong",
+                        "reco_status": "below_threshold",
+                        "market_heat": "hot",
+                        "action": "減碼觀察",
+                        "realized_ret_pct": 4.0,
+                        "status": "ok",
+                    },
+                    {
+                        "signal_date": "2026-04-22",
+                        "horizon_days": 1,
+                        "watch_type": "midlong",
+                        "reco_status": "ok",
+                        "market_heat": "normal",
+                        "action": "續抱",
+                        "realized_ret_pct": 1.0,
+                        "status": "ok",
+                    },
+                ]
+            ).to_csv(outcomes_csv, index=False)
+
+            aggregate = _load_outcomes_aggregate(outcomes_csv)
+
+        self.assertIn("midlong_threshold_gate", aggregate)
+        self.assertEqual(aggregate["midlong_threshold_gate"][0]["decision"], "block_loosening")
 
     def test_build_verification_report_markdown_renders_tables_without_tabulate(self) -> None:
         df = pd.DataFrame(
