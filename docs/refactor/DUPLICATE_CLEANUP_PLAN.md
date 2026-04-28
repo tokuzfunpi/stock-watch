@@ -53,10 +53,11 @@
 - Daily run-state helpers 已移到 `stock_watch/state/run_state.py`；runtime metrics rendering/writing 已移到 `stock_watch/workflows/runtime_metrics.py`。
 - Market/session/runtime-context helpers 已移到 `stock_watch/workflows/market_context.py`，包含 history freshness date、session phase、schedule delay context。
 - Market scenario 與 scenario-adjusted strategy preview 已移到 `stock_watch/strategy/scenario.py`；daily/portfolio/verification 呼叫 package helper，legacy daily 只保留相容 wrappers。
+- Candidate ranking pools 與 short/midlong action labels 已移到 `stock_watch/strategy/candidates.py`；verification 直接引用 package helper。
 
 下一階段才拆：
 
-- 把仍留在 `daily_theme_watchlist.py` 的 candidate selection、message/report helper 邏輯抽到 package modules。
+- 把仍留在 `daily_theme_watchlist.py` 的 candidate cap/feedback selection、message/report helper 邏輯抽到 package modules。
 - 等 package workflows 不再 import `daily_theme_watchlist.py` helpers/globals 時，再刪或改成內部相容層。
 
 ## 3) Generated artifact duplicates

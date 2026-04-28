@@ -17,21 +17,23 @@ if str(REPO_ROOT) not in sys.path:
 from stock_watch.paths import THEME_OUTDIR
 from stock_watch.paths import VERIFICATION_OUTDIR
 from stock_watch.runtime import LOCAL_TZ
+from stock_watch.strategy.candidates import (
+    is_midlong_buyable,
+    is_short_term_buyable,
+    midlong_action_label,
+    rank_midlong_pool,
+    rank_short_term_pool,
+    short_term_action_label,
+)
 from stock_watch.strategy.scenario import build_market_scenario
 from daily_theme_watchlist import (
     CONFIG,
     get_market_regime,
     get_us_market_reference,
-    is_midlong_buyable,
-    is_short_term_buyable,
-    rank_midlong_pool,
-    rank_short_term_pool,
     select_midlong_backup_candidates,
     select_midlong_candidates,
     select_short_term_backup_candidates,
     select_short_term_candidates,
-    midlong_action_label,
-    short_term_action_label,
 )
 from stock_watch.signals import apply_signal_template_labels
 from stock_watch.signals import summarize_signal_templates
