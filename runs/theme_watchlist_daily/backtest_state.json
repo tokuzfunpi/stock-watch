@@ -1,5 +1,5 @@
 {
-  "signature": "8ab094ae12a24de1",
+  "signature": "99d99e474f40d29b",
   "backtest_period": "5y",
   "lookahead_days": [
     1,
@@ -43,7 +43,7 @@
     "8064.TWO": "2026-03-26",
     "0050.TW": "2026-03-26",
     "00878.TW": "2026-03-26",
-    "0052.TW": "2026-03-26",
+    "0052.TW": "2026-03-25",
     "3014.TW": "2026-03-26",
     "3491.TWO": "2026-03-26",
     "3661.TW": "2026-03-26",
@@ -61,5 +61,5 @@
     "2412.TW": "2026-03-26"
   },
   "last_run_mode": "full_rebuild",
-  "last_run_scanned_cutoffs": 48221
+  "last_run_scanned_cutoffs": 48220
 }
