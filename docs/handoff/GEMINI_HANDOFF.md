@@ -1,6 +1,8 @@
 # GEMINI Handoff (Integration Sync 6)
 最後更新：2026-04-27
 
+> 2026-04-28 single-CLI note: `main` now treats `python -m stock_watch ...` as canonical. Mentions of removed wrapper scripts below are historical or conceptual; portfolio now runs through `python -m stock_watch portfolio`, and verification runs through `python -m stock_watch verification ...`.
+
 ## 1) What changed (已上線)
 - `spec_risk` 的 coverage 分析已在 `main` 有可用產出：
   - `run_weekly_review.py` 現在可以產出 `Candidate Mix Guidance`、`Candidate Expansion Targets` (By Group/By Layer) 以及 `Watchlist Gap Snapshot` 等報表。
@@ -44,8 +46,9 @@
 
 ## 6) Sensitive files (敏感檔案)
 Gemini 不直接修改以下檔案，交由 Codex 實作：
-- `daily_theme_watchlist.py` / `portfolio_check.py`
-- `verification/summarize_outcomes.py` (包含其中的 Signal Template 邏輯)
+- `stock_watch/workflows/*` 與 `stock_watch/reports/*` 的 workflow/report 邊界
+- `stock_watch/workflows/portfolio.py`（`python -m stock_watch portfolio`）
+- `verification/reports/summarize_outcomes.py` (包含其中的 Signal Template 邏輯)
 
 ## 7) Needs verification before merge (合併前須驗證)
 - **ATR Stop-loss Tuning**: 若要對 `進攻持股` 收緊停損，須先在 `evaluate_recommendations.py` 模擬是否會造成過早止損。

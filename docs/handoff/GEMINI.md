@@ -1,6 +1,8 @@
 # GEMINI.md - AI Agent Context & Guidelines
 
 > Reference note: this document is design context from the `testv` line of work. Treat it as guidance to cross-check with `GEMINI_HANDOFF.md`, not as the sole source of truth for what `main` currently does.
+>
+> 2026-04-28 update: `main` now uses the single CLI (`python -m stock_watch ...`) as the canonical operator surface. Removed root wrappers such as `portfolio_check.py` and `verification/*.py` should be treated as historical references only.
 
 This file provides critical context and operational mandates for AI agents working on the `stock-watch` project. Adhere to these instructions to maintain system integrity and strategy consistency.
 
@@ -27,18 +29,19 @@ This file provides critical context and operational mandates for AI agents worki
 
 | File | Role |
 | :--- | :--- |
-| `daily_theme_watchlist.py` | Main entry point & strategy engine. |
+| `python -m stock_watch` | Canonical CLI for daily, portfolio, weekly, website, doctor, housekeeping, and verification workflows. |
+| `daily_theme_watchlist.py` | Legacy compatibility shim; package modules own runtime, strategy, workflow, and report logic. |
 | `config.json` | Global settings & Strategy Parameter source. |
 | `alert_tracking.csv` | Historical signal performance data (with `scenario_label`). |
-| `portfolio_check.py` | Local portfolio evaluator (must stay synced with main logic). |
+| `stock_watch/workflows/portfolio.py` | Portfolio workflow used by `python -m stock_watch portfolio`. |
 | `CODEX_NOTES.md` | Detailed maintenance and architectural history. |
 
 ## 4. Development Constraints
 
 - **Dependency Management**: Maintain strictly through `requirements.txt`.
-- **Environment**: Primarily executed in macOS/Linux with Python 3.9+.
+- **Environment**: Primarily executed in macOS/Linux with Python 3.11.
 - **Testing**:
-    - Always run `tests/test_core.py` after logic changes.
+    - Always run focused tests after logic changes, then `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3.11 -m pytest -q` before merge when feasible.
     - Use `test_my_logic.py` for isolated strategy/ATR verification.
 - **Reporting**: Reports are output to `theme_watchlist_daily/`. Do NOT change output paths without explicit instruction.
 

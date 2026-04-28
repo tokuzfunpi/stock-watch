@@ -8,6 +8,14 @@
 - 不需要每次再額外詢問一次是否要提交，除非使用者明確說先不要 push
 - 若工作樹還混有使用者自己的未整理資料檔，先拆出本次改動範圍後再提交，不要把無關檔案一起推上去
 
+## 2026-04-28 單一 CLI 更新（目前準則）
+
+- 穩定入口統一為 `python -m stock_watch ...`，常用子命令包含 `preopen`、`postclose`、`full`、`portfolio`、`weekly`、`doctor`、`housekeeping`、`website` 與 `verification ...`。
+- 已移除 root wrapper：`portfolio_check.py`、`run_local_daily.py`、`run_local_doctor.py`、`run_local_housekeeping.py`、`run_local_website.py`、`run_weekly_review.py`。
+- 已移除 root verification wrappers：`verification/verify_recommendations.py`、`verification/evaluate_recommendations.py`、`verification/summarize_outcomes.py`、`verification/feedback_weight_sensitivity.py`、`verification/backfill_from_git.py`、`verification/run_daily_verification.py`。
+- Portfolio-only 請用 `python -m stock_watch portfolio`；實作在 `stock_watch/workflows/portfolio.py`，CLI 入口在 `stock_watch/cli/local_daily.py`。
+- Verification 請用 `python -m stock_watch verification ...`；舊筆記中直接呼叫 wrapper script 的例子都視為歷史紀錄，不是目前建議操作。
+
 ## Repo 目的
 
 這個 repo 會建立台股題材觀察名單流程，主要做這幾件事：
@@ -39,19 +47,20 @@
 
 ## 主要入口
 
+- `python -m stock_watch`
+  - 目前唯一建議的人類/automation 操作入口
+  - `preopen`：早盤 watchlist + verification snapshot
+  - `postclose`：收盤 outcomes + summary
+  - `full`：watchlist + portfolio + verification
+  - `portfolio`：持股檢查專用流程
+  - `weekly`：weekly review
+  - `doctor` / `housekeeping` / `website`：本機健康檢查、清理與 dashboard
 - `daily_theme_watchlist.py`
-  - 正式主程式
-  - 載入 config 與 watchlist
-  - 下載資料
-  - 計算排行
-  - 產生報表
-  - 更新 alert tracking
-  - 發送 Telegram
-- `portfolio_check.py`
-  - 持股檢查專用執行檔
-  - 共用 `daily_theme_watchlist.py` 的資料抓取、排行與判讀邏輯
-  - 只產生持股專用報表與 CLI 輸出
-  - 成功結尾訊息目前降為 `debug`，避免 CLI 多一行狀態字樣
+  - 舊 automation 相容 shim
+  - 新流程應優先走 `python -m stock_watch`
+- `stock_watch/workflows/portfolio.py`
+  - 持股檢查實作
+  - 由 `python -m stock_watch portfolio` 呼叫
 - `backtest_runner.py`
   - 簡單的 CLI 包裝
   - 直接呼叫 `run_backtest_dual()`
@@ -75,7 +84,7 @@
   - `enabled=false` 的列會被略過
 - `portfolio.csv`
   - 本機個人持股檔
-  - 目前由 `portfolio_check.py` 使用
+  - 目前由 `python -m stock_watch portfolio` 使用
   - 建議欄位：
     - `ticker`
     - `shares`
@@ -134,7 +143,7 @@
 
 ## 主流程
 
-`daily_theme_watchlist.py` 的 `main()` 高層執行順序如下：
+`python -m stock_watch preopen/full` 會透過 package workflow 執行 watchlist；舊 `daily_theme_watchlist.py` shim 的高層順序大致如下：
 
 1. `get_market_regime()`
 2. `run_watchlist()`
@@ -146,7 +155,7 @@
 8. `send_telegram_message()`
 9. `save_last_state()`
 
-`portfolio_check.py` 的流程則是：
+`python -m stock_watch portfolio` / `stock_watch.workflows.portfolio` 的流程則是：
 
 1. 讀取本機 `portfolio.csv`
 2. `get_market_regime()`
@@ -194,7 +203,7 @@
   - 代表 state 沒變也照樣送
   - 但訊息內容仍然只會從 `select_push_candidates()` 選出的標的組成
 - `daily_theme_watchlist.py` 不再夾帶 `持股檢查`
-- `持股檢查` 改由 `portfolio_check.py` 單獨執行
+- `持股檢查` 改由 `python -m stock_watch portfolio` 單獨執行
   - 來源是本機 `portfolio.csv`
   - 會根據成本、目標報酬、當前走勢給出分層建議
   - 不走 Telegram，只留本機檔案與 CLI 顯示
@@ -791,28 +800,27 @@ GitHub 排程要注意：
 
 ## 本機執行方式
 
-這台機器建議使用 `python3`：
+這台機器建議使用 Python 3.11：
 
 ```bash
-python3 -m venv .venv
+python3.11 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
-python3 -m py_compile daily_theme_watchlist.py portfolio_check.py backtest_runner.py tests/test_core.py
-python3 -m unittest discover -s tests
-python3 backtest_runner.py
-python3 daily_theme_watchlist.py
-python3 portfolio_check.py
-python3 verification/verify_recommendations.py
-python3 verification/evaluate_recommendations.py
-python3 verification/summarize_outcomes.py
+python -m pip install -r requirements.txt
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python -m pytest -q
+python -m stock_watch --help
+python -m stock_watch preopen
+python -m stock_watch portfolio
+python -m stock_watch verification snapshot
+python -m stock_watch verification evaluate --all-dates --horizons 1,5,20
+python -m stock_watch verification summary
 ```
 
 驗算檢查輸出（本機）：
 
-- `verification/watchlist_daily/verification_report.md`
-- `verification/watchlist_daily/reco_snapshots.csv`
-- `verification/watchlist_daily/reco_outcomes.csv`（需另外跑 evaluate）
-- `verification/watchlist_daily/outcomes_summary.md`
+- `runs/verification/watchlist_daily/verification_report.md`
+- `runs/verification/watchlist_daily/reco_snapshots.csv`
+- `runs/verification/watchlist_daily/reco_outcomes.csv`（需另外跑 evaluate）
+- `runs/verification/watchlist_daily/outcomes_summary.md`
 
 依賴套件目前記在：
 
@@ -1118,8 +1126,8 @@ requirements.txt
 
 - production 先不動
 - 每天照常跑：
-  - 盤前：`python3.11 verification/run_daily_verification.py --mode preopen`
-  - 盤後：`python3.11 verification/run_daily_verification.py --mode postclose`
+  - 盤前：`python3.11 -m stock_watch preopen`
+  - 盤後：`python3.11 -m stock_watch postclose`
 - 繼續累積 `5D / 20D`
 - 之後最先重看的，不是 feedback 權重，也不是 ATR exit，而是：
   - `midlong threshold`
@@ -1415,9 +1423,9 @@ layer 看起來則是：
 - `run_weekly_review.py` 也接了 `short_gate` decision：
   - weekly view 只看最近 signal dates，所以目前仍可能是 `hold`。
   - 這是合理的：全歷史 verification 已經指出候選，但近週樣本還沒大到足以直接推動規則調整。
-- 實際輸出重點：
-  - `verification/watchlist_daily/outcomes_summary.md`：會看到 `Short Gate Promotion Watch`
-  - `theme_watchlist_daily/weekly_review.md`：會看到 `short_gate` decision 與 weekly 的 promotion watch 表
+  - 實際輸出重點：
+    - `runs/verification/watchlist_daily/outcomes_summary.md`：會看到 `Short Gate Promotion Watch`
+    - `runs/theme_watchlist_daily/weekly_review.md`：會看到 `short_gate` decision 與 weekly 的 promotion watch 表
 - 目前對 short gate 的最新判讀：
   - 不再是 dedupe 問題。
   - 也還不是「直接放寬 short gate」。

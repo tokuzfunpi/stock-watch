@@ -1,6 +1,8 @@
 # Project Update: 2026-04-22 (Adaptive Strategy & Volatility Awareness)
 
 > Archived design update from `testv`. Use this as historical context and compare against `GEMINI_HANDOFF.md` before assuming the same behavior is present on `main`.
+>
+> 2026-04-28 note: `portfolio_check.py` was later removed from `main`; the supported portfolio entry is now `python -m stock_watch portfolio`.
 
 ## 1. 核心邏輯更新 (Core Logic Enhancements)
 
@@ -53,7 +55,7 @@
 
 ## 4. 檔案變動清單
 - `daily_theme_watchlist.py`: 核心邏輯重構、新增指標與報表邏輯。
-- `portfolio_check.py`: 同步更新以支援自適應策略調整。
+- `portfolio_check.py`: 當時同步更新以支援自適應策略調整；目前 `main` 已改由 `python -m stock_watch portfolio` / `stock_watch/workflows/portfolio.py` 承接。
 - `config.json`: 新增 `strategy` 區塊。
 - `test_my_logic.py`: (新) 供開發者驗證 ATR 與情境邏輯的單元測試。
 

@@ -23,7 +23,7 @@
   - `scenario + heat`
   - `date + heat`
 - short scenario cap / heat-bias cap
-- `portfolio_check.py` 已吃 scenario-adjusted strategy
+- `python -m stock_watch portfolio` / `stock_watch/workflows/portfolio.py` 已吃 scenario-adjusted strategy
 - `盤中保守觀察` 與 `明顯修正盤` 已分流
 - `^TWII` 量比異常值會先按中性處理
 - `.TW / .TWO` ticker fallback 已在 `main`
@@ -47,7 +47,7 @@
 
 下面這些是 `testv` 的方向有價值，但不能直接搬 code；若要進 `main`，應該在主線上重新設計、補測試、跑 verification：
 
-- `portfolio_check.py` 更深層的 `trim_price` / exit 自動化
+- `stock_watch/workflows/portfolio.py` 更深層的 `trim_price` / exit 自動化
 - `feedback_score` 權重敏感度實驗
 - `ATR` band 的離線驗證與校準
 - `By Scenario + Action` 的持續分析結論整理成可執行規則
@@ -154,7 +154,7 @@
      - 不重寫主排序
      - 必須先有 verification 支持
 
-2. **`portfolio_check.py` 的研究版 scenario-aware 收斂提醒**
+2. **Portfolio workflow 的研究版 scenario-aware 收斂提醒**
    - 先做提示 / report
    - 不要直接做全自動 exit 執行
 

@@ -9,7 +9,7 @@
   - `backtesting`
   - `verification`
   - `local runners / doctor / housekeeping / weekly review`
-- `daily_theme_watchlist.py` 與 `portfolio_check.py` 現在主要是 orchestrator / compatibility wrapper。
+- `python -m stock_watch` 是目前穩定入口；`daily_theme_watchlist.py` 只保留為 compatibility shim，`portfolio_check.py` 已移除，持股流程改由 `python -m stock_watch portfolio` / `stock_watch.workflows.portfolio` 執行。
 - 穩健路線的效能優化已經完成到可長期使用的 checkpoint：
   - in-memory history cache
   - disk-backed history cache
@@ -109,14 +109,20 @@
 - 以及 local dashboard / doctor / weekly review smoke checks
 
 ## 8. 常看輸出
-- `theme_watchlist_daily/daily_report.md`
-- `verification/watchlist_daily/verification_report.md`
-- `verification/watchlist_daily/outcomes_summary.md`
-- `theme_watchlist_daily/local_run_status.md`
-- `theme_watchlist_daily/local_doctor.md`
-- `theme_watchlist_daily/weekly_review.md`
+- `runs/theme_watchlist_daily/daily_report.md`
+- `runs/verification/watchlist_daily/verification_report.md`
+- `runs/verification/watchlist_daily/outcomes_summary.md`
+- `runs/theme_watchlist_daily/local_run_status.md`
+- `runs/theme_watchlist_daily/local_doctor.md`
+- `runs/theme_watchlist_daily/weekly_review.md`
 
 ## 9. 本機執行
 - 本機固定 venv：`/Users/tokuzfunpi/codes/nvidia/311env`
 - 建議直接用：
   - `VENV_PY=/Users/tokuzfunpi/codes/nvidia/311env/bin/python`
+- 常用入口：
+  - `$VENV_PY -m stock_watch preopen`
+  - `$VENV_PY -m stock_watch postclose`
+  - `$VENV_PY -m stock_watch full`
+  - `$VENV_PY -m stock_watch portfolio`
+  - `$VENV_PY -m stock_watch weekly`
