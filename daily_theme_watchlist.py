@@ -46,6 +46,7 @@ from stock_watch.paths import VERIFICATION_OUTDIR as STOCK_WATCH_VERIFICATION_OU
 from stock_watch.runtime import ALERT_TRACK_CSV, FEEDBACK_SUMMARY_CSV, LOCAL_TZ, logger
 from stock_watch.state import run_state
 from stock_watch.strategy import candidates as strategy_candidates
+from stock_watch.strategy import feedback as strategy_feedback
 from stock_watch.strategy import scenario as strategy_scenario
 from stock_watch.workflows import market_context
 from stock_watch.workflows import runtime_metrics
@@ -932,27 +933,7 @@ def volatility_badge_text(row: pd.Series) -> str:
 
 
 def heat_bias_message(df_rank: Optional[pd.DataFrame], scenario: dict) -> str:
-    if df_rank is None or df_rank.empty:
-        return ""
-    working = df_rank.head(10).copy()
-    if working.empty:
-        return ""
-    for col in ["risk_score", "ret5_pct"]:
-        if col in working.columns:
-            working[col] = pd.to_numeric(working[col], errors="coerce")
-    hot_mask = (
-        working.get("risk_score", pd.Series(dtype=float)).fillna(0).ge(5)
-        | working.get("ret5_pct", pd.Series(dtype=float)).fillna(0).ge(12)
-        | working.get("volatility_tag", pd.Series(dtype=str)).astype(str).isin(["活潑", "劇烈"])
-        | working.get("spec_risk_label", pd.Series(dtype=str)).astype(str).eq("疑似炒作風險高")
-    )
-    hot_ratio = float(hot_mask.mean()) if len(working) else 0.0
-    label = str(scenario.get("label", "") or "")
-    if hot_ratio >= 0.5:
-        return "⚠️ Heat Bias 偏強：前排標的偏熱，最近績效可能有行情抬轎，追價風險高。"
-    if hot_ratio >= 0.3 and label in {"高檔震盪盤", "強勢延伸盤"}:
-        return "⚠️ Heat Bias 提醒：前排標的已有明顯熱度，請把拉回買點與分批落袋看得比平常更重。"
-    return ""
+    return strategy_candidates.heat_bias_message(df_rank, scenario)
 
 
 def correction_sample_warning_message(scenario: dict) -> str:
@@ -987,18 +968,14 @@ def effective_short_top_n(
     market_regime: Optional[dict] = None,
     us_market: Optional[dict] = None,
 ) -> int:
-    top_n = int(CONFIG.notify.top_n_short)
-    if market_regime is None or us_market is None or df_rank.empty:
-        return top_n
-
-    scenario = build_market_scenario(market_regime, us_market, df_rank)
-    if str(scenario.get("label", "") or "") in {"明顯修正盤", "盤中保守觀察"}:
-        return min(top_n, int(CONFIG.scenario_policy.correction_short_top_n))
-
-    heat_bias = heat_bias_message(df_rank, scenario)
-    if "Heat Bias 偏強" in heat_bias:
-        return min(top_n, int(CONFIG.scenario_policy.heat_bias_short_top_n))
-    return top_n
+    return strategy_candidates.effective_short_top_n(
+        df_rank,
+        top_n_short=CONFIG.notify.top_n_short,
+        correction_short_top_n=CONFIG.scenario_policy.correction_short_top_n,
+        heat_bias_short_top_n=CONFIG.scenario_policy.heat_bias_short_top_n,
+        market_regime=market_regime,
+        us_market=us_market,
+    )
 
 
 def effective_midlong_top_n(
@@ -1006,14 +983,13 @@ def effective_midlong_top_n(
     market_regime: Optional[dict] = None,
     us_market: Optional[dict] = None,
 ) -> int:
-    top_n = int(CONFIG.notify.top_n_midlong)
-    if market_regime is None or us_market is None or df_rank.empty:
-        return top_n
-
-    scenario = build_market_scenario(market_regime, us_market, df_rank)
-    if str(scenario.get("label", "") or "") in {"明顯修正盤", "盤中保守觀察"}:
-        return min(top_n, int(CONFIG.scenario_policy.correction_midlong_top_n))
-    return top_n
+    return strategy_candidates.effective_midlong_top_n(
+        df_rank,
+        top_n_midlong=CONFIG.notify.top_n_midlong,
+        correction_midlong_top_n=CONFIG.scenario_policy.correction_midlong_top_n,
+        market_regime=market_regime,
+        us_market=us_market,
+    )
 
 
 def detect_row(
@@ -1403,27 +1379,48 @@ def rank_midlong_pool(df_rank: pd.DataFrame) -> pd.DataFrame:
     return strategy_candidates.rank_midlong_pool(df_rank, CONFIG.notify.priority_groups)
 
 
+def _candidate_selection_kwargs(
+    market_regime: Optional[dict] = None,
+    us_market: Optional[dict] = None,
+) -> dict:
+    return {
+        "priority_groups": CONFIG.notify.priority_groups,
+        "top_n_short": CONFIG.notify.top_n_short,
+        "top_n_midlong": CONFIG.notify.top_n_midlong,
+        "correction_short_top_n": CONFIG.scenario_policy.correction_short_top_n,
+        "heat_bias_short_top_n": CONFIG.scenario_policy.heat_bias_short_top_n,
+        "correction_midlong_top_n": CONFIG.scenario_policy.correction_midlong_top_n,
+        "market_regime": market_regime,
+        "us_market": us_market,
+        "feedback_adjuster": apply_feedback_adjustment,
+    }
+
+
 def select_short_term_candidates(
     df_rank: pd.DataFrame,
     market_regime: Optional[dict] = None,
     us_market: Optional[dict] = None,
 ) -> pd.DataFrame:
-    df = rank_short_term_pool(df_rank)
-    if df.empty:
-        return df
-    buyable_mask = df.apply(is_short_term_buyable, axis=1)
-    top_n_short = effective_short_top_n(df_rank, market_regime, us_market)
-    return apply_feedback_adjustment(df[buyable_mask].copy(), "short").head(top_n_short).copy()
+    return strategy_candidates.select_short_term_candidates(
+        df_rank,
+        priority_groups=CONFIG.notify.priority_groups,
+        top_n_short=CONFIG.notify.top_n_short,
+        correction_short_top_n=CONFIG.scenario_policy.correction_short_top_n,
+        heat_bias_short_top_n=CONFIG.scenario_policy.heat_bias_short_top_n,
+        market_regime=market_regime,
+        us_market=us_market,
+        feedback_adjuster=apply_feedback_adjustment,
+    )
 
 
 def select_short_term_backup_candidates(df_rank: pd.DataFrame, exclude_tickers: Optional[set[str]] = None) -> pd.DataFrame:
-    df = rank_short_term_pool(df_rank)
-    if not df.empty:
-        buyable_mask = df.apply(is_short_term_buyable, axis=1)
-        df = df[~buyable_mask].copy()
-    if exclude_tickers:
-        df = df[~df["ticker"].astype(str).isin(exclude_tickers)].copy()
-    return apply_feedback_adjustment(df.copy(), "short").head(5).copy()
+    return strategy_candidates.select_short_term_backup_candidates(
+        df_rank,
+        priority_groups=CONFIG.notify.priority_groups,
+        exclude_tickers=exclude_tickers,
+        feedback_adjuster=apply_feedback_adjustment,
+    )
+
 
 def select_midlong_candidates(
     df_rank: pd.DataFrame,
@@ -1431,25 +1428,25 @@ def select_midlong_candidates(
     us_market: Optional[dict] = None,
     exclude_tickers: Optional[set[str]] = None,
 ) -> pd.DataFrame:
-    rule = CONFIG.notify
-    df = rank_midlong_pool(df_rank)
-    if not df.empty:
-        buyable_mask = df.apply(is_midlong_buyable, axis=1)
-        df = df[buyable_mask].copy()
-    if exclude_tickers:
-        df = df[~df["ticker"].astype(str).isin(exclude_tickers)].copy()
-    top_n_midlong = effective_midlong_top_n(df_rank, market_regime, us_market)
-    return apply_feedback_adjustment(df.copy(), "midlong").head(min(rule.top_n_midlong, top_n_midlong)).copy()
+    return strategy_candidates.select_midlong_candidates(
+        df_rank,
+        priority_groups=CONFIG.notify.priority_groups,
+        top_n_midlong=CONFIG.notify.top_n_midlong,
+        correction_midlong_top_n=CONFIG.scenario_policy.correction_midlong_top_n,
+        market_regime=market_regime,
+        us_market=us_market,
+        exclude_tickers=exclude_tickers,
+        feedback_adjuster=apply_feedback_adjustment,
+    )
 
 
 def select_midlong_backup_candidates(df_rank: pd.DataFrame, exclude_tickers: Optional[set[str]] = None) -> pd.DataFrame:
-    df = rank_midlong_pool(df_rank)
-    if not df.empty:
-        buyable_mask = df.apply(is_midlong_buyable, axis=1)
-        df = df[~buyable_mask].copy()
-    if exclude_tickers:
-        df = df[~df["ticker"].astype(str).isin(exclude_tickers)].copy()
-    return apply_feedback_adjustment(df.copy(), "midlong").head(5).copy()
+    return strategy_candidates.select_midlong_backup_candidates(
+        df_rank,
+        priority_groups=CONFIG.notify.priority_groups,
+        exclude_tickers=exclude_tickers,
+        feedback_adjuster=apply_feedback_adjustment,
+    )
 
 
 def select_push_candidates(
@@ -1457,9 +1454,10 @@ def select_push_candidates(
     market_regime: Optional[dict] = None,
     us_market: Optional[dict] = None,
 ) -> pd.DataFrame:
-    short_candidates = select_short_term_candidates(df_rank, market_regime, us_market)
-    midlong_candidates = select_midlong_candidates(df_rank, market_regime, us_market)
-    return pd.concat([short_candidates, midlong_candidates], ignore_index=True)
+    return strategy_candidates.select_push_candidates(
+        df_rank,
+        **_candidate_selection_kwargs(market_regime, us_market),
+    )
 
 
 def build_candidate_sets(
@@ -1467,17 +1465,10 @@ def build_candidate_sets(
     market_regime: Optional[dict] = None,
     us_market: Optional[dict] = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    short_candidates = select_short_term_candidates(df_rank, market_regime, us_market)
-    short_backups = select_short_term_backup_candidates(
+    return strategy_candidates.build_candidate_sets(
         df_rank,
-        exclude_tickers=set(short_candidates["ticker"].astype(str)),
+        **_candidate_selection_kwargs(market_regime, us_market),
     )
-    midlong_candidates = select_midlong_candidates(df_rank, market_regime, us_market)
-    midlong_backups = select_midlong_backup_candidates(
-        df_rank,
-        exclude_tickers=set(midlong_candidates["ticker"].astype(str)),
-    )
-    return short_candidates, short_backups, midlong_candidates, midlong_backups
 
 
 def market_heat_bucket(df_rank: Optional[pd.DataFrame], scenario: dict) -> str:
@@ -2656,38 +2647,19 @@ def build_portfolio_message(
 
 
 def history_target_return(row: pd.Series) -> tuple[Optional[float], str]:
-    watch_type = str(row.get("watch_type", ""))
-    if watch_type == "short":
-        for col, label in [("ret5_future_pct", "5D"), ("ret1_future_pct", "1D")]:
-            value = row.get(col)
-            if pd.notna(value):
-                return float(value), label
-    if watch_type == "midlong":
-        for col, label in [("ret20_future_pct", "20D"), ("ret5_future_pct", "5D"), ("ret1_future_pct", "1D")]:
-            value = row.get(col)
-            if pd.notna(value):
-                return float(value), label
-    return None, ""
+    return strategy_feedback.history_target_return(row)
 
 
 def feedback_action_label(row: pd.Series, watch_type: str) -> str:
-    if watch_type == "short":
-        return short_term_action_label(row)
-    return midlong_action_label(row)
+    return strategy_feedback.feedback_action_label(row, watch_type)
 
 
 def feedback_label_from_score(score: float, samples: int) -> str:
-    if samples < 3:
-        return "樣本不足"
-    if score >= 1.2:
-        return "近期有效"
-    if score <= -1.2:
-        return "近期偏弱"
-    return "中性"
+    return strategy_feedback.feedback_label_from_score(score, samples)
 
 
 def feedback_window_size(watch_type: str) -> int:
-    return 12 if watch_type == "short" else 8
+    return strategy_feedback.feedback_window_size(watch_type)
 
 
 def compute_feedback_score_components(
@@ -2695,170 +2667,24 @@ def compute_feedback_score_components(
     sample_scale: int,
     use_weights: bool = False,
 ) -> dict[str, float]:
-    if returns.empty:
-        return {
-            "win_rate_pct": 0.0,
-            "avg_return_pct": 0.0,
-            "avg_win_return_pct": 0.0,
-            "avg_loss_return_pct": 0.0,
-            "pl_ratio": 0.0,
-            "feedback_score": 0.0,
-        }
-
-    working = returns.astype(float).reset_index(drop=True)
-    weights = pd.Series([1.0] * len(working))
-    if use_weights and len(working) > 1:
-        floor = 0.65
-        step = (1.0 - floor) / max(len(working) - 1, 1)
-        weights = pd.Series([1.0 - (step * i) for i in range(len(working))])
-
-    positive_mask = working > 0
-    negative_mask = ~positive_mask
-    positive = working[positive_mask]
-    negative = working[negative_mask]
-    positive_weights = weights[positive_mask]
-    negative_weights = weights[negative_mask]
-
-    total_weight = float(weights.sum()) or 1.0
-    win_rate_pct = round(float(weights[positive_mask].sum() / total_weight) * 100, 2)
-    avg_return_pct = round(float((working * weights).sum() / total_weight), 2)
-    avg_win_return_pct = round(float((positive * positive_weights).sum() / positive_weights.sum()), 2) if not positive.empty else 0.0
-    avg_loss_return_pct = round(float((negative * negative_weights).sum() / negative_weights.sum()), 2) if not negative.empty else 0.0
-    gross_win = float((positive * positive_weights).sum()) if not positive.empty else 0.0
-    gross_loss = abs(float((negative * negative_weights).sum())) if not negative.empty else 0.0
-    pl_ratio = round(gross_win / gross_loss, 2) if gross_loss > 0 else (round(gross_win, 2) if gross_win > 0 else 0.0)
-    shrink = min(sample_scale / 8.0, 1.0)
-    pl_ratio_capped = min(max(pl_ratio, 0.0), 4.0)
-    pl_ratio_component = (pl_ratio_capped - 1.0) / 4.0
-    feedback_score = round(
-        (
-            ((win_rate_pct - 50.0) / 10.0)
-            + (avg_return_pct / 5.0)
-            + pl_ratio_component
-        )
-        * shrink,
-        2,
-    )
-    return {
-        "win_rate_pct": win_rate_pct,
-        "avg_return_pct": avg_return_pct,
-        "avg_win_return_pct": avg_win_return_pct,
-        "avg_loss_return_pct": avg_loss_return_pct,
-        "pl_ratio": pl_ratio,
-        "feedback_score": feedback_score,
-    }
+    return strategy_feedback.compute_feedback_score_components(returns, sample_scale, use_weights)
 
 
 def build_feedback_summary() -> pd.DataFrame:
-    if not ALERT_TRACK_CSV.exists():
-        return pd.DataFrame()
-    try:
-        hist = pd.read_csv(ALERT_TRACK_CSV)
-    except Exception:
-        return pd.DataFrame()
-    if hist.empty or "watch_type" not in hist.columns:
-        return pd.DataFrame()
-
-    rows = []
-    working = hist.copy()
-    for watch_type in ["short", "midlong"]:
-        subset = working[working["watch_type"].astype(str) == watch_type].copy()
-        if subset.empty:
-            continue
-        if "action_label" not in subset.columns:
-            subset["action_label"] = ""
-        subset["alert_date"] = pd.to_datetime(subset.get("alert_date"), errors="coerce")
-        subset["target_return"] = subset.apply(lambda r: history_target_return(r)[0], axis=1)
-        subset = subset[subset["target_return"].notna()].copy()
-        if subset.empty:
-            continue
-        subset = subset.sort_values("alert_date", ascending=False, kind="mergesort").reset_index(drop=True)
-
-        for action_label in ["__all__"] + sorted(set(subset["action_label"].astype(str))):
-            action_df = subset if action_label == "__all__" else subset[subset["action_label"].astype(str) == action_label].copy()
-            if action_df.empty:
-                continue
-            samples = int(action_df.shape[0])
-            base_metrics = compute_feedback_score_components(
-                action_df["target_return"],
-                sample_scale=samples,
-                use_weights=False,
-            )
-            recent_window = feedback_window_size(watch_type)
-            recent_df = action_df.head(recent_window).copy()
-            recent_samples = int(recent_df.shape[0])
-            recent_metrics = compute_feedback_score_components(
-                recent_df["target_return"],
-                sample_scale=recent_samples,
-                use_weights=True,
-            )
-            feedback_score = round(
-                (base_metrics["feedback_score"] * 0.7) + (recent_metrics["feedback_score"] * 0.3),
-                2,
-            )
-            rows.append(
-                {
-                    "watch_type": watch_type,
-                    "action_label": action_label,
-                    "samples": samples,
-                    "recent_samples": recent_samples,
-                    "win_rate_pct": base_metrics["win_rate_pct"],
-                    "avg_return_pct": base_metrics["avg_return_pct"],
-                    "avg_win_return_pct": base_metrics["avg_win_return_pct"],
-                    "avg_loss_return_pct": base_metrics["avg_loss_return_pct"],
-                    "pl_ratio": base_metrics["pl_ratio"],
-                    "recent_win_rate_pct": recent_metrics["win_rate_pct"],
-                    "recent_avg_return_pct": recent_metrics["avg_return_pct"],
-                    "recent_pl_ratio": recent_metrics["pl_ratio"],
-                    "base_feedback_score": base_metrics["feedback_score"],
-                    "recent_feedback_score": recent_metrics["feedback_score"],
-                    "feedback_score": feedback_score,
-                    "feedback_label": feedback_label_from_score(feedback_score, samples),
-                }
-            )
-    summary = pd.DataFrame(rows)
-    if not summary.empty:
-        summary.to_csv(FEEDBACK_SUMMARY_CSV, index=False, encoding="utf-8-sig")
-    return summary
+    return strategy_feedback.build_feedback_summary(ALERT_TRACK_CSV, FEEDBACK_SUMMARY_CSV)
 
 
 def feedback_score_lookup(summary: pd.DataFrame, watch_type: str, action_label: str) -> tuple[float, str, float]:
-    if summary is None or summary.empty:
-        return 0.0, "樣本不足", 0.0
-    exact = summary[
-        (summary["watch_type"].astype(str) == watch_type)
-        & (summary["action_label"].astype(str) == action_label)
-    ]
-    if not exact.empty:
-        row = exact.iloc[0]
-        return float(row["feedback_score"]), str(row["feedback_label"]), float(row.get("pl_ratio", 0.0) or 0.0)
-    fallback = summary[
-        (summary["watch_type"].astype(str) == watch_type)
-        & (summary["action_label"].astype(str) == "__all__")
-    ]
-    if not fallback.empty:
-        row = fallback.iloc[0]
-        return float(row["feedback_score"]), str(row["feedback_label"]), float(row.get("pl_ratio", 0.0) or 0.0)
-    return 0.0, "樣本不足", 0.0
+    return strategy_feedback.feedback_score_lookup(summary, watch_type, action_label)
 
 
 def apply_feedback_adjustment(df: pd.DataFrame, watch_type: str) -> pd.DataFrame:
-    if df.empty:
-        return df
-    summary = build_feedback_summary()
-    out = df.copy().reset_index(drop=True)
-    out["_base_order"] = range(len(out))
-    out["action_label"] = out.apply(lambda row: feedback_action_label(row, watch_type), axis=1)
-    lookups = out["action_label"].apply(lambda action: feedback_score_lookup(summary, watch_type, action))
-    out["feedback_score"] = [score for score, _, _ in lookups]
-    out["feedback_label"] = [label for _, label, _ in lookups]
-    out["feedback_pl_ratio"] = [pl_ratio for _, _, pl_ratio in lookups]
-    out = out.sort_values(
-        by=["feedback_score", "feedback_pl_ratio", "_base_order"],
-        ascending=[False, False, True],
-        kind="mergesort",
-    ).reset_index(drop=True)
-    return out.drop(columns=["_base_order"])
+    return strategy_feedback.apply_feedback_adjustment(
+        df,
+        watch_type,
+        summary=build_feedback_summary(),
+        action_label_func=feedback_action_label,
+    )
 
 
 def dataframe_to_html(df: pd.DataFrame) -> str:

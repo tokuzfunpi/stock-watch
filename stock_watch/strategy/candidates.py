@@ -1,6 +1,17 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import pandas as pd
+
+from stock_watch.strategy import scenario as strategy_scenario
+
+
+FeedbackAdjuster = Callable[[pd.DataFrame, str], pd.DataFrame]
+
+
+def _identity_feedback_adjustment(df: pd.DataFrame, watch_type: str) -> pd.DataFrame:
+    return df
 
 
 def reorder_priority_groups(df_rank: pd.DataFrame, priority_groups: list[str] | tuple[str, ...]) -> pd.DataFrame:
@@ -129,3 +140,235 @@ def midlong_action_label(row: pd.Series) -> str:
 
 def is_midlong_buyable(row: pd.Series) -> bool:
     return midlong_action_label(row) in {"續抱", "可分批"}
+
+
+def heat_bias_message(df_rank: pd.DataFrame | None, scenario: dict) -> str:
+    if df_rank is None or df_rank.empty:
+        return ""
+    working = df_rank.head(10).copy()
+    if working.empty:
+        return ""
+    for col in ["risk_score", "ret5_pct"]:
+        if col in working.columns:
+            working[col] = pd.to_numeric(working[col], errors="coerce")
+    hot_mask = (
+        working.get("risk_score", pd.Series(dtype=float)).fillna(0).ge(5)
+        | working.get("ret5_pct", pd.Series(dtype=float)).fillna(0).ge(12)
+        | working.get("volatility_tag", pd.Series(dtype=str)).astype(str).isin(["活潑", "劇烈"])
+        | working.get("spec_risk_label", pd.Series(dtype=str)).astype(str).eq("疑似炒作風險高")
+    )
+    hot_ratio = float(hot_mask.mean()) if len(working) else 0.0
+    label = str(scenario.get("label", "") or "")
+    if hot_ratio >= 0.5:
+        return "⚠️ Heat Bias 偏強：前排標的偏熱，最近績效可能有行情抬轎，追價風險高。"
+    if hot_ratio >= 0.3 and label in {"高檔震盪盤", "強勢延伸盤"}:
+        return "⚠️ Heat Bias 提醒：前排標的已有明顯熱度，請把拉回買點與分批落袋看得比平常更重。"
+    return ""
+
+
+def effective_short_top_n(
+    df_rank: pd.DataFrame,
+    *,
+    top_n_short: int,
+    correction_short_top_n: int,
+    heat_bias_short_top_n: int,
+    market_regime: dict | None = None,
+    us_market: dict | None = None,
+) -> int:
+    top_n = int(top_n_short)
+    if market_regime is None or us_market is None or df_rank.empty:
+        return top_n
+
+    scenario = strategy_scenario.build_market_scenario(market_regime, us_market, df_rank)
+    if str(scenario.get("label", "") or "") in {"明顯修正盤", "盤中保守觀察"}:
+        return min(top_n, int(correction_short_top_n))
+
+    heat_bias = heat_bias_message(df_rank, scenario)
+    if "Heat Bias 偏強" in heat_bias:
+        return min(top_n, int(heat_bias_short_top_n))
+    return top_n
+
+
+def effective_midlong_top_n(
+    df_rank: pd.DataFrame,
+    *,
+    top_n_midlong: int,
+    correction_midlong_top_n: int,
+    market_regime: dict | None = None,
+    us_market: dict | None = None,
+) -> int:
+    top_n = int(top_n_midlong)
+    if market_regime is None or us_market is None or df_rank.empty:
+        return top_n
+
+    scenario = strategy_scenario.build_market_scenario(market_regime, us_market, df_rank)
+    if str(scenario.get("label", "") or "") in {"明顯修正盤", "盤中保守觀察"}:
+        return min(top_n, int(correction_midlong_top_n))
+    return top_n
+
+
+def select_short_term_candidates(
+    df_rank: pd.DataFrame,
+    *,
+    priority_groups: list[str] | tuple[str, ...] = (),
+    top_n_short: int,
+    correction_short_top_n: int,
+    heat_bias_short_top_n: int,
+    market_regime: dict | None = None,
+    us_market: dict | None = None,
+    feedback_adjuster: FeedbackAdjuster = _identity_feedback_adjustment,
+) -> pd.DataFrame:
+    df = rank_short_term_pool(df_rank, priority_groups)
+    if df.empty:
+        return df
+    buyable_mask = df.apply(is_short_term_buyable, axis=1)
+    candidate_limit = effective_short_top_n(
+        df_rank,
+        top_n_short=top_n_short,
+        correction_short_top_n=correction_short_top_n,
+        heat_bias_short_top_n=heat_bias_short_top_n,
+        market_regime=market_regime,
+        us_market=us_market,
+    )
+    return feedback_adjuster(df[buyable_mask].copy(), "short").head(candidate_limit).copy()
+
+
+def select_short_term_backup_candidates(
+    df_rank: pd.DataFrame,
+    *,
+    priority_groups: list[str] | tuple[str, ...] = (),
+    exclude_tickers: set[str] | None = None,
+    feedback_adjuster: FeedbackAdjuster = _identity_feedback_adjustment,
+) -> pd.DataFrame:
+    df = rank_short_term_pool(df_rank, priority_groups)
+    if not df.empty:
+        buyable_mask = df.apply(is_short_term_buyable, axis=1)
+        df = df[~buyable_mask].copy()
+    if exclude_tickers:
+        df = df[~df["ticker"].astype(str).isin(exclude_tickers)].copy()
+    return feedback_adjuster(df.copy(), "short").head(5).copy()
+
+
+def select_midlong_candidates(
+    df_rank: pd.DataFrame,
+    *,
+    priority_groups: list[str] | tuple[str, ...] = (),
+    top_n_midlong: int,
+    correction_midlong_top_n: int,
+    market_regime: dict | None = None,
+    us_market: dict | None = None,
+    exclude_tickers: set[str] | None = None,
+    feedback_adjuster: FeedbackAdjuster = _identity_feedback_adjustment,
+) -> pd.DataFrame:
+    df = rank_midlong_pool(df_rank, priority_groups)
+    if not df.empty:
+        buyable_mask = df.apply(is_midlong_buyable, axis=1)
+        df = df[buyable_mask].copy()
+    if exclude_tickers:
+        df = df[~df["ticker"].astype(str).isin(exclude_tickers)].copy()
+    candidate_limit = effective_midlong_top_n(
+        df_rank,
+        top_n_midlong=top_n_midlong,
+        correction_midlong_top_n=correction_midlong_top_n,
+        market_regime=market_regime,
+        us_market=us_market,
+    )
+    return feedback_adjuster(df.copy(), "midlong").head(candidate_limit).copy()
+
+
+def select_midlong_backup_candidates(
+    df_rank: pd.DataFrame,
+    *,
+    priority_groups: list[str] | tuple[str, ...] = (),
+    exclude_tickers: set[str] | None = None,
+    feedback_adjuster: FeedbackAdjuster = _identity_feedback_adjustment,
+) -> pd.DataFrame:
+    df = rank_midlong_pool(df_rank, priority_groups)
+    if not df.empty:
+        buyable_mask = df.apply(is_midlong_buyable, axis=1)
+        df = df[~buyable_mask].copy()
+    if exclude_tickers:
+        df = df[~df["ticker"].astype(str).isin(exclude_tickers)].copy()
+    return feedback_adjuster(df.copy(), "midlong").head(5).copy()
+
+
+def select_push_candidates(
+    df_rank: pd.DataFrame,
+    *,
+    priority_groups: list[str] | tuple[str, ...] = (),
+    top_n_short: int,
+    top_n_midlong: int,
+    correction_short_top_n: int,
+    heat_bias_short_top_n: int,
+    correction_midlong_top_n: int,
+    market_regime: dict | None = None,
+    us_market: dict | None = None,
+    feedback_adjuster: FeedbackAdjuster = _identity_feedback_adjustment,
+) -> pd.DataFrame:
+    short_candidates = select_short_term_candidates(
+        df_rank,
+        priority_groups=priority_groups,
+        top_n_short=top_n_short,
+        correction_short_top_n=correction_short_top_n,
+        heat_bias_short_top_n=heat_bias_short_top_n,
+        market_regime=market_regime,
+        us_market=us_market,
+        feedback_adjuster=feedback_adjuster,
+    )
+    midlong_candidates = select_midlong_candidates(
+        df_rank,
+        priority_groups=priority_groups,
+        top_n_midlong=top_n_midlong,
+        correction_midlong_top_n=correction_midlong_top_n,
+        market_regime=market_regime,
+        us_market=us_market,
+        feedback_adjuster=feedback_adjuster,
+    )
+    return pd.concat([short_candidates, midlong_candidates], ignore_index=True)
+
+
+def build_candidate_sets(
+    df_rank: pd.DataFrame,
+    *,
+    priority_groups: list[str] | tuple[str, ...] = (),
+    top_n_short: int,
+    top_n_midlong: int,
+    correction_short_top_n: int,
+    heat_bias_short_top_n: int,
+    correction_midlong_top_n: int,
+    market_regime: dict | None = None,
+    us_market: dict | None = None,
+    feedback_adjuster: FeedbackAdjuster = _identity_feedback_adjustment,
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    short_candidates = select_short_term_candidates(
+        df_rank,
+        priority_groups=priority_groups,
+        top_n_short=top_n_short,
+        correction_short_top_n=correction_short_top_n,
+        heat_bias_short_top_n=heat_bias_short_top_n,
+        market_regime=market_regime,
+        us_market=us_market,
+        feedback_adjuster=feedback_adjuster,
+    )
+    short_backups = select_short_term_backup_candidates(
+        df_rank,
+        priority_groups=priority_groups,
+        exclude_tickers=set(short_candidates["ticker"].astype(str)),
+        feedback_adjuster=feedback_adjuster,
+    )
+    midlong_candidates = select_midlong_candidates(
+        df_rank,
+        priority_groups=priority_groups,
+        top_n_midlong=top_n_midlong,
+        correction_midlong_top_n=correction_midlong_top_n,
+        market_regime=market_regime,
+        us_market=us_market,
+        feedback_adjuster=feedback_adjuster,
+    )
+    midlong_backups = select_midlong_backup_candidates(
+        df_rank,
+        priority_groups=priority_groups,
+        exclude_tickers=set(midlong_candidates["ticker"].astype(str)),
+        feedback_adjuster=feedback_adjuster,
+    )
+    return short_candidates, short_backups, midlong_candidates, midlong_backups
