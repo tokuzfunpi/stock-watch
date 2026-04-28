@@ -13,6 +13,7 @@ This document is the forward-looking refactor queue after single CLI consolidati
 - Daily watchlist top-level orchestration lives in `stock_watch/workflows/daily_watchlist.py`; `daily_theme_watchlist.main()` is now only a compatibility shim.
 - Shared runtime constants/logger live in `stock_watch/runtime.py`; weekly/verification no longer import the legacy daily module for `LOCAL_TZ`, `ALERT_TRACK_CSV`, or logger.
 - Daily run-state helpers live in `stock_watch/state/run_state.py`, and daily runtime metrics live in `stock_watch/workflows/runtime_metrics.py`.
+- Market/session/runtime-context helpers live in `stock_watch/workflows/market_context.py`.
 - GitHub Actions and runbooks point at the single CLI.
 - Local website no longer writes root compatibility artifact copies.
 

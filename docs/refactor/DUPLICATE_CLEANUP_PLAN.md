@@ -51,6 +51,7 @@
 - Portfolio 的 legacy 呼叫集中在 `stock_watch/workflows/portfolio.py`。
 - Runtime constants (`LOCAL_TZ`, `ALERT_TRACK_CSV`, `FEEDBACK_SUMMARY_CSV`, logger) 已移到 `stock_watch/runtime.py`，weekly/verification 不再為了這些常數 import legacy daily module。
 - Daily run-state helpers 已移到 `stock_watch/state/run_state.py`；runtime metrics rendering/writing 已移到 `stock_watch/workflows/runtime_metrics.py`。
+- Market/session/runtime-context helpers 已移到 `stock_watch/workflows/market_context.py`，包含 history freshness date、session phase、schedule delay context。
 
 下一階段才拆：
 

@@ -14,7 +14,6 @@ from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
-from zoneinfo import ZoneInfo
 
 import pandas as pd
 import requests
@@ -46,6 +45,7 @@ from stock_watch.paths import THEME_OUTDIR as STOCK_WATCH_THEME_OUTDIR
 from stock_watch.paths import VERIFICATION_OUTDIR as STOCK_WATCH_VERIFICATION_OUTDIR
 from stock_watch.runtime import ALERT_TRACK_CSV, FEEDBACK_SUMMARY_CSV, LOCAL_TZ, logger
 from stock_watch.state import run_state
+from stock_watch.workflows import market_context
 from stock_watch.workflows import runtime_metrics
 from stock_watch.signals.detect import (
     add_indicators as add_indicators_impl,
@@ -110,7 +110,7 @@ ENABLE_HISTORY_CACHE = os.getenv("ENABLE_HISTORY_CACHE", "1").strip().lower() in
 ENABLE_DISK_HISTORY_CACHE = os.getenv("ENABLE_DISK_HISTORY_CACHE", "1").strip().lower() in {"1", "true", "yes", "y"}
 HISTORY_CACHE_DIR = OUTDIR / "history_cache"
 HISTORY_CACHE_DIR.mkdir(parents=True, exist_ok=True)
-US_MARKET_TZ = ZoneInfo("America/New_York")
+US_MARKET_TZ = market_context.US_MARKET_TZ
 
 
 def realtime_quotes_enabled() -> bool:
@@ -517,7 +517,7 @@ SPECIAL_ETF_TICKERS = [
     "0050.TW",
     "00878.TW",
 ]
-SCHEDULE_TARGET_TIMES = ["08:45", "14:00"]
+SCHEDULE_TARGET_TIMES = list(market_context.DEFAULT_SCHEDULE_TARGET_TIMES)
 
 
 def alternate_taiwan_ticker(ticker: str) -> str:
@@ -631,44 +631,24 @@ def _write_history_cache(path: Path, df: pd.DataFrame) -> None:
 
 
 def _history_market(ticker: str) -> str:
-    normalized = str(ticker or "").strip().upper()
-    if normalized.endswith(".TW") or normalized.endswith(".TWO") or normalized in {"^TWII", "TWII"}:
-        return "tw"
-    return "us"
+    return market_context.history_market(ticker)
 
 
 def _business_day_on_or_before(day: pd.Timestamp) -> pd.Timestamp:
-    current = pd.Timestamp(day).normalize()
-    while current.weekday() >= 5:
-        current -= pd.Timedelta(days=1)
-    return current
+    return market_context.business_day_on_or_before(day)
 
 
 def _previous_business_day(day: pd.Timestamp) -> pd.Timestamp:
-    current = pd.Timestamp(day).normalize() - pd.Timedelta(days=1)
-    while current.weekday() >= 5:
-        current -= pd.Timedelta(days=1)
-    return current
+    return market_context.previous_business_day(day)
 
 
 def _required_history_end_date(ticker: str, now_local: Optional[datetime] = None) -> pd.Timestamp:
-    current = now_local or datetime.now(LOCAL_TZ)
-    if current.tzinfo is None:
-        current = current.replace(tzinfo=LOCAL_TZ)
-
-    market = _history_market(ticker)
-    market_tz = LOCAL_TZ if market == "tw" else US_MARKET_TZ
-    close_minutes = 13 * 60 + 35 if market == "tw" else 16 * 60 + 5
-
-    market_now = current.astimezone(market_tz)
-    market_day = pd.Timestamp(market_now.date()).normalize()
-    if market_now.weekday() >= 5:
-        return _business_day_on_or_before(market_day)
-
-    if market_now.hour * 60 + market_now.minute >= close_minutes:
-        return market_day
-
-    return _previous_business_day(market_day)
+    return market_context.required_history_end_date(
+        ticker,
+        now_local=now_local,
+        local_tz=LOCAL_TZ,
+        us_market_tz=US_MARKET_TZ,
+    )
 
 
 def _load_history_from_disk_cache(ticker: str, period: str) -> Optional[pd.DataFrame]:
@@ -1106,49 +1086,22 @@ def today_local_str() -> str:
 
 
 def runtime_trigger_label() -> str:
-    event_name = os.getenv("GITHUB_EVENT_NAME", "").strip().lower()
-    if event_name == "schedule":
-        return "Scheduled"
-    if event_name == "workflow_dispatch":
-        return "Manual"
-    if event_name:
-        return event_name
-    return "Local"
+    return market_context.runtime_trigger_label()
 
 
 def nearest_schedule_delay_minutes(now_local: datetime) -> Optional[int]:
-    candidates: list[int] = []
-    for time_str in SCHEDULE_TARGET_TIMES:
-        hour_str, minute_str = time_str.split(":")
-        target = now_local.replace(
-            hour=int(hour_str),
-            minute=int(minute_str),
-            second=0,
-            microsecond=0,
-        )
-        delta_minutes = int((now_local - target).total_seconds() // 60)
-        if delta_minutes >= 0:
-            candidates.append(delta_minutes)
-    return min(candidates) if candidates else None
+    return market_context.nearest_schedule_delay_minutes(
+        now_local,
+        schedule_target_times=tuple(SCHEDULE_TARGET_TIMES),
+    )
 
 
 def runtime_context_lines() -> list[str]:
-    now_local = datetime.now(LOCAL_TZ)
-    trigger = runtime_trigger_label()
-    lines = [
-        f"台灣時間：{now_local.strftime('%Y-%m-%d %H:%M:%S')}",
-    ]
-
-    if trigger == "Scheduled":
-        delay_minutes = nearest_schedule_delay_minutes(now_local)
-        if delay_minutes is None:
-            lines.append("排程延遲：尚未到預定時段")
-        elif delay_minutes <= 15:
-            lines.append(f"排程延遲：{delay_minutes} 分鐘內，屬正常波動")
-        else:
-            lines.append(f"排程延遲：已延後約 {delay_minutes} 分鐘")
-
-    return lines
+    return market_context.runtime_context_lines(
+        now_local=None,
+        local_tz=LOCAL_TZ,
+        schedule_target_times=tuple(SCHEDULE_TARGET_TIMES),
+    )
 
 
 def load_last_success_date() -> str:
@@ -1221,13 +1174,7 @@ def write_runtime_metrics(
 
 
 def market_session_phase(now_local: Optional[datetime] = None) -> str:
-    current = now_local or datetime.now(LOCAL_TZ)
-    minutes = current.hour * 60 + current.minute
-    if minutes < 9 * 60:
-        return "preopen"
-    if minutes < (13 * 60 + 35):
-        return "intraday"
-    return "postclose"
+    return market_context.market_session_phase(now_local=now_local, local_tz=LOCAL_TZ)
 
 
 def get_market_regime() -> dict:

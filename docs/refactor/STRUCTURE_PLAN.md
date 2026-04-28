@@ -87,6 +87,7 @@ Completed:
 - Moved daily watchlist top-level orchestration into `stock_watch/workflows/daily_watchlist.py`; `daily_theme_watchlist.main()` is now a compatibility shim.
 - Moved shared runtime constants/logger into `stock_watch/runtime.py` so weekly and verification modules do not import the legacy daily module for path/time/logger globals.
 - Moved daily run-state helpers into `stock_watch/state/run_state.py` and daily runtime metrics into `stock_watch/workflows/runtime_metrics.py`.
+- Moved market/session/runtime-context helpers into `stock_watch/workflows/market_context.py`.
 - Updated GitHub Actions and runbooks to use `python -m stock_watch`.
 - Stopped local website generation from copying artifact files into root compatibility paths.
 
@@ -95,6 +96,7 @@ Still intentionally present:
 - `daily_theme_watchlist.py`: still owns legacy helper globals and much of the strategy/report implementation.
 - `stock_watch/runtime.py`: owns shared runtime constants/logger used across daily, weekly, and verification workflows.
 - `stock_watch/state/run_state.py`: owns last-state, success-signature, and rank-state helpers.
+- `stock_watch/workflows/market_context.py`: owns history freshness dates, market session phase, and schedule-delay context helpers.
 - `verification/cli/*.py`: retained as subcommand adapters for `stock_watch.cli.main`.
 - `runs/`: retained as local state/report/cache root; individual files are classified in `DUPLICATE_CLEANUP_PLAN.md`.
 

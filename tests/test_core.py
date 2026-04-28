@@ -20,6 +20,7 @@ from stock_watch.signals.detect import (
     detect_row as module_detect_row,
     grade_signal as module_grade_signal,
 )
+from stock_watch.workflows import market_context
 
 from daily_theme_watchlist import (
     add_indicators,
@@ -340,22 +341,40 @@ class DetectRowTests(unittest.TestCase):
         preopen = datetime(2026, 4, 24, 8, 30, tzinfo=dtw.LOCAL_TZ)
         postclose = datetime(2026, 4, 24, 14, 0, tzinfo=dtw.LOCAL_TZ)
 
-        self.assertEqual(dtw._required_history_end_date("2330.TW", preopen), pd.Timestamp("2026-04-23"))
-        self.assertEqual(dtw._required_history_end_date("2330.TW", postclose), pd.Timestamp("2026-04-24"))
+        self.assertEqual(
+            market_context.required_history_end_date("2330.TW", now_local=preopen, local_tz=dtw.LOCAL_TZ),
+            pd.Timestamp("2026-04-23"),
+        )
+        self.assertEqual(
+            market_context.required_history_end_date("2330.TW", now_local=postclose, local_tz=dtw.LOCAL_TZ),
+            pd.Timestamp("2026-04-24"),
+        )
 
     def test_required_history_end_date_uses_us_session(self) -> None:
         before_us_close = datetime(2026, 4, 24, 3, 0, tzinfo=dtw.LOCAL_TZ)
         after_us_close = datetime(2026, 4, 24, 9, 0, tzinfo=dtw.LOCAL_TZ)
 
-        self.assertEqual(dtw._required_history_end_date("NVDA", before_us_close), pd.Timestamp("2026-04-22"))
-        self.assertEqual(dtw._required_history_end_date("NVDA", after_us_close), pd.Timestamp("2026-04-23"))
+        self.assertEqual(
+            market_context.required_history_end_date("NVDA", now_local=before_us_close, local_tz=dtw.LOCAL_TZ),
+            pd.Timestamp("2026-04-22"),
+        )
+        self.assertEqual(
+            market_context.required_history_end_date("NVDA", now_local=after_us_close, local_tz=dtw.LOCAL_TZ),
+            pd.Timestamp("2026-04-23"),
+        )
 
     def test_required_history_end_date_rolls_weekend_to_previous_business_day(self) -> None:
         saturday = datetime(2026, 4, 25, 15, 0, tzinfo=dtw.LOCAL_TZ)
         sunday_evening_taipei = datetime(2026, 4, 26, 22, 0, tzinfo=dtw.LOCAL_TZ)
 
-        self.assertEqual(dtw._required_history_end_date("2330.TW", saturday), pd.Timestamp("2026-04-24"))
-        self.assertEqual(dtw._required_history_end_date("SOXX", sunday_evening_taipei), pd.Timestamp("2026-04-24"))
+        self.assertEqual(
+            market_context.required_history_end_date("2330.TW", now_local=saturday, local_tz=dtw.LOCAL_TZ),
+            pd.Timestamp("2026-04-24"),
+        )
+        self.assertEqual(
+            market_context.required_history_end_date("SOXX", now_local=sunday_evening_taipei, local_tz=dtw.LOCAL_TZ),
+            pd.Timestamp("2026-04-24"),
+        )
 
     def test_get_indicator_frame_reuses_cached_indicator_dataframe(self) -> None:
         dates = pd.date_range("2025-01-01", periods=260, freq="B")
