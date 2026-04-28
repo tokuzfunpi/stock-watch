@@ -4,14 +4,14 @@
 
 ## 檔案與用途
 
-Stable runbook commands now use `python -m stock_watch verification ...`; root `verification/*.py` files are compatibility wrappers.
+Stable runbook commands now use `python -m stock_watch verification ...`; root `verification/*.py` compatibility wrappers have been removed.
 Implementation code is now split by role:
 
 - `verification/cli/`: thin module wrappers for `python3.11 -m verification.cli...`
 - `verification/reports/`: report/snapshot builders and analysis renderers
 - `verification/workflows/`: orchestration and data-update workflows
 
-- `verify_recommendations.py`
+- `python -m stock_watch verification snapshot`
   - 目的：用 `runs/theme_watchlist_daily/daily_rank.csv` 的資料，產出當日短線/中線推薦驗算報告，並把推薦清單存成快照。
   - 實作：`verification/reports/verify_recommendations.py`
   - 輸出：
@@ -19,22 +19,22 @@ Implementation code is now split by role:
     - `runs/verification/watchlist_daily/reco_snapshots.csv`
     - `runs/verification/watchlist_daily/codex_context.json`（給 Codex/人工分析用的結構化 JSON）
     - `runs/verification/watchlist_daily/contexts/codex_context_*.json`（每次執行留一份）
-- `evaluate_recommendations.py`
+- `python -m stock_watch verification evaluate`
   - 目的：把 `reco_snapshots.csv` 的推薦，對照未來 N 個交易日的收盤價，回填 outcome（報酬% / 狀態）。
   - 實作：`verification/workflows/evaluate_recommendations.py`
   - 輸出：`runs/verification/watchlist_daily/reco_outcomes.csv`
   - 注意：需要網路能抓到 yfinance；抓不到會寫入 `status`（best effort）。
-- `summarize_outcomes.py`
+- `python -m stock_watch verification summary`
   - 目的：把 `reco_outcomes.csv` 彙整成可讀的勝率/平均報酬/樣本數報告。
   - 實作：`verification/reports/summarize_outcomes.py`
   - 輸出：`runs/verification/watchlist_daily/outcomes_summary.md`
-- `feedback_weight_sensitivity.py`
+- `python -m stock_watch verification feedback`
   - 目的：離線比較 `feedback_score` 的 `base/recent` 權重組合，不改 production 預設。
   - 實作：`verification/reports/feedback_weight_sensitivity.py`
   - 輸出：
     - `runs/verification/watchlist_daily/feedback_weight_sensitivity.md`
     - `runs/verification/watchlist_daily/feedback_weight_sensitivity.csv`
-- `run_daily_verification.py`
+- `python -m stock_watch verification daily`
   - 目的：把 `verify -> evaluate -> summarize -> feedback sensitivity` 串成單一入口，並支援 `盤前 / 盤後 / 全流程` 模式。
   - 實作：`verification/workflows/run_daily_verification.py`
   - 適合：想用同一支指令跑早上快照、收盤後回填，或完整 workflow 時使用。
@@ -44,9 +44,9 @@ Implementation code is now split by role:
 
 ## 建議執行時機（台灣時間）
 
-- 08:45：`verify_recommendations.py`（把「今天早上推薦」定格成快照；會強制補滿短線/中線各 5 檔，低於門檻會標示 `below_threshold`）
-- 14:00（收盤後）：`evaluate_recommendations.py`（回填 1/5/20 天等 horizon 的結果）
-- 任何時候：`summarize_outcomes.py`（產出彙整報告）
+- 08:45：`python -m stock_watch verification snapshot`（把「今天早上推薦」定格成快照；會強制補滿短線/中線各 5 檔，低於門檻會標示 `below_threshold`）
+- 14:00（收盤後）：`python -m stock_watch verification evaluate`（回填 1/5/20 天等 horizon 的結果）
+- 任何時候：`python -m stock_watch verification summary`（產出彙整報告）
 
 ## 使用方式（在 repo root 執行）
 
@@ -97,10 +97,10 @@ python3.11 -m stock_watch verification daily --horizons 1,5,20 --weights 70:30,8
 python3.11 -m stock_watch verification daily --mode postclose --skip-feedback
 ```
 
-`run_daily_verification.py` 的 mode 規則：
+`python -m stock_watch verification daily` 的 mode 規則：
 
-- `--mode preopen`：只跑 `verify_recommendations.py`
-- `--mode postclose`：跑 `evaluate_recommendations.py`、`summarize_outcomes.py`、`feedback_weight_sensitivity.py`
+- `--mode preopen`：只跑 snapshot
+- `--mode postclose`：跑 evaluate、summary、feedback sensitivity
 - `--mode full`：從 `verify` 一路跑到 `feedback`（預設）
 - `--skip-*` 旗標仍然有效，會在 mode 的基礎上再跳過指定步驟
 - 同一天重跑 `preopen` 會以 `signal_date + watch_type + ticker` 覆蓋 snapshot，不再重複累積同一筆推薦
@@ -148,7 +148,7 @@ python3.11 -m stock_watch verification backfill --since 2026-04-15 --until 2026-
 
 ## GitHub Actions（手動）
 
-Repo 有一個手動 workflow 會跑 `verify_recommendations.py` 並上傳 artifact：
+Repo 有一個手動 workflow 會跑 `python -m stock_watch verification snapshot` 並上傳 artifact：
 
 - `.github/workflows/verify-recommendations.yml`
 

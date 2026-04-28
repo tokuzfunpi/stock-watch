@@ -150,4 +150,4 @@ Weekly / maintenance：
 
 ## 舊入口狀態
 
-`run_local_daily.py`、`run_weekly_review.py`、`run_local_doctor.py`、`run_local_housekeeping.py`、`run_local_website.py` 仍是相容 wrapper；新操作請優先使用 `python3 -m stock_watch ...`。
+Root-level local wrappers have been removed. Use `python3 -m stock_watch ...` for local workflows and `python3 -m stock_watch verification ...` for verification workflows.
