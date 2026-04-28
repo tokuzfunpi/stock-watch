@@ -16,9 +16,9 @@ if str(REPO_ROOT) not in sys.path:
 
 from stock_watch.paths import THEME_OUTDIR
 from stock_watch.paths import VERIFICATION_OUTDIR
+from stock_watch.runtime import LOCAL_TZ
 from daily_theme_watchlist import (
     build_market_scenario,
-    LOCAL_TZ,
     CONFIG,
     get_market_regime,
     get_us_market_reference,

@@ -5,7 +5,7 @@ from datetime import datetime
 
 import pandas as pd
 
-from daily_theme_watchlist import LOCAL_TZ
+from stock_watch.runtime import LOCAL_TZ
 from verification.reports.feedback_weight_sensitivity import (
     build_feedback_summary_for_weights,
     build_markdown,

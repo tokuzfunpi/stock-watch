@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from daily_theme_watchlist import LOCAL_TZ
+from stock_watch.runtime import LOCAL_TZ
 from verification.reports.verify_recommendations import _load_outcomes_aggregate
 from verification.reports.verify_recommendations import build_verification_report_markdown
 from verification.reports.verify_recommendations import upsert_csv_with_existing_header

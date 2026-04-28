@@ -10,26 +10,27 @@ This document is the forward-looking refactor queue after single CLI consolidati
 - `portfolio_check.py` removed.
 - Portfolio-only workflow runs through `stock_watch.cli.local_daily.run_portfolio_step()`.
 - `stock_watch.cli.local_daily` delegates watchlist and portfolio work to `stock_watch/workflows/` instead of importing `daily_theme_watchlist.py` directly.
+- Daily watchlist top-level orchestration lives in `stock_watch/workflows/daily_watchlist.py`; `daily_theme_watchlist.main()` is now only a compatibility shim.
+- Shared runtime constants/logger live in `stock_watch/runtime.py`; weekly/verification no longer import the legacy daily module for `LOCAL_TZ`, `ALERT_TRACK_CSV`, or logger.
 - GitHub Actions and runbooks point at the single CLI.
 - Local website no longer writes root compatibility artifact copies.
 
 ## Current constraints
 
-- `daily_theme_watchlist.py` still owns the watchlist orchestration layer and several legacy helper globals.
+- `daily_theme_watchlist.py` still owns several strategy/report/state implementation details and workflow helper functions.
 - Verification is already split into `verification/cli/`, `verification/reports/`, and `verification/workflows/`; do not fold it back into the daily script.
 - `runs/theme_watchlist_daily/daily_rank.csv`, `runs/verification/watchlist_daily/reco_snapshots.csv`, and `runs/verification/watchlist_daily/reco_outcomes.csv` are canonical local state, not disposable duplicates.
 - Cache/log/report files under `runs/` should be handled by regeneration or housekeeping, not ad-hoc deletion.
 
 ## Next phases
 
-### Phase 1: Extract watchlist workflow
+### Phase 1: Extract workflow dependencies
 
-Objective: make `python -m stock_watch daily` stop depending on `daily_theme_watchlist.py` as the orchestration module.
+Objective: make `stock_watch/workflows/daily_watchlist.py` depend on package modules instead of `daily_theme_watchlist.py` helpers/globals.
 
 Tasks:
 
-- Replace the temporary `stock_watch/workflows/daily_watchlist.py` adapter with native orchestration.
-- Move the top-level daily pipeline from `daily_theme_watchlist.main()` into that workflow.
+- Move strategy/report/state/helper dependencies used by `stock_watch/workflows/daily_watchlist.py` into package modules.
 - Keep output files and schemas identical.
 - Keep `daily_theme_watchlist.py` importable only as a temporary legacy helper holder.
 

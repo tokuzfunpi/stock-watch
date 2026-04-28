@@ -45,6 +45,7 @@ from stock_watch.reports.portfolio import (
 from stock_watch.state.alert_tracking import upsert_alert_tracking as upsert_alert_tracking_impl
 from stock_watch.paths import THEME_OUTDIR as STOCK_WATCH_THEME_OUTDIR
 from stock_watch.paths import VERIFICATION_OUTDIR as STOCK_WATCH_VERIFICATION_OUTDIR
+from stock_watch.runtime import ALERT_TRACK_CSV, FEEDBACK_SUMMARY_CSV, LOCAL_TZ, logger
 from stock_watch.signals.detect import (
     add_indicators as add_indicators_impl,
     apply_group_weight as apply_group_weight_impl,
@@ -83,8 +84,6 @@ PORTFOLIO_REPORT_MD = OUTDIR / "portfolio_report.md"
 PORTFOLIO_REPORT_HTML = OUTDIR / "portfolio_report.html"
 RUNTIME_METRICS_MD = OUTDIR / "runtime_metrics.md"
 RUNTIME_METRICS_JSON = OUTDIR / "runtime_metrics.json"
-ALERT_TRACK_CSV = OUTDIR / "alert_tracking.csv"
-FEEDBACK_SUMMARY_CSV = OUTDIR / "feedback_summary.csv"
 SHADOW_OPEN_NOT_CHASE_CSV = OUTDIR / "shadow_open_not_chase_candidates.csv"
 SHADOW_OPEN_NOT_CHASE_MD = OUTDIR / "shadow_open_not_chase.md"
 SUCCESS_FILE = OUTDIR / "last_success_date.txt"
@@ -96,9 +95,7 @@ LOG_DIR.mkdir(parents=True, exist_ok=True)
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "").strip()
 FINMIND_TOKEN = os.getenv("FINMIND_TOKEN", "").strip()
 HTTP_TIMEOUT = int(os.getenv("HTTP_TIMEOUT", "20"))
-LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 FORCE_RUN = os.getenv("FORCE_RUN", "").strip().lower() in {"1", "true", "yes", "y"}
-LOCAL_TZ = ZoneInfo(os.getenv("LOCAL_TZ", "Asia/Taipei"))
 STOCK_DATA_PROVIDER = os.getenv("STOCK_DATA_PROVIDER", "yahoo").strip().lower()
 STOCK_DATA_FALLBACKS = [
     item.strip().lower()
@@ -277,12 +274,6 @@ def load_config(path: Path) -> AppConfig:
 
 
 CONFIG = load_config(CONFIG_PATH)
-
-logging.basicConfig(
-    level=getattr(logging, LOG_LEVEL, logging.INFO),
-    format="%(asctime)s | %(levelname)s | %(message)s",
-)
-logger = logging.getLogger("theme_watchlist")
 
 
 def build_session() -> requests.Session:
@@ -3448,134 +3439,9 @@ def parse_cli_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def main(*, force_run: bool | None = None) -> int:
-    main_started = time.perf_counter()
-    effective_force_run = FORCE_RUN if force_run is None else bool(force_run)
-    for key in _CACHE_STATS:
-        _CACHE_STATS[key] = 0
-    step_timings: dict[str, float] = {}
-    warnings: list[str] = []
-    try:
-        if (
-            not effective_force_run
-            and load_last_success_date() == today_local_str()
-            and load_last_success_signature() == current_run_signature()
-        ):
-            logger.info("Already completed successfully for %s with same code/config. Skip duplicate run.", today_local_str())
-            return 0
+    from stock_watch.workflows.daily_watchlist import run_daily_watchlist
 
-        try:
-            market_regime = _timed_call(step_timings, "market_regime", get_market_regime)
-        except Exception as exc:
-            warnings.append(f"market_regime: {exc}")
-            logger.exception("Market regime fetch failed (best effort): %s", exc)
-            market_regime = {"comment": "加權指數資料抓不到（best effort）", "is_bullish": True}
-
-        try:
-            us_market = _timed_call(step_timings, "us_market", get_us_market_reference)
-        except Exception as exc:
-            warnings.append(f"us_market: {exc}")
-            logger.exception("US market reference failed (best effort): %s", exc)
-            us_market = {"summary": "美股參考暫時抓不到（best effort）。", "rows": []}
-
-        initial_scenario = build_market_scenario(market_regime, us_market)
-        adjusted_strat = adjust_strategy_by_scenario(CONFIG.strategy, initial_scenario)
-        _timed_call(step_timings, "cache_warmup", prewarm_watchlist_indicator_cache)
-        df_rank = _timed_call(step_timings, "watchlist", run_watchlist, strat=adjusted_strat)
-        bt_steady, bt_attack = _timed_call(step_timings, "backtest", run_backtest_dual)
-
-        logger.info("=== 今日排行榜 ===\n%s", df_rank.to_string(index=False))
-        logger.info("Market regime: %s", market_regime["comment"])
-
-        short_candidates, short_backups, midlong_candidates, _ = _timed_call(
-            step_timings,
-            "candidate_sets",
-            build_candidate_sets,
-            df_rank,
-            market_regime,
-            us_market,
-        )
-        market_scenario = build_market_scenario(market_regime, us_market, df_rank)
-        _timed_call(step_timings, "reports", save_reports, df_rank, market_regime, bt_steady, bt_attack, us_market)
-        try:
-            _timed_call(
-                step_timings,
-                "shadow_observation",
-                save_open_not_chase_shadow_observations,
-                df_rank,
-                market_regime,
-                us_market,
-            )
-        except Exception as exc:
-            warnings.append(f"shadow_observation: {exc}")
-            logger.exception("Shadow observation update failed (best effort): %s", exc)
-        try:
-            _timed_call(
-                step_timings,
-                "alert_tracking",
-                upsert_alert_tracking,
-                short_candidates,
-                midlong_candidates,
-                market_scenario,
-            )
-        except Exception as exc:
-            warnings.append(f"alert_tracking: {exc}")
-            logger.exception("Alert tracking update failed (best effort): %s", exc)
-        logger.info(
-            "Adaptive strategy applied (%s): %s",
-            initial_scenario["label"],
-            " | ".join(line.removeprefix("- ") for line in strategy_preview_lines(CONFIG.strategy, initial_scenario)),
-        )
-
-        current_state = build_state(df_rank, market_regime)
-        last_state = load_last_state()
-
-        should_send = _timed_call(
-            step_timings,
-            "should_alert",
-            should_alert,
-            df_rank,
-            current_state,
-            last_state,
-            market_regime,
-            us_market,
-        )
-        if should_send:
-            def _send_notifications() -> None:
-                send_telegram_message(build_macro_message(market_regime, us_market, df_rank))
-                send_telegram_message(build_short_term_message(df_rank, market_regime, us_market))
-                send_telegram_message(build_early_gem_message(df_rank, market_regime, us_market))
-                send_telegram_message(build_midlong_message(df_rank, market_regime, us_market))
-
-            _timed_call(step_timings, "notifications", _send_notifications)
-            logger.info("Notification sent.")
-        else:
-            logger.info("No notification sent.")
-
-        _timed_call(step_timings, "persist_state", save_last_state, current_state)
-        _timed_call(step_timings, "persist_success", save_last_success_date, today_local_str())
-        write_runtime_metrics(
-            status="ok",
-            step_timings=step_timings,
-            warnings=warnings,
-            wall_seconds=time.perf_counter() - main_started,
-        )
-        logger.info("Runtime timings: %s", ", ".join(f"{name}={seconds:.3f}s" for name, seconds in step_timings.items()))
-
-        if warnings:
-            logger.warning("Best effort warnings: %s", " | ".join(warnings))
-        return 0
-    except Exception as exc:
-        err_msg = f"Watchlist job failed: {exc}"
-        logger.exception(err_msg)
-        warnings.append(err_msg)
-        write_runtime_metrics(
-            status="failed",
-            step_timings=step_timings,
-            warnings=warnings,
-            wall_seconds=time.perf_counter() - main_started,
-        )
-        send_telegram_message(err_msg)
-        return 1
+    return run_daily_watchlist(force_run=force_run)
 
 
 if __name__ == "__main__":

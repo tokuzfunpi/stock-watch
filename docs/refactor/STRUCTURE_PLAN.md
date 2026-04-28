@@ -84,12 +84,15 @@ Completed:
 - Removed root verification command wrappers.
 - Removed `portfolio_check.py` and moved portfolio-only execution into `stock_watch.cli.local_daily`.
 - Moved legacy watchlist/portfolio calls behind `stock_watch/workflows/` adapters so the daily CLI no longer imports `daily_theme_watchlist.py` directly.
+- Moved daily watchlist top-level orchestration into `stock_watch/workflows/daily_watchlist.py`; `daily_theme_watchlist.main()` is now a compatibility shim.
+- Moved shared runtime constants/logger into `stock_watch/runtime.py` so weekly and verification modules do not import the legacy daily module for path/time/logger globals.
 - Updated GitHub Actions and runbooks to use `python -m stock_watch`.
 - Stopped local website generation from copying artifact files into root compatibility paths.
 
 Still intentionally present:
 
-- `daily_theme_watchlist.py`: still owns coupled watchlist orchestration and legacy helper globals.
+- `daily_theme_watchlist.py`: still owns legacy helper globals and much of the strategy/report/state implementation.
+- `stock_watch/runtime.py`: owns shared runtime constants/logger used across daily, weekly, and verification workflows.
 - `verification/cli/*.py`: retained as subcommand adapters for `stock_watch.cli.main`.
 - `runs/`: retained as local state/report/cache root; individual files are classified in `DUPLICATE_CLEANUP_PLAN.md`.
 
@@ -97,7 +100,7 @@ Still intentionally present:
 
 The next safe migration is not more wrapper deletion; it is splitting `daily_theme_watchlist.py`:
 
-1. Replace the `stock_watch/workflows/` legacy adapters with native workflow orchestration.
-2. Move remaining report/state/helper logic into package modules.
+1. Move remaining strategy/report/state/helper logic into package modules.
+2. Make `stock_watch/workflows/daily_watchlist.py` depend on package modules instead of legacy globals.
 3. Keep `python -m stock_watch daily` calling package workflows directly.
 4. Delete or shrink `daily_theme_watchlist.py` after parity tests pass.

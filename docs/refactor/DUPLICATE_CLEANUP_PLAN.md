@@ -34,24 +34,27 @@
 保留的內部實作入口：
 
 - `stock_watch/cli/*.py`：single CLI dispatch 的目標模組。
-- `stock_watch/workflows/daily_watchlist.py`、`stock_watch/workflows/portfolio.py`：daily CLI 呼叫的 package workflow adapters。
+- `stock_watch/workflows/daily_watchlist.py`：daily watchlist orchestration 的 package workflow。
+- `stock_watch/workflows/portfolio.py`：portfolio workflow 與目前的 legacy wiring。
 - `verification/cli/*.py`：verification subcommands 的 module wrappers。
 - `verification/reports/*.py`、`verification/workflows/*.py`：真正的 implementation modules。
 
 ## 2) Still-coupled legacy module
 
-`daily_theme_watchlist.py` 目前不是「可直接刪的 duplicate」。它仍是 watchlist/ranking orchestration 與多個共用 helper 的主要來源。
+`daily_theme_watchlist.py` 目前不是「可直接刪的 duplicate」。它已不再擁有 daily watchlist 的 top-level orchestration，但仍是 ranking/strategy/report/state helper 與多個共用 globals 的主要來源。
 
 已完成的下一步：
 
 - `stock_watch.cli.local_daily` 不再直接 import `daily_theme_watchlist.py`。
-- Watchlist 與 portfolio 的 legacy 呼叫集中在 `stock_watch/workflows/` adapters。
+- Watchlist 的 top-level orchestration 已移到 `stock_watch/workflows/daily_watchlist.py`。
+- `daily_theme_watchlist.main()` 現在只是相容入口，委派到 package workflow。
+- Portfolio 的 legacy 呼叫集中在 `stock_watch/workflows/portfolio.py`。
+- Runtime constants (`LOCAL_TZ`, `ALERT_TRACK_CSV`, `FEEDBACK_SUMMARY_CSV`, logger) 已移到 `stock_watch/runtime.py`，weekly/verification 不再為了這些常數 import legacy daily module。
 
 下一階段才拆：
 
-- 把 watchlist orchestration 從 adapter 委派，真正搬進 `stock_watch/workflows/`。
-- 把仍留在 `daily_theme_watchlist.py` 的 report/state/helper 邏輯抽到 package modules。
-- 等 workflow adapters 不再 import `daily_theme_watchlist.py` 時，再刪或改成內部相容層。
+- 把仍留在 `daily_theme_watchlist.py` 的 strategy/report/state/helper 邏輯抽到 package modules。
+- 等 package workflows 不再 import `daily_theme_watchlist.py` helpers/globals 時，再刪或改成內部相容層。
 
 ## 3) Generated artifact duplicates
 

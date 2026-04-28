@@ -12,7 +12,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from stock_watch.paths import VERIFICATION_OUTDIR
-from daily_theme_watchlist import ALERT_TRACK_CSV, LOCAL_TZ
+from stock_watch.runtime import ALERT_TRACK_CSV, LOCAL_TZ
 from stock_watch.signals import apply_signal_template_labels
 from stock_watch.signals import build_speculative_risk_profile
 

@@ -7,10 +7,10 @@ from pathlib import Path
 
 import pandas as pd
 
-from daily_theme_watchlist import ALERT_TRACK_CSV, LOCAL_TZ
 from stock_watch.paths import REPO_ROOT
 from stock_watch.paths import THEME_OUTDIR
 from stock_watch.paths import VERIFICATION_OUTDIR
+from stock_watch.runtime import ALERT_TRACK_CSV, LOCAL_TZ
 from verification.reports.summarize_outcomes import summarize_atr_band_checkpoints
 from verification.reports.summarize_outcomes import summarize_outcomes
 
