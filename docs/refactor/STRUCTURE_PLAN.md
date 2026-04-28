@@ -91,6 +91,7 @@ Completed:
 - Moved market scenario classification and scenario-adjusted strategy preview into `stock_watch/strategy/scenario.py`.
 - Moved candidate ranking pools, short/midlong action labels, cap selection, and candidate-set assembly into `stock_watch/strategy/candidates.py`.
 - Moved feedback scoring/weighting helpers into `stock_watch/strategy/feedback.py`.
+- Moved message formatting helpers into `stock_watch/reports/messages.py`.
 - Updated GitHub Actions and runbooks to use `python -m stock_watch`.
 - Stopped local website generation from copying artifact files into root compatibility paths.
 
@@ -102,6 +103,7 @@ Still intentionally present:
 - `stock_watch/strategy/scenario.py`: owns market scenario classification and scenario-adjusted strategy preview.
 - `stock_watch/strategy/candidates.py`: owns candidate ranking pools, caps, short/midlong action labels, and candidate-set assembly.
 - `stock_watch/strategy/feedback.py`: owns feedback summary scoring, weighting windows, lookup, and candidate feedback adjustment.
+- `stock_watch/reports/messages.py`: owns reusable Telegram/report message formatting helpers.
 - `stock_watch/workflows/market_context.py`: owns history freshness dates, market session phase, and schedule-delay context helpers.
 - `verification/cli/*.py`: retained as subcommand adapters for `stock_watch.cli.main`.
 - `runs/`: retained as local state/report/cache root; individual files are classified in `DUPLICATE_CLEANUP_PLAN.md`.
@@ -110,7 +112,7 @@ Still intentionally present:
 
 The next safe migration is not more wrapper deletion; it is splitting `daily_theme_watchlist.py`:
 
-1. Move remaining message/report helper logic into package modules.
+1. Move remaining full Telegram message builders and report wiring into package modules.
 2. Make `stock_watch/workflows/daily_watchlist.py` depend on package modules instead of legacy globals.
 3. Keep `python -m stock_watch daily` calling package workflows directly.
 4. Delete or shrink `daily_theme_watchlist.py` after parity tests pass.
