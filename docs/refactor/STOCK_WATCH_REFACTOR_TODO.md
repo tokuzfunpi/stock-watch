@@ -12,12 +12,13 @@ This document is the forward-looking refactor queue after single CLI consolidati
 - `stock_watch.cli.local_daily` delegates watchlist and portfolio work to `stock_watch/workflows/` instead of importing `daily_theme_watchlist.py` directly.
 - Daily watchlist top-level orchestration lives in `stock_watch/workflows/daily_watchlist.py`; `daily_theme_watchlist.main()` is now only a compatibility shim.
 - Shared runtime constants/logger live in `stock_watch/runtime.py`; weekly/verification no longer import the legacy daily module for `LOCAL_TZ`, `ALERT_TRACK_CSV`, or logger.
+- Daily run-state helpers live in `stock_watch/state/run_state.py`, and daily runtime metrics live in `stock_watch/workflows/runtime_metrics.py`.
 - GitHub Actions and runbooks point at the single CLI.
 - Local website no longer writes root compatibility artifact copies.
 
 ## Current constraints
 
-- `daily_theme_watchlist.py` still owns several strategy/report/state implementation details and workflow helper functions.
+- `daily_theme_watchlist.py` still owns several strategy/report implementation details and workflow helper functions.
 - Verification is already split into `verification/cli/`, `verification/reports/`, and `verification/workflows/`; do not fold it back into the daily script.
 - `runs/theme_watchlist_daily/daily_rank.csv`, `runs/verification/watchlist_daily/reco_snapshots.csv`, and `runs/verification/watchlist_daily/reco_outcomes.csv` are canonical local state, not disposable duplicates.
 - Cache/log/report files under `runs/` should be handled by regeneration or housekeeping, not ad-hoc deletion.
@@ -30,7 +31,7 @@ Objective: make `stock_watch/workflows/daily_watchlist.py` depend on package mod
 
 Tasks:
 
-- Move strategy/report/state/helper dependencies used by `stock_watch/workflows/daily_watchlist.py` into package modules.
+- Move strategy/report/helper dependencies used by `stock_watch/workflows/daily_watchlist.py` into package modules.
 - Keep output files and schemas identical.
 - Keep `daily_theme_watchlist.py` importable only as a temporary legacy helper holder.
 

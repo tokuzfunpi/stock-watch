@@ -3,7 +3,6 @@ from __future__ import annotations
 import argparse
 import csv
 import contextlib
-import hashlib
 import io
 import json
 import logging
@@ -46,6 +45,8 @@ from stock_watch.state.alert_tracking import upsert_alert_tracking as upsert_ale
 from stock_watch.paths import THEME_OUTDIR as STOCK_WATCH_THEME_OUTDIR
 from stock_watch.paths import VERIFICATION_OUTDIR as STOCK_WATCH_VERIFICATION_OUTDIR
 from stock_watch.runtime import ALERT_TRACK_CSV, FEEDBACK_SUMMARY_CSV, LOCAL_TZ, logger
+from stock_watch.state import run_state
+from stock_watch.workflows import runtime_metrics
 from stock_watch.signals.detect import (
     add_indicators as add_indicators_impl,
     apply_group_weight as apply_group_weight_impl,
@@ -1093,18 +1094,15 @@ def save_daily_rank(rows: List[dict], prev_rank: Optional[pd.DataFrame]) -> pd.D
 
 
 def load_last_state() -> str:
-    if not CONFIG.state_enabled or not STATE_FILE.exists():
-        return ""
-    return STATE_FILE.read_text(encoding="utf-8").strip()
+    return run_state.load_last_state(state_file=STATE_FILE, state_enabled=CONFIG.state_enabled)
 
 
 def save_last_state(state: str) -> None:
-    if CONFIG.state_enabled:
-        STATE_FILE.write_text(state, encoding="utf-8")
+    run_state.save_last_state(state_file=STATE_FILE, state_enabled=CONFIG.state_enabled, state=state)
 
 
 def today_local_str() -> str:
-    return datetime.now(LOCAL_TZ).strftime("%Y-%m-%d")
+    return run_state.today_local_str(local_tz=LOCAL_TZ)
 
 
 def runtime_trigger_label() -> str:
@@ -1154,43 +1152,22 @@ def runtime_context_lines() -> list[str]:
 
 
 def load_last_success_date() -> str:
-    if not SUCCESS_FILE.exists():
-        return ""
-    raw = SUCCESS_FILE.read_text(encoding="utf-8").strip()
-    if not raw:
-        return ""
-    try:
-        data = json.loads(raw)
-        return str(data.get("date", ""))
-    except json.JSONDecodeError:
-        return raw
+    return run_state.load_last_success_date(success_file=SUCCESS_FILE)
 
 
 def current_run_signature() -> str:
-    hasher = hashlib.sha256()
-    for path in [Path(__file__), CONFIG_PATH, WATCHLIST_CSV]:
-        hasher.update(str(path).encode("utf-8"))
-        hasher.update(path.read_bytes())
-    return hasher.hexdigest()[:16]
+    return run_state.current_run_signature([Path(__file__), CONFIG_PATH, WATCHLIST_CSV])
 
 
 def load_last_success_signature() -> str:
-    if not SUCCESS_FILE.exists():
-        return ""
-    raw = SUCCESS_FILE.read_text(encoding="utf-8").strip()
-    if not raw:
-        return ""
-    try:
-        data = json.loads(raw)
-        return str(data.get("signature", ""))
-    except json.JSONDecodeError:
-        return ""
+    return run_state.load_last_success_signature(success_file=SUCCESS_FILE)
 
 
 def save_last_success_date(success_date: str) -> None:
-    SUCCESS_FILE.write_text(
-        json.dumps({"date": success_date, "signature": current_run_signature()}, ensure_ascii=False),
-        encoding="utf-8",
+    run_state.save_last_success_date(
+        success_file=SUCCESS_FILE,
+        success_date=success_date,
+        signature=current_run_signature(),
     )
 
 
@@ -1212,55 +1189,15 @@ def build_runtime_metrics_markdown(
     backtest_meta: dict[str, object],
     wall_seconds: float | None = None,
 ) -> str:
-    lines = [
-        "# Runtime Metrics",
-        f"- Generated: {generated_at}",
-        f"- Status: `{status}`",
-        "",
-        "## Steps",
-        "",
-        "| Step | Seconds |",
-        "| --- | --- |",
-    ]
-    for name, seconds in step_timings.items():
-        lines.append(f"| {name} | {seconds:.4f} |")
-    total = sum(step_timings.values())
-    lines.extend(["", f"- Total tracked seconds: `{total:.3f}`"])
-    if wall_seconds is not None:
-        lines.append(f"- Wall-clock seconds: `{wall_seconds:.3f}`")
-    lines.extend(
-        [
-            "",
-            "## Cache",
-            "",
-            (
-                f"- History cache: `{cache_stats.get('history_hit', 0)}` exact hit / "
-                f"`{cache_stats.get('history_disk_hit', 0)}` disk hit / "
-                f"`{cache_stats.get('history_superset_hit', 0)}` superset hit / "
-                f"`{cache_stats.get('history_miss', 0)}` miss"
-            ),
-            (
-                f"- Indicator cache: `{cache_stats.get('indicator_hit', 0)}` exact hit / "
-                f"`{cache_stats.get('indicator_superset_hit', 0)}` superset hit / "
-                f"`{cache_stats.get('indicator_miss', 0)}` miss"
-            ),
-        ]
+    return runtime_metrics.build_runtime_metrics_markdown(
+        generated_at=generated_at,
+        status=status,
+        step_timings=step_timings,
+        warnings=warnings,
+        cache_stats=cache_stats,
+        backtest_meta=backtest_meta,
+        wall_seconds=wall_seconds,
     )
-    if backtest_meta:
-        lines.extend(
-            [
-                "",
-                "## Backtest",
-                "",
-                f"- Mode: `{backtest_meta.get('last_run_mode', 'unknown')}`",
-                f"- Scanned cutoffs: `{backtest_meta.get('last_run_scanned_cutoffs', 0)}`",
-            ]
-        )
-    if warnings:
-        lines.extend(["", "## Warnings", ""])
-        for warning in warnings:
-            lines.append(f"- {warning}")
-    return "\n".join(lines)
 
 
 def write_runtime_metrics(
@@ -1270,36 +1207,16 @@ def write_runtime_metrics(
     warnings: list[str],
     wall_seconds: float | None = None,
 ) -> None:
-    generated_at = datetime.now(LOCAL_TZ).strftime("%Y-%m-%d %H:%M:%S")
-    backtest_meta: dict[str, object] = {}
-    backtest_state_path = OUTDIR / "backtest_state.json"
-    if backtest_state_path.exists():
-        try:
-            backtest_meta = json.loads(backtest_state_path.read_text(encoding="utf-8"))
-        except Exception:
-            backtest_meta = {}
-    payload = {
-        "generated_at": generated_at,
-        "status": status,
-        "step_timings": step_timings,
-        "warnings": warnings,
-        "total_seconds": round(sum(step_timings.values()), 3),
-        "wall_seconds": round(wall_seconds, 3) if wall_seconds is not None else None,
-        "cache_stats": dict(_CACHE_STATS),
-        "backtest_meta": backtest_meta,
-    }
-    RUNTIME_METRICS_JSON.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-    RUNTIME_METRICS_MD.write_text(
-        build_runtime_metrics_markdown(
-            generated_at=generated_at,
-            status=status,
-            step_timings=step_timings,
-            warnings=warnings,
-            cache_stats=dict(_CACHE_STATS),
-            backtest_meta=backtest_meta,
-            wall_seconds=wall_seconds,
-        ),
-        encoding="utf-8",
+    runtime_metrics.write_runtime_metrics(
+        runtime_metrics_json=RUNTIME_METRICS_JSON,
+        runtime_metrics_md=RUNTIME_METRICS_MD,
+        backtest_state_path=OUTDIR / "backtest_state.json",
+        local_tz=LOCAL_TZ,
+        status=status,
+        step_timings=step_timings,
+        warnings=warnings,
+        cache_stats=dict(_CACHE_STATS),
+        wall_seconds=wall_seconds,
     )
 
 
@@ -1854,11 +1771,7 @@ def _empty_shadow_open_not_chase_df() -> pd.DataFrame:
 
 
 def build_state(df_rank: pd.DataFrame, market_regime: dict) -> str:
-    base_state = "|".join(
-        f"{r.ticker}:{r.setup_score}:{r.risk_score}:{r.signals}:{r.rank}:{r.grade}"
-        for r in df_rank.itertuples(index=False)
-    )
-    return f"market={market_regime.get('is_bullish', True)}||{base_state}"
+    return run_state.build_rank_state(df_rank, market_regime)
 
 
 def short_term_action_label(row: pd.Series) -> str:

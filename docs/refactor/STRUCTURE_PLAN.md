@@ -86,13 +86,15 @@ Completed:
 - Moved legacy watchlist/portfolio calls behind `stock_watch/workflows/` adapters so the daily CLI no longer imports `daily_theme_watchlist.py` directly.
 - Moved daily watchlist top-level orchestration into `stock_watch/workflows/daily_watchlist.py`; `daily_theme_watchlist.main()` is now a compatibility shim.
 - Moved shared runtime constants/logger into `stock_watch/runtime.py` so weekly and verification modules do not import the legacy daily module for path/time/logger globals.
+- Moved daily run-state helpers into `stock_watch/state/run_state.py` and daily runtime metrics into `stock_watch/workflows/runtime_metrics.py`.
 - Updated GitHub Actions and runbooks to use `python -m stock_watch`.
 - Stopped local website generation from copying artifact files into root compatibility paths.
 
 Still intentionally present:
 
-- `daily_theme_watchlist.py`: still owns legacy helper globals and much of the strategy/report/state implementation.
+- `daily_theme_watchlist.py`: still owns legacy helper globals and much of the strategy/report implementation.
 - `stock_watch/runtime.py`: owns shared runtime constants/logger used across daily, weekly, and verification workflows.
+- `stock_watch/state/run_state.py`: owns last-state, success-signature, and rank-state helpers.
 - `verification/cli/*.py`: retained as subcommand adapters for `stock_watch.cli.main`.
 - `runs/`: retained as local state/report/cache root; individual files are classified in `DUPLICATE_CLEANUP_PLAN.md`.
 
@@ -100,7 +102,7 @@ Still intentionally present:
 
 The next safe migration is not more wrapper deletion; it is splitting `daily_theme_watchlist.py`:
 
-1. Move remaining strategy/report/state/helper logic into package modules.
+1. Move remaining strategy/report/helper logic into package modules.
 2. Make `stock_watch/workflows/daily_watchlist.py` depend on package modules instead of legacy globals.
 3. Keep `python -m stock_watch daily` calling package workflows directly.
 4. Delete or shrink `daily_theme_watchlist.py` after parity tests pass.

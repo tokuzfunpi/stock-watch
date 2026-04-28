@@ -78,9 +78,9 @@ UPDATE_CHAT_ID_MAP_SPEC.loader.exec_module(update_chat_id_map)
 
 class DetectRowTests(unittest.TestCase):
     def test_main_skips_duplicate_run_without_force(self) -> None:
-        with patch("daily_theme_watchlist.load_last_success_date", return_value=dtw.today_local_str()), patch(
-            "daily_theme_watchlist.load_last_success_signature", return_value="sig"
-        ), patch("daily_theme_watchlist.current_run_signature", return_value="sig"), patch(
+        with patch("stock_watch.workflows.daily_watchlist.run_state.load_last_success_date", return_value=dtw.today_local_str()), patch(
+            "stock_watch.workflows.daily_watchlist.run_state.load_last_success_signature", return_value="sig"
+        ), patch("stock_watch.workflows.daily_watchlist.run_state.current_run_signature", return_value="sig"), patch(
             "daily_theme_watchlist.get_market_regime"
         ) as market_regime_mock:
             result = watchlist_main()
@@ -113,9 +113,9 @@ class DetectRowTests(unittest.TestCase):
             ]
         )
 
-        with patch("daily_theme_watchlist.load_last_success_date", return_value=dtw.today_local_str()), patch(
-            "daily_theme_watchlist.load_last_success_signature", return_value="sig"
-        ), patch("daily_theme_watchlist.current_run_signature", return_value="sig"), patch(
+        with patch("stock_watch.workflows.daily_watchlist.run_state.load_last_success_date", return_value=dtw.today_local_str()), patch(
+            "stock_watch.workflows.daily_watchlist.run_state.load_last_success_signature", return_value="sig"
+        ), patch("stock_watch.workflows.daily_watchlist.run_state.current_run_signature", return_value="sig"), patch(
             "daily_theme_watchlist.get_market_regime", return_value={"comment": "ok", "is_bullish": True}
         ) as market_regime_mock, patch(
             "daily_theme_watchlist.get_us_market_reference", return_value={"summary": "ok", "rows": []}
@@ -140,15 +140,15 @@ class DetectRowTests(unittest.TestCase):
         ), patch(
             "daily_theme_watchlist.strategy_preview_lines", return_value=["- noop"]
         ), patch(
-            "daily_theme_watchlist.build_state", return_value="STATE"
+            "stock_watch.workflows.daily_watchlist.run_state.build_rank_state", return_value="STATE"
         ), patch(
-            "daily_theme_watchlist.load_last_state", return_value=""
+            "stock_watch.workflows.daily_watchlist.run_state.load_last_state", return_value=""
         ), patch(
             "daily_theme_watchlist.should_alert", return_value=False
         ), patch(
-            "daily_theme_watchlist.save_last_state"
+            "stock_watch.workflows.daily_watchlist.run_state.save_last_state"
         ), patch(
-            "daily_theme_watchlist.save_last_success_date"
+            "stock_watch.workflows.daily_watchlist.run_state.save_last_success_date"
         ):
             result = watchlist_main(force_run=True)
 
@@ -728,8 +728,8 @@ class FeedbackTests(unittest.TestCase):
             ]
         )
 
-        with patch("daily_theme_watchlist.load_last_success_date", return_value=""), patch(
-            "daily_theme_watchlist.current_run_signature", return_value="sig"
+        with patch("stock_watch.workflows.daily_watchlist.run_state.load_last_success_date", return_value=""), patch(
+            "stock_watch.workflows.daily_watchlist.run_state.current_run_signature", return_value="sig"
         ), patch("daily_theme_watchlist.get_market_regime", return_value={"comment": "ok", "is_bullish": True}), patch(
             "daily_theme_watchlist.get_us_market_reference", return_value={"summary": "ok", "rows": []}
         ), patch(
@@ -751,15 +751,15 @@ class FeedbackTests(unittest.TestCase):
         ), patch(
             "daily_theme_watchlist.strategy_preview_lines", return_value=["- noop"]
         ), patch(
-            "daily_theme_watchlist.build_state", return_value="STATE"
+            "stock_watch.workflows.daily_watchlist.run_state.build_rank_state", return_value="STATE"
         ), patch(
-            "daily_theme_watchlist.load_last_state", return_value=""
+            "stock_watch.workflows.daily_watchlist.run_state.load_last_state", return_value=""
         ), patch(
             "daily_theme_watchlist.should_alert", return_value=False
         ), patch(
-            "daily_theme_watchlist.save_last_state"
+            "stock_watch.workflows.daily_watchlist.run_state.save_last_state"
         ), patch(
-            "daily_theme_watchlist.save_last_success_date"
+            "stock_watch.workflows.daily_watchlist.run_state.save_last_success_date"
         ):
             result = watchlist_main()
 
@@ -2410,19 +2410,19 @@ class PushMessageTests(unittest.TestCase):
         market_regime = {"comment": "加權指數目前偏多", "ret20_pct": 12.0, "volume_ratio20": 1.2, "is_bullish": True}
         us_market = {"summary": "美股偏弱"}
 
-        with patch("daily_theme_watchlist.load_last_success_date", return_value=""), patch(
-            "daily_theme_watchlist.current_run_signature", return_value="sig"
+        with patch("stock_watch.workflows.daily_watchlist.run_state.load_last_success_date", return_value=""), patch(
+            "stock_watch.workflows.daily_watchlist.run_state.current_run_signature", return_value="sig"
         ), patch("daily_theme_watchlist.get_market_regime", return_value=market_regime), patch(
             "daily_theme_watchlist.get_us_market_reference", return_value=us_market
         ), patch("daily_theme_watchlist.run_watchlist", return_value=df) as run_watchlist_mock, patch(
             "daily_theme_watchlist.run_backtest_dual", return_value=(None, None)
         ), patch("daily_theme_watchlist.upsert_alert_tracking"), patch(
             "daily_theme_watchlist.save_reports"
-        ), patch("daily_theme_watchlist.build_state", return_value="state"), patch(
-            "daily_theme_watchlist.load_last_state", return_value=""
+        ), patch("stock_watch.workflows.daily_watchlist.run_state.build_rank_state", return_value="state"), patch(
+            "stock_watch.workflows.daily_watchlist.run_state.load_last_state", return_value=""
         ), patch("daily_theme_watchlist.should_alert", return_value=False), patch(
-            "daily_theme_watchlist.save_last_state"
-        ), patch("daily_theme_watchlist.save_last_success_date"), patch(
+            "stock_watch.workflows.daily_watchlist.run_state.save_last_state"
+        ), patch("stock_watch.workflows.daily_watchlist.run_state.save_last_success_date"), patch(
             "daily_theme_watchlist.logger"
         ):
             result = watchlist_main()
@@ -2464,19 +2464,19 @@ class PushMessageTests(unittest.TestCase):
         market_regime = {"comment": "加權指數目前偏多", "ret20_pct": 12.0, "volume_ratio20": 1.2, "is_bullish": True}
         us_market = {"summary": "美股偏強"}
 
-        with patch("daily_theme_watchlist.load_last_success_date", return_value=""), patch(
-            "daily_theme_watchlist.current_run_signature", return_value="sig"
+        with patch("stock_watch.workflows.daily_watchlist.run_state.load_last_success_date", return_value=""), patch(
+            "stock_watch.workflows.daily_watchlist.run_state.current_run_signature", return_value="sig"
         ), patch("daily_theme_watchlist.get_market_regime", return_value=market_regime), patch(
             "daily_theme_watchlist.get_us_market_reference", return_value=us_market
         ), patch("daily_theme_watchlist.run_watchlist", return_value=df), patch(
             "daily_theme_watchlist.run_backtest_dual", return_value=(None, None)
         ), patch("daily_theme_watchlist.upsert_alert_tracking"), patch(
             "daily_theme_watchlist.save_reports"
-        ), patch("daily_theme_watchlist.build_state", return_value="state"), patch(
-            "daily_theme_watchlist.load_last_state", return_value=""
+        ), patch("stock_watch.workflows.daily_watchlist.run_state.build_rank_state", return_value="state"), patch(
+            "stock_watch.workflows.daily_watchlist.run_state.load_last_state", return_value=""
         ), patch("daily_theme_watchlist.should_alert", return_value=True), patch(
-            "daily_theme_watchlist.save_last_state"
-        ), patch("daily_theme_watchlist.save_last_success_date"), patch(
+            "stock_watch.workflows.daily_watchlist.run_state.save_last_state"
+        ), patch("stock_watch.workflows.daily_watchlist.run_state.save_last_success_date"), patch(
             "daily_theme_watchlist.send_telegram_message"
         ) as send_mock, patch("daily_theme_watchlist.logger"):
             result = watchlist_main()

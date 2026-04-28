@@ -2,8 +2,19 @@ from __future__ import annotations
 
 import sys
 import time
+from pathlib import Path
 
 from stock_watch.paths import REPO_ROOT
+from stock_watch.state import run_state
+from stock_watch.workflows import runtime_metrics
+
+
+def _timed_call(step_timings: dict[str, float], name: str, func, *args, **kwargs):
+    started = time.perf_counter()
+    try:
+        return func(*args, **kwargs)
+    finally:
+        step_timings[name] = time.perf_counter() - started
 
 
 def _load_legacy_daily_workflow():
@@ -19,24 +30,31 @@ def run_daily_watchlist(*, force_run: bool | None = False) -> int:
     daily_theme_watchlist = _load_legacy_daily_workflow()
     main_started = time.perf_counter()
     effective_force_run = daily_theme_watchlist.FORCE_RUN if force_run is None else bool(force_run)
+    run_signature_paths = [
+        Path(daily_theme_watchlist.__file__),
+        daily_theme_watchlist.CONFIG_PATH,
+        daily_theme_watchlist.WATCHLIST_CSV,
+    ]
     for key in daily_theme_watchlist._CACHE_STATS:
         daily_theme_watchlist._CACHE_STATS[key] = 0
     step_timings: dict[str, float] = {}
     warnings: list[str] = []
     try:
+        today = run_state.today_local_str(local_tz=daily_theme_watchlist.LOCAL_TZ)
+        run_signature = run_state.current_run_signature(run_signature_paths)
         if (
             not effective_force_run
-            and daily_theme_watchlist.load_last_success_date() == daily_theme_watchlist.today_local_str()
-            and daily_theme_watchlist.load_last_success_signature() == daily_theme_watchlist.current_run_signature()
+            and run_state.load_last_success_date(success_file=daily_theme_watchlist.SUCCESS_FILE) == today
+            and run_state.load_last_success_signature(success_file=daily_theme_watchlist.SUCCESS_FILE) == run_signature
         ):
             daily_theme_watchlist.logger.info(
                 "Already completed successfully for %s with same code/config. Skip duplicate run.",
-                daily_theme_watchlist.today_local_str(),
+                today,
             )
             return 0
 
         try:
-            market_regime = daily_theme_watchlist._timed_call(
+            market_regime = _timed_call(
                 step_timings, "market_regime", daily_theme_watchlist.get_market_regime
             )
         except Exception as exc:
@@ -45,7 +63,7 @@ def run_daily_watchlist(*, force_run: bool | None = False) -> int:
             market_regime = {"comment": "加權指數資料抓不到（best effort）", "is_bullish": True}
 
         try:
-            us_market = daily_theme_watchlist._timed_call(
+            us_market = _timed_call(
                 step_timings, "us_market", daily_theme_watchlist.get_us_market_reference
             )
         except Exception as exc:
@@ -57,20 +75,20 @@ def run_daily_watchlist(*, force_run: bool | None = False) -> int:
         adjusted_strat = daily_theme_watchlist.adjust_strategy_by_scenario(
             daily_theme_watchlist.CONFIG.strategy, initial_scenario
         )
-        daily_theme_watchlist._timed_call(
+        _timed_call(
             step_timings, "cache_warmup", daily_theme_watchlist.prewarm_watchlist_indicator_cache
         )
-        df_rank = daily_theme_watchlist._timed_call(
+        df_rank = _timed_call(
             step_timings, "watchlist", daily_theme_watchlist.run_watchlist, strat=adjusted_strat
         )
-        bt_steady, bt_attack = daily_theme_watchlist._timed_call(
+        bt_steady, bt_attack = _timed_call(
             step_timings, "backtest", daily_theme_watchlist.run_backtest_dual
         )
 
         daily_theme_watchlist.logger.info("=== 今日排行榜 ===\n%s", df_rank.to_string(index=False))
         daily_theme_watchlist.logger.info("Market regime: %s", market_regime["comment"])
 
-        short_candidates, short_backups, midlong_candidates, _ = daily_theme_watchlist._timed_call(
+        short_candidates, short_backups, midlong_candidates, _ = _timed_call(
             step_timings,
             "candidate_sets",
             daily_theme_watchlist.build_candidate_sets,
@@ -79,7 +97,7 @@ def run_daily_watchlist(*, force_run: bool | None = False) -> int:
             us_market,
         )
         market_scenario = daily_theme_watchlist.build_market_scenario(market_regime, us_market, df_rank)
-        daily_theme_watchlist._timed_call(
+        _timed_call(
             step_timings,
             "reports",
             daily_theme_watchlist.save_reports,
@@ -90,7 +108,7 @@ def run_daily_watchlist(*, force_run: bool | None = False) -> int:
             us_market,
         )
         try:
-            daily_theme_watchlist._timed_call(
+            _timed_call(
                 step_timings,
                 "shadow_observation",
                 daily_theme_watchlist.save_open_not_chase_shadow_observations,
@@ -102,7 +120,7 @@ def run_daily_watchlist(*, force_run: bool | None = False) -> int:
             warnings.append(f"shadow_observation: {exc}")
             daily_theme_watchlist.logger.exception("Shadow observation update failed (best effort): %s", exc)
         try:
-            daily_theme_watchlist._timed_call(
+            _timed_call(
                 step_timings,
                 "alert_tracking",
                 daily_theme_watchlist.upsert_alert_tracking,
@@ -122,10 +140,13 @@ def run_daily_watchlist(*, force_run: bool | None = False) -> int:
             ),
         )
 
-        current_state = daily_theme_watchlist.build_state(df_rank, market_regime)
-        last_state = daily_theme_watchlist.load_last_state()
+        current_state = run_state.build_rank_state(df_rank, market_regime)
+        last_state = run_state.load_last_state(
+            state_file=daily_theme_watchlist.STATE_FILE,
+            state_enabled=daily_theme_watchlist.CONFIG.state_enabled,
+        )
 
-        should_send = daily_theme_watchlist._timed_call(
+        should_send = _timed_call(
             step_timings,
             "should_alert",
             daily_theme_watchlist.should_alert,
@@ -151,21 +172,36 @@ def run_daily_watchlist(*, force_run: bool | None = False) -> int:
                     daily_theme_watchlist.build_midlong_message(df_rank, market_regime, us_market)
                 )
 
-            daily_theme_watchlist._timed_call(step_timings, "notifications", _send_notifications)
+            _timed_call(step_timings, "notifications", _send_notifications)
             daily_theme_watchlist.logger.info("Notification sent.")
         else:
             daily_theme_watchlist.logger.info("No notification sent.")
 
-        daily_theme_watchlist._timed_call(
-            step_timings, "persist_state", daily_theme_watchlist.save_last_state, current_state
+        _timed_call(
+            step_timings,
+            "persist_state",
+            run_state.save_last_state,
+            state_file=daily_theme_watchlist.STATE_FILE,
+            state_enabled=daily_theme_watchlist.CONFIG.state_enabled,
+            state=current_state,
         )
-        daily_theme_watchlist._timed_call(
-            step_timings, "persist_success", daily_theme_watchlist.save_last_success_date, daily_theme_watchlist.today_local_str()
+        _timed_call(
+            step_timings,
+            "persist_success",
+            run_state.save_last_success_date,
+            success_file=daily_theme_watchlist.SUCCESS_FILE,
+            success_date=today,
+            signature=run_signature,
         )
-        daily_theme_watchlist.write_runtime_metrics(
+        runtime_metrics.write_runtime_metrics(
+            runtime_metrics_json=daily_theme_watchlist.RUNTIME_METRICS_JSON,
+            runtime_metrics_md=daily_theme_watchlist.RUNTIME_METRICS_MD,
+            backtest_state_path=daily_theme_watchlist.OUTDIR / "backtest_state.json",
+            local_tz=daily_theme_watchlist.LOCAL_TZ,
             status="ok",
             step_timings=step_timings,
             warnings=warnings,
+            cache_stats=dict(daily_theme_watchlist._CACHE_STATS),
             wall_seconds=time.perf_counter() - main_started,
         )
         daily_theme_watchlist.logger.info(
@@ -179,10 +215,15 @@ def run_daily_watchlist(*, force_run: bool | None = False) -> int:
         err_msg = f"Watchlist job failed: {exc}"
         daily_theme_watchlist.logger.exception(err_msg)
         warnings.append(err_msg)
-        daily_theme_watchlist.write_runtime_metrics(
+        runtime_metrics.write_runtime_metrics(
+            runtime_metrics_json=daily_theme_watchlist.RUNTIME_METRICS_JSON,
+            runtime_metrics_md=daily_theme_watchlist.RUNTIME_METRICS_MD,
+            backtest_state_path=daily_theme_watchlist.OUTDIR / "backtest_state.json",
+            local_tz=daily_theme_watchlist.LOCAL_TZ,
             status="failed",
             step_timings=step_timings,
             warnings=warnings,
+            cache_stats=dict(daily_theme_watchlist._CACHE_STATS),
             wall_seconds=time.perf_counter() - main_started,
         )
         daily_theme_watchlist.send_telegram_message(err_msg)

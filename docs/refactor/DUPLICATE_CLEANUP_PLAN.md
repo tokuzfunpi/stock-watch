@@ -50,10 +50,11 @@
 - `daily_theme_watchlist.main()` 現在只是相容入口，委派到 package workflow。
 - Portfolio 的 legacy 呼叫集中在 `stock_watch/workflows/portfolio.py`。
 - Runtime constants (`LOCAL_TZ`, `ALERT_TRACK_CSV`, `FEEDBACK_SUMMARY_CSV`, logger) 已移到 `stock_watch/runtime.py`，weekly/verification 不再為了這些常數 import legacy daily module。
+- Daily run-state helpers 已移到 `stock_watch/state/run_state.py`；runtime metrics rendering/writing 已移到 `stock_watch/workflows/runtime_metrics.py`。
 
 下一階段才拆：
 
-- 把仍留在 `daily_theme_watchlist.py` 的 strategy/report/state/helper 邏輯抽到 package modules。
+- 把仍留在 `daily_theme_watchlist.py` 的 strategy/report/helper 邏輯抽到 package modules。
 - 等 package workflows 不再 import `daily_theme_watchlist.py` helpers/globals 時，再刪或改成內部相容層。
 
 ## 3) Generated artifact duplicates
