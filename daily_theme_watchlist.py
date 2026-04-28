@@ -2840,6 +2840,98 @@ def portfolio_advice_label(row: pd.Series, market_scenario: Optional[dict] = Non
     return base
 
 
+def _portfolio_plan_float(row: pd.Series, column: str, default: float = 0.0) -> float:
+    value = row.get(column, default)
+    if pd.isna(value):
+        return default
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def portfolio_price_plan(row: pd.Series, market_scenario: Optional[dict] = None) -> dict[str, float | str]:
+    current_close = _portfolio_plan_float(row, "current_close")
+    if current_close <= 0:
+        return {
+            "add_price": 0.0,
+            "sell_price": 0.0,
+            "escape_price": 0.0,
+            "price_plan_note": "尚未抓到行情，先不給價格帶。",
+        }
+
+    plan_row = row.copy()
+    plan_row["close"] = current_close
+    plan_row["risk_score"] = int(_portfolio_plan_float(plan_row, "risk_score"))
+    plan_row["ret5_pct"] = _portfolio_plan_float(plan_row, "ret5_pct")
+    plan_row["ret20_pct"] = _portfolio_plan_float(plan_row, "ret20_pct")
+    plan_row["atr_pct"] = _portfolio_plan_float(plan_row, "atr_pct")
+    plan_row["signals"] = str(plan_row.get("signals", "") or "")
+    plan_row["holding_style"] = str(plan_row.get("holding_style", "") or holding_style_label(row))
+    if not _portfolio_plan_float(plan_row, "ma20"):
+        plan_row["ma20"] = current_close
+    if not _portfolio_plan_float(plan_row, "ma60"):
+        plan_row["ma60"] = _portfolio_plan_float(plan_row, "ma20", current_close)
+
+    holding_style = str(row.get("holding_style", "") or holding_style_label(row))
+    watch_type = "short" if holding_style == "進攻持股" else "midlong"
+    base_plan = watch_price_plan(plan_row, watch_type)
+
+    avg_cost = _portfolio_plan_float(row, "avg_cost")
+    target_profit_pct = _portfolio_plan_float(row, "target_profit_pct")
+    profit_pct = _portfolio_plan_float(row, "unrealized_pnl_pct")
+    risk_score = int(_portfolio_plan_float(row, "risk_score"))
+    advice = str(row.get("advice", "") or "")
+    scenario_label = str((market_scenario or {}).get("label", "") or row.get("market_scenario", "") or "")
+
+    target_price = avg_cost * (1 + target_profit_pct / 100) if avg_cost > 0 and target_profit_pct else 0.0
+    base_sell = float(base_plan.get("trim_price", 0.0) or 0.0)
+    sell_price = max(base_sell, target_price)
+
+    urgent_sell_labels = ("落袋", "降部位", "收一點", "達標可落袋")
+    if any(label in advice for label in urgent_sell_labels):
+        sell_price = current_close
+    elif "設停利" in advice or "盯盤" in advice:
+        sell_price = max(current_close * 1.03, target_price or base_sell)
+
+    base_escape = float(base_plan.get("stop_price", 0.0) or 0.0)
+    escape_price = base_escape
+    if avg_cost > 0:
+        if profit_pct >= max(target_profit_pct * 0.5, 6):
+            escape_price = max(escape_price, avg_cost)
+        if profit_pct >= max(target_profit_pct * 0.8, 10):
+            escape_price = max(escape_price, avg_cost * 1.03)
+    if risk_score >= 4 or scenario_label in {"明顯修正盤", "權值撐盤、個股轉弱"}:
+        escape_price = max(escape_price, current_close * 0.94)
+    if holding_style == "進攻持股":
+        escape_price = max(escape_price, current_close * 0.93)
+
+    note_bits = []
+    if any(label in advice for label in urgent_sell_labels):
+        note_bits.append("已有賣出/減碼訊號，賣出價用現價附近當第一參考。")
+    elif "續抱" in advice:
+        note_bits.append("續抱時用賣出價分批停利，不用一次出清。")
+    else:
+        note_bits.append("先用價格帶管理，不追價。")
+    note_bits.append("跌破逃跑價代表型態失效，先退出或至少降部位。")
+
+    return {
+        "add_price": round(float(base_plan.get("add_price", 0.0) or 0.0), 2),
+        "sell_price": round(max(sell_price, 0.01), 2),
+        "escape_price": round(max(escape_price, 0.01), 2),
+        "price_plan_note": " ".join(note_bits),
+    }
+
+
+def portfolio_price_plan_text(row: pd.Series) -> str:
+    add_price = _portfolio_plan_float(row, "add_price")
+    sell_price = _portfolio_plan_float(row, "sell_price")
+    escape_price = _portfolio_plan_float(row, "escape_price")
+    if not add_price or not sell_price or not escape_price:
+        return ""
+    return f"加碼≤{add_price:.2f} / 賣出≥{sell_price:.2f} / 跌破逃跑 {escape_price:.2f}"
+
+
 def build_portfolio_review_df(
     df_rank: pd.DataFrame,
     market_regime: Optional[dict] = None,
@@ -2854,7 +2946,7 @@ def build_portfolio_review_df(
 
     market_cols = [
         "ticker", "name", "close", "signals", "regime", "risk_score",
-        "ret5_pct", "ret20_pct", "volume_ratio20", "atr_pct", "volatility_tag"
+        "ret5_pct", "ret20_pct", "volume_ratio20", "atr_pct", "volatility_tag", "ma20", "ma60"
     ]
     market_df = df_rank.reindex(columns=market_cols).copy() if not df_rank.empty else pd.DataFrame(columns=market_cols)
     review = PORTFOLIO.merge(market_df, on="ticker", how="left")
@@ -2880,6 +2972,11 @@ def build_portfolio_review_df(
     review["advice"] = review.apply(lambda row: portfolio_advice_label(row, market_scenario), axis=1)
     review["market_scenario"] = market_scenario.get("label", "") if market_scenario else ""
     review["market_stance"] = market_scenario.get("stance", "") if market_scenario else ""
+    price_plans = review.apply(lambda row: portfolio_price_plan(row, market_scenario), axis=1)
+    plan_df = pd.DataFrame(price_plans.tolist(), index=review.index)
+    for column in ["add_price", "sell_price", "escape_price", "price_plan_note"]:
+        review[column] = plan_df[column] if column in plan_df else pd.NA
+    review["price_plan"] = review.apply(portfolio_price_plan_text, axis=1)
     return review.sort_values(by=["unrealized_pnl_pct", "target_gap_pct"], ascending=[False, True]).reset_index(drop=True)
 
 
@@ -2910,7 +3007,7 @@ def build_portfolio_message(
         lines.append(
             f"{r['name']} ({r['ticker'].split('.')[0]}) [{r['holding_style']}] {r['advice']} | "
             f"{vol_text} | 現價 {round(float(current_close), 2)} / 成本 {round(float(r['avg_cost']), 2)} | "
-            f"報酬 {r['unrealized_pnl_pct']}% / 目標 {r['target_profit_pct']}%"
+            f"報酬 {r['unrealized_pnl_pct']}% / 目標 {r['target_profit_pct']}% | {r.get('price_plan', '')}"
         )
     return "\n".join(lines).strip()
 

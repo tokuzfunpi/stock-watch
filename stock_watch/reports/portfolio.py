@@ -55,7 +55,8 @@ def build_portfolio_report_markdown(
         lines.append(
             f"- {row['name']} ({row['ticker'].split('.')[0]}) | {row['holding_style']} | 現價 {round(float(current_close), 2)} | "
             f"成本 {round(float(row['avg_cost']), 2)} | 報酬 {row['unrealized_pnl_pct']}% | "
-            f"目標 {row['target_profit_pct']}% | 波動 {volatility_badge_text(row)} | 建議 {row['advice']}"
+            f"目標 {row['target_profit_pct']}% | 波動 {volatility_badge_text(row)} | 建議 {row['advice']} | "
+            f"價格帶 {row.get('price_plan', '')}"
         )
     return "\n".join(lines)
 

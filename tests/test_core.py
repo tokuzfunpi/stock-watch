@@ -40,6 +40,8 @@ from daily_theme_watchlist import (
     resolve_security_name,
     should_refresh_watchlist_name,
     portfolio_advice_label,
+    portfolio_price_plan,
+    portfolio_price_plan_text,
     build_special_etf_message,
     build_midlong_message,
     build_short_term_message,
@@ -1056,6 +1058,9 @@ class ChatIdMapUpdateTests(unittest.TestCase):
         self.assertIn("進攻持股", message)
         self.assertIn("🔥活潑", message)
         self.assertIn("報酬", message)
+        self.assertIn("加碼≤", message)
+        self.assertIn("賣出≥", message)
+        self.assertIn("跌破逃跑", message)
 
     def test_portfolio_report_is_separate_from_daily_report(self) -> None:
         df = pd.DataFrame(
@@ -1098,6 +1103,8 @@ class ChatIdMapUpdateTests(unittest.TestCase):
         self.assertIn("Market Scenario", portfolio_report)
         self.assertIn("核心持股", portfolio_report)
         self.assertIn("台積電", portfolio_report)
+        self.assertIn("價格帶", portfolio_report)
+        self.assertIn("跌破逃跑", portfolio_report)
 
     def test_portfolio_advice_promotes_low_risk_accel_holding(self) -> None:
         row = pd.Series(
@@ -1264,6 +1271,41 @@ class ChatIdMapUpdateTests(unittest.TestCase):
         )
 
         self.assertEqual(portfolio_advice_label(row), "達標可落袋")
+
+    def test_portfolio_price_plan_adds_sell_and_escape_prices(self) -> None:
+        row = pd.Series(
+            {
+                "ticker": "3013.TW",
+                "current_close": 120.0,
+                "avg_cost": 100.0,
+                "target_profit_pct": 15.0,
+                "unrealized_pnl_pct": 20.0,
+                "risk_score": 4,
+                "signals": "ACCEL,TREND",
+                "ret5_pct": 9.0,
+                "ret20_pct": 18.0,
+                "volume_ratio20": 1.4,
+                "holding_style": "進攻持股",
+                "advice": "達標可落袋",
+                "ma20": 110.0,
+                "ma60": 102.0,
+                "atr_pct": 5.0,
+            }
+        )
+
+        plan = portfolio_price_plan(row, {"label": "高檔震盪盤"})
+        row_with_plan = row.copy()
+        for key, value in plan.items():
+            row_with_plan[key] = value
+        text = portfolio_price_plan_text(row_with_plan)
+
+        self.assertGreater(plan["sell_price"], 0)
+        self.assertGreaterEqual(plan["add_price"], plan["escape_price"])
+        self.assertGreaterEqual(plan["sell_price"], row["current_close"])
+        self.assertGreaterEqual(plan["escape_price"], row["avg_cost"])
+        self.assertIn("加碼≤", text)
+        self.assertIn("賣出≥", text)
+        self.assertIn("跌破逃跑", text)
 
 
 class SelectPushCandidatesTests(unittest.TestCase):
