@@ -818,6 +818,13 @@ def main(argv: list[str] | None = None) -> int:
                 combined,
                 key_cols=["signal_date", "watch_type", "ticker"],
             )
+            # Also write a per-day snapshot file to preserve local history even if the
+            # aggregated CSV is later replaced or corrupted.
+            if asof_date:
+                snapshot_dir = snapshot_csv.parent / "snapshots"
+                snapshot_dir.mkdir(parents=True, exist_ok=True)
+                daily_snapshot = snapshot_dir / f"reco_snapshots_{asof_date}.csv"
+                combined.to_csv(daily_snapshot, index=False, encoding="utf-8")
     return 0
 
 

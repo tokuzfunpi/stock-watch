@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <key>Label</key>
+    <string>com.stockwatch.preopen</string>
+
+    <key>ProgramArguments</key>
+    <array>
+      <string>__REPO_ROOT__/tools/scheduling/stock-watch-preopen.sh</string>
+    </array>
+
+    <key>StartCalendarInterval</key>
+    <dict>
+      <key>Hour</key>
+      <integer>8</integer>
+      <key>Minute</key>
+      <integer>45</integer>
+    </dict>
+
+    <key>StandardOutPath</key>
+    <string>__REPO_ROOT__/runs/scheduler/launchd-preopen.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>__REPO_ROOT__/runs/scheduler/launchd-preopen.err.log</string>
+  </dict>
+</plist>
+

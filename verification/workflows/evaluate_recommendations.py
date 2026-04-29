@@ -652,7 +652,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.until:
             dates = [d for d in dates if d <= args.until]
         if int(args.max_days) > 0:
-            dates = dates[: int(args.max_days)]
+            dates = dates[-int(args.max_days) :]
         if not dates:
             print("No valid signal_date values matched filters.")
             return 0

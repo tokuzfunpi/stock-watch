@@ -119,6 +119,10 @@ Weekly / maintenance：
 - `python3 -m stock_watch website`
 - `open runs/theme_watchlist_daily/local_site/index.html`
 
+## 自動排程（本機）
+
+- 盤前 / 盤後自動跑：`docs/runbooks/SCHEDULING.md`
+
 ## Telegram chat id
 
 - 優先讀 `TELEGRAM_CHAT_IDS`。

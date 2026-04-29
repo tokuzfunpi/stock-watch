@@ -303,6 +303,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     out_dir = Path(args.out_dir)
     snapshot_csv = Path(args.snapshot_csv)
+    bak: Path | None = None
 
     items = list_daily_rank_commits(str(args.path))
     if args.since:
@@ -359,6 +360,12 @@ def main(argv: list[str] | None = None) -> int:
         except Exception as exc:
             print(f"SKIP {item.signal_date} {item.commit_sha[:8]}: {exc}")
             continue
+
+    if not args.no_snapshot and args.rebuild_snapshot and total_snapshots == 0 and bak is not None:
+        # If every backfill item failed, restore the original snapshot file.
+        if not snapshot_csv.exists():
+            bak.replace(snapshot_csv)
+            print(f"Restored snapshot CSV from backup (no snapshots appended): {snapshot_csv}")
 
     print(f"Backfill done: reports={total_reports} snapshot_rows_appended={total_snapshots}")
     print(f"Reports dir: {out_dir}")

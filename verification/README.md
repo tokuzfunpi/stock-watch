@@ -126,6 +126,12 @@ python3.11 -m stock_watch verification backfill --since 2026-04-15 --until 2026-
 
 `backfill_from_git.py` 的實作在 `verification/workflows/backfill_from_git.py`。
 
+注意：
+
+- `backfill` 需要 repo 內「真的存在歷史 artifact commits」（也就是過去的 `runs/theme_watchlist_daily/daily_rank.csv` 有被 commit 進 git）。
+- 如果你平常不會把 `runs/` 產出 commit 回 repo，那 `backfill` 可能會列出一些日期但最後全部 `SKIP`，因為那些 commit 其實沒有 `daily_rank.csv` 可以讀。
+- 在這種「不 commit runs」的正常情境下，請依賴 `runs/verification/watchlist_daily/reco_snapshots.csv` 的每日累積，以及 `runs/verification/watchlist_daily/snapshots/` 底下的每日快照檔來保留本機歷史。
+
 會產生：
 
 - `runs/verification/watchlist_daily/backfill_reports/verification_report_YYYY-MM-DD.md`
