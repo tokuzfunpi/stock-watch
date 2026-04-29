@@ -66,5 +66,12 @@ PY
       "$python_bin" -m stock_watch verification daily --mode postclose --all-dates --max-days 60
     fi
   done
+
+  # Backup verification history outside the repo (so `runs/` cleanup won't erase it).
+  archive_dir="/Users/tokuzfunpi/.codex/automations/stock-watch-backup/archives/$(TZ=Asia/Taipei date '+%Y%m%d')"
+  mkdir -p "$archive_dir"
+  cp -f "runs/verification/watchlist_daily/reco_snapshots.csv" "$archive_dir/reco_snapshots.csv" 2>/dev/null || true
+  cp -f "runs/verification/watchlist_daily/reco_outcomes.csv" "$archive_dir/reco_outcomes.csv" 2>/dev/null || true
+
   echo "finished_at=$(TZ=Asia/Taipei date '+%Y-%m-%d %H:%M:%S %Z')"
 } >>"$LOG_PATH" 2>&1
