@@ -44,6 +44,18 @@ def run_git(args: list[str]) -> subprocess.CompletedProcess[str]:
         check=False,
     )
 
+def _normalize_repo_relative_path(path: str) -> str:
+    raw = str(path or "").strip()
+    if not raw:
+        return raw
+    p = Path(raw)
+    if p.is_absolute():
+        try:
+            return str(p.relative_to(REPO_ROOT))
+        except Exception:
+            return p.name
+    return raw
+
 
 def parse_git_log_dates(text: str) -> list[BackfillItem]:
     """
@@ -67,7 +79,7 @@ def parse_git_log_dates(text: str) -> list[BackfillItem]:
 
 
 def list_daily_rank_commits(path: str) -> list[BackfillItem]:
-    proc = run_git(["log", "--date=short", "--pretty=format:%H %ad", "--", path])
+    proc = run_git(["log", "--date=short", "--pretty=format:%H %ad", "--", _normalize_repo_relative_path(path)])
     if proc.returncode != 0:
         raise RuntimeError(proc.stderr.strip() or "git log failed")
     # De-dupe to latest commit per day (log is newest first).
@@ -82,7 +94,7 @@ def list_daily_rank_commits(path: str) -> list[BackfillItem]:
 
 
 def read_file_at_commit(path: str, commit_sha: str) -> str:
-    proc = run_git(["show", f"{commit_sha}:{path}"])
+    proc = run_git(["show", f"{commit_sha}:{_normalize_repo_relative_path(path)}"])
     if proc.returncode != 0:
         raise RuntimeError(proc.stderr.strip() or f"git show failed for {commit_sha}:{path}")
     return proc.stdout
@@ -279,7 +291,8 @@ def append_snapshot_rows(
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Backfill verification snapshots from git history.")
-    parser.add_argument("--path", default=str(THEME_OUTDIR / "daily_rank.csv"))
+    # Use repo-relative path by default so git show/log can find the file.
+    parser.add_argument("--path", default="runs/theme_watchlist_daily/daily_rank.csv")
     parser.add_argument("--since", default="", help="YYYY-MM-DD (inclusive)")
     parser.add_argument("--until", default="", help="YYYY-MM-DD (inclusive)")
     parser.add_argument("--limit", type=int, default=30, help="Max number of days to backfill (0=unlimited)")
