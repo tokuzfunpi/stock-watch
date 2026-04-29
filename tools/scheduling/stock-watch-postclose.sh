@@ -23,5 +23,48 @@ fi
   echo "python=$python_bin"
   # Keep evaluation history updated as older horizons mature.
   "$python_bin" -m stock_watch daily --mode postclose --all-dates --max-days 60
+
+  # Yahoo/TW tickers sometimes lag after close; retry evaluation if today's rows are missing.
+  for attempt in 1 2 3 4; do
+    missing_count="$(
+      "$python_bin" - <<'PY'
+import datetime
+import pandas as pd
+import pytz
+
+tz = pytz.timezone("Asia/Taipei")
+today = datetime.datetime.now(tz).strftime("%Y-%m-%d")
+
+try:
+  df = pd.read_csv("runs/verification/watchlist_daily/reco_outcomes.csv")
+except Exception:
+  print(999)
+  raise SystemExit(0)
+
+if df.empty or "status" not in df.columns or "signal_date" not in df.columns:
+  print(999)
+  raise SystemExit(0)
+
+sub = df[df["signal_date"].astype(str) == today]
+if sub.empty:
+  print(999)
+  raise SystemExit(0)
+
+status = sub["status"].astype(str).str.strip()
+print(int((status == "signal_date_missing").sum()))
+PY
+    )"
+
+    if [[ "$missing_count" -eq 0 ]]; then
+      echo "eval_retry=ok attempt=$attempt"
+      break
+    fi
+
+    echo "eval_retry=signal_date_missing count=$missing_count attempt=$attempt"
+    if [[ "$attempt" -lt 4 ]]; then
+      sleep 600
+      "$python_bin" -m stock_watch verification daily --mode postclose --all-dates --max-days 60
+    fi
+  done
   echo "finished_at=$(TZ=Asia/Taipei date '+%Y-%m-%d %H:%M:%S %Z')"
 } >>"$LOG_PATH" 2>&1
