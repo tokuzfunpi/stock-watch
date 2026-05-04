@@ -41,7 +41,8 @@ This file provides critical context and operational mandates for AI agents worki
 - **Dependency Management**: Maintain strictly through `requirements.txt`.
 - **Environment**: Primarily executed in macOS/Linux with Python 3.11.
 - **Testing**:
-    - Always run focused tests after logic changes, then `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3.11 -m pytest -q` before merge when feasible.
+    - Preferred local runtime is `/Users/tokuzfunpi/codes/nvidia/311env`; set `VENV_PY=/Users/tokuzfunpi/codes/nvidia/311env/bin/python`.
+    - Always run focused tests after logic changes, then `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 $VENV_PY -m pytest -q` before merge when feasible.
     - Use `test_my_logic.py` for isolated strategy/ATR verification.
 - **Reporting**: Reports are output to `theme_watchlist_daily/`. Do NOT change output paths without explicit instruction.
 

@@ -21,53 +21,55 @@
 
 ## 安裝
 
-- `python3 -m venv .venv`
-- `source .venv/bin/activate`
-- `pip install -r requirements.txt`
-- `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3 -m pytest`
+- 固定 venv：`export VENV_PY=/Users/tokuzfunpi/codes/nvidia/311env/bin/python`
+- 如需 activate：`source /Users/tokuzfunpi/codes/nvidia/311env/bin/activate`
+- 安裝依賴：`$VENV_PY -m pip install -r requirements.txt`
+- 跑測試：`PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 $VENV_PY -m pytest`
 
 ## 單一 CLI 入口
 
 優先使用：
 
-- `python3 -m stock_watch daily --mode preopen`
-- `python3 -m stock_watch daily --mode preopen --force-watchlist`
-- `python3 -m stock_watch daily --mode postclose`
-- `python3 -m stock_watch daily --mode full`
-- `python3 -m stock_watch daily --mode portfolio`
-- `python3 -m stock_watch doctor`
-- `python3 -m stock_watch doctor --skip-network`
-- `python3 -m stock_watch report-sync`
-- `python3 -m stock_watch daily --mode portfolio --sync-watchlist-report`
-- `python3 -m stock_watch daily --mode portfolio --no-sync-watchlist-report`
-- `python3 -m stock_watch weekly`
-- `python3 -m stock_watch weekly --max-signal-dates 5`
-- `python3 -m stock_watch housekeeping`
-- `python3 -m stock_watch housekeeping --apply`
-- `python3 -m stock_watch website`
+- `$VENV_PY -m stock_watch daily --mode preopen`
+- `$VENV_PY -m stock_watch daily --mode preopen --force-watchlist`
+- `$VENV_PY -m stock_watch daily --mode postclose`
+- `$VENV_PY -m stock_watch daily --mode full`
+- `$VENV_PY -m stock_watch daily --mode portfolio`
+- `$VENV_PY -m stock_watch doctor`
+- `$VENV_PY -m stock_watch doctor --skip-network`
+- `$VENV_PY -m stock_watch doctor --skip-network --fail-on warn`
+- `$VENV_PY -m stock_watch report-sync`
+- `$VENV_PY -m stock_watch daily --mode portfolio --sync-watchlist-report`
+- `$VENV_PY -m stock_watch daily --mode portfolio --no-sync-watchlist-report`
+- `$VENV_PY -m stock_watch weekly`
+- `$VENV_PY -m stock_watch weekly --max-signal-dates 5`
+- `$VENV_PY -m stock_watch housekeeping`
+- `$VENV_PY -m stock_watch housekeeping --apply`
+- `$VENV_PY -m stock_watch website`
 
 Daily aliases 也可以用：
 
-- `python3 -m stock_watch preopen`
-- `python3 -m stock_watch postclose`
-- `python3 -m stock_watch full`
-- `python3 -m stock_watch portfolio`
+- `$VENV_PY -m stock_watch preopen`
+- `$VENV_PY -m stock_watch postclose`
+- `$VENV_PY -m stock_watch full`
+- `$VENV_PY -m stock_watch portfolio`
 
 Verification 子命令：
 
-- `python3 -m stock_watch verification daily --mode preopen`
-- `python3 -m stock_watch verification daily --mode postclose`
-- `python3 -m stock_watch verification snapshot`
-- `python3 -m stock_watch verification evaluate --all-dates --horizons 1,5,20`
-- `python3 -m stock_watch verification summary`
-- `python3 -m stock_watch verification feedback`
-- `python3 -m stock_watch verification backfill --limit 0 --rebuild-snapshot`
+- `$VENV_PY -m stock_watch verification daily --mode preopen`
+- `$VENV_PY -m stock_watch verification daily --mode postclose`
+- `$VENV_PY -m stock_watch verification snapshot`
+- `$VENV_PY -m stock_watch verification evaluate --all-dates --horizons 1,5,20`
+- `$VENV_PY -m stock_watch verification summary`
+- `$VENV_PY -m stock_watch verification feedback`
+- `$VENV_PY -m stock_watch verification backfill --limit 0 --rebuild-snapshot`
 
 ## Daily 模式
 
 - `preopen`：跑 watchlist + verification snapshot。
 - `postclose`：跑 watchlist + portfolio + verification 後半段，且 watchlist 會強制重跑，不沿用同日 preopen 的 duplicate guard。
 - `postclose`：流程尾端還會自動執行 `doctor --skip-network --fail-on warn`，把每日健康摘要寫進 scheduler log；只要 doctor 退化到 `warn/fail`，排程就會明確失敗。
+- `postclose` / `full`：若 portfolio 步驟讓 `daily_rank.csv` 比 `daily_report.md` 新，會自動補跑 `report-sync`。
 - `full`：整套本機流程一次跑完。
 - `portfolio`：只跑本機持股檢查。
 
@@ -76,15 +78,17 @@ Verification 子命令：
 - `runs/theme_watchlist_daily/local_run_status.md`
 - `runs/theme_watchlist_daily/local_run_status.json`
 - `runs/theme_watchlist_daily/local_doctor_summary.txt`
+- `runs/theme_watchlist_daily/report_sync_metrics.md`
+- `runs/theme_watchlist_daily/report_sync_metrics.json`
 
 ## Portfolio 檢查
 
 - 複製 `portfolio.csv.example` 成本機的 `portfolio.csv`。
 - 填入自己的持股資料。
-- 執行 `python3 -m stock_watch portfolio`。
+- 執行 `$VENV_PY -m stock_watch portfolio`。
 - 這個流程會更新 `runs/theme_watchlist_daily/daily_rank.csv` 供持股檢查使用，但不會重建 `daily_report.md/html`。
 - `daily --mode portfolio`、`daily --mode postclose`、`daily --mode full` 現在預設都會在需要時自動補跑 `report-sync`；若不想補跑，可加 `--no-sync-watchlist-report`。
-- 如果想手動把 watchlist 報表補齊到最新排行，再跑 `python3 -m stock_watch report-sync`。
+- 如果想手動把 watchlist 報表補齊到最新排行，再跑 `$VENV_PY -m stock_watch report-sync`。
 
 輸出：
 
@@ -126,7 +130,7 @@ Weekly / maintenance：
 
 本機網站：
 
-- `python3 -m stock_watch website`
+- `$VENV_PY -m stock_watch website`
 - `open runs/theme_watchlist_daily/local_site/index.html`
 
 ## 自動排程（本機）
@@ -164,4 +168,4 @@ Weekly / maintenance：
 
 ## 舊入口狀態
 
-Root-level local wrappers have been removed. Use `python3 -m stock_watch ...` for local workflows and `python3 -m stock_watch verification ...` for verification workflows.
+Root-level local wrappers have been removed. Use `$VENV_PY -m stock_watch ...` for local workflows and `$VENV_PY -m stock_watch verification ...` for verification workflows.

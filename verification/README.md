@@ -5,9 +5,15 @@
 ## 檔案與用途
 
 Stable runbook commands now use `python -m stock_watch verification ...`; root `verification/*.py` compatibility wrappers have been removed.
+This repo's fixed local venv is `/Users/tokuzfunpi/codes/nvidia/311env`; prefer:
+
+```bash
+export VENV_PY=/Users/tokuzfunpi/codes/nvidia/311env/bin/python
+```
+
 Implementation code is now split by role:
 
-- `verification/cli/`: thin module wrappers for `python3.11 -m verification.cli...`
+- `verification/cli/`: thin module wrappers for `python -m verification.cli...`
 - `verification/reports/`: report/snapshot builders and analysis renderers
 - `verification/workflows/`: orchestration and data-update workflows
 
@@ -52,49 +58,49 @@ Implementation code is now split by role:
 
 ```bash
 # 1) 早上產生驗算報告 + 快照
-python3.11 -m stock_watch verification snapshot
+$VENV_PY -m stock_watch verification snapshot
 
 # 若想調整「強制補滿」的數量（預設 5）
-python3.11 -m stock_watch verification snapshot --top-n-short 5 --top-n-midlong 5
+$VENV_PY -m stock_watch verification snapshot --top-n-short 5 --top-n-midlong 5
 
 # 2) 收盤後回填 outcomes（horizons 預設 1,5,20）
-python3.11 -m stock_watch verification evaluate --horizons 1,5,20
+$VENV_PY -m stock_watch verification evaluate --horizons 1,5,20
 
 # yfinance 偶爾不穩時，可提高穩定性（分批 + retry + backoff + 拉長 period）
-python3.11 -m stock_watch verification evaluate --horizons 1,5,20 --period 180d --batch-size 25 --retries 3 --backoff-seconds 1
+$VENV_PY -m stock_watch verification evaluate --horizons 1,5,20 --period 180d --batch-size 25 --retries 3 --backoff-seconds 1
 
 # 用本機 cache（網路不穩時更容易補齊 OK rows；cache 會寫在 runs/verification/watchlist_daily/ 下）
-python3.11 -m stock_watch verification evaluate --horizons 1,5,20 --cache-dir runs/verification/watchlist_daily/yfinance_cache
+$VENV_PY -m stock_watch verification evaluate --horizons 1,5,20 --cache-dir runs/verification/watchlist_daily/yfinance_cache
 
 # 一次把所有日期都補齊（會跑 snapshots 裡所有 signal_date）
-python3.11 -m stock_watch verification evaluate --all-dates --horizons 1,5,20
+$VENV_PY -m stock_watch verification evaluate --all-dates --horizons 1,5,20
 
 # 只補指定區間（需搭配 --all-dates）
-python3.11 -m stock_watch verification evaluate --all-dates --since 2026-04-10 --until 2026-04-17 --horizons 1,5,20
+$VENV_PY -m stock_watch verification evaluate --all-dates --since 2026-04-10 --until 2026-04-17 --horizons 1,5,20
 
 # 3) 彙整 outcomes
-python3.11 -m stock_watch verification summary
+$VENV_PY -m stock_watch verification summary
 
 # 4) 比較 feedback 權重敏感度（預設 70/30, 80/20, 60/40）
-python3.11 -m stock_watch verification feedback
+$VENV_PY -m stock_watch verification feedback
 
 # 自訂權重組合
-python3.11 -m stock_watch verification feedback --weights 70:30,85:15,50:50
+$VENV_PY -m stock_watch verification feedback --weights 70:30,85:15,50:50
 
 # 5) 一次跑完整個 verification workflow
-python3.11 -m stock_watch verification daily
+$VENV_PY -m stock_watch verification daily
 
 # 5a) 盤前流程：只做 verify / snapshot
-python3.11 -m stock_watch verification daily --mode preopen
+$VENV_PY -m stock_watch verification daily --mode preopen
 
 # 5b) 盤後流程：做 evaluate -> summarize -> feedback sensitivity
-python3.11 -m stock_watch verification daily --mode postclose
+$VENV_PY -m stock_watch verification daily --mode postclose
 
 # 常用調整：指定 horizons / weights
-python3.11 -m stock_watch verification daily --horizons 1,5,20 --weights 70:30,85:15,50:50
+$VENV_PY -m stock_watch verification daily --horizons 1,5,20 --weights 70:30,85:15,50:50
 
 # 若要在 mode 上再局部跳步
-python3.11 -m stock_watch verification daily --mode postclose --skip-feedback
+$VENV_PY -m stock_watch verification daily --mode postclose --skip-feedback
 ```
 
 `python -m stock_watch verification daily` 的 mode 規則：
@@ -104,6 +110,7 @@ python3.11 -m stock_watch verification daily --mode postclose --skip-feedback
 - `--mode full`：從 `verify` 一路跑到 `feedback`（預設）
 - `--skip-*` 旗標仍然有效，會在 mode 的基礎上再跳過指定步驟
 - 同一天重跑 `preopen` 會以 `signal_date + watch_type + ticker` 覆蓋 snapshot，不再重複累積同一筆推薦
+- 如果你還需要同步更新 `runs/theme_watchlist_daily/local_run_status.md`、portfolio 報告、`report-sync` 與 `doctor` 狀態，請改跑 `$VENV_PY -m stock_watch postclose`
 
 ## 用 Git 歷史回填（補齊過去樣本）
 
@@ -112,16 +119,16 @@ python3.11 -m stock_watch verification daily --mode postclose --skip-feedback
 
 ```bash
 # 回填最近 30 天（每一天取最新一次 daily_rank.csv）
-python3.11 -m stock_watch verification backfill
+$VENV_PY -m stock_watch verification backfill
 
 # 回填全部可用日期（0=unlimited）
-python3.11 -m stock_watch verification backfill --limit 0
+$VENV_PY -m stock_watch verification backfill --limit 0
 
 # 直接重建 reco_snapshots.csv（避免檔案不小心壞掉 / 欄位錯位）
-python3.11 -m stock_watch verification backfill --limit 0 --rebuild-snapshot
+$VENV_PY -m stock_watch verification backfill --limit 0 --rebuild-snapshot
 
 # 指定區間（YYYY-MM-DD）
-python3.11 -m stock_watch verification backfill --since 2026-04-15 --until 2026-04-19
+$VENV_PY -m stock_watch verification backfill --since 2026-04-15 --until 2026-04-19
 ```
 
 `backfill_from_git.py` 的實作在 `verification/workflows/backfill_from_git.py`。

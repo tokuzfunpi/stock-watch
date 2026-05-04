@@ -800,19 +800,19 @@ GitHub 排程要注意：
 
 ## 本機執行方式
 
-這台機器建議使用 Python 3.11：
+這台機器固定使用 venv `/Users/tokuzfunpi/codes/nvidia/311env`：
 
 ```bash
-python3.11 -m venv .venv
-source .venv/bin/activate
-python -m pip install -r requirements.txt
-PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python -m pytest -q
-python -m stock_watch --help
-python -m stock_watch preopen
-python -m stock_watch portfolio
-python -m stock_watch verification snapshot
-python -m stock_watch verification evaluate --all-dates --horizons 1,5,20
-python -m stock_watch verification summary
+export VENV_PY=/Users/tokuzfunpi/codes/nvidia/311env/bin/python
+source /Users/tokuzfunpi/codes/nvidia/311env/bin/activate
+$VENV_PY -m pip install -r requirements.txt
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 $VENV_PY -m pytest -q
+$VENV_PY -m stock_watch --help
+$VENV_PY -m stock_watch preopen
+$VENV_PY -m stock_watch portfolio
+$VENV_PY -m stock_watch verification snapshot
+$VENV_PY -m stock_watch verification evaluate --all-dates --horizons 1,5,20
+$VENV_PY -m stock_watch verification summary
 ```
 
 驗算檢查輸出（本機）：
@@ -1126,8 +1126,8 @@ requirements.txt
 
 - production 先不動
 - 每天照常跑：
-  - 盤前：`python3.11 -m stock_watch preopen`
-  - 盤後：`python3.11 -m stock_watch postclose`
+  - 盤前：`$VENV_PY -m stock_watch preopen`
+  - 盤後：`$VENV_PY -m stock_watch postclose`
 - 繼續累積 `5D / 20D`
 - 之後最先重看的，不是 feedback 權重，也不是 ATR exit，而是：
   - `midlong threshold`
