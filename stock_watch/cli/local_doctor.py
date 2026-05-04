@@ -32,6 +32,12 @@ class DoctorCheck:
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Check local stock-watch readiness before daily runs.")
     parser.add_argument("--skip-network", action="store_true", help="Skip the best-effort Yahoo DNS check.")
+    parser.add_argument(
+        "--fail-on",
+        choices=("fail", "warn"),
+        default="fail",
+        help="Choose which overall status should return a non-zero exit code. `fail` keeps warnings informational; `warn` turns warnings into a failing health gate.",
+    )
     return parser.parse_args(argv)
 
 
@@ -441,6 +447,11 @@ def overall_status(checks: list[DoctorCheck]) -> str:
     return "ok"
 
 
+def should_exit_nonzero(*, overall: str, fail_on: str) -> bool:
+    severity = {"ok": 0, "warn": 1, "fail": 2}
+    return severity.get(overall, 0) >= severity.get(fail_on, 2)
+
+
 def build_doctor_summary(checks: list[DoctorCheck]) -> dict[str, object]:
     failing = [check.name for check in checks if check.status == "fail"]
     warnings = [check.name for check in checks if check.status == "warn"]
@@ -567,7 +578,7 @@ def main(argv: list[str] | None = None) -> int:
     metrics = collect_doctor_metrics()
     overall = overall_status(checks)
     write_doctor_outputs(checks=checks, overall=overall, metrics=metrics)
-    return 1 if overall == "fail" else 0
+    return 1 if should_exit_nonzero(overall=overall, fail_on=args.fail_on) else 0
 
 
 if __name__ == "__main__":

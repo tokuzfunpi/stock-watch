@@ -67,7 +67,7 @@ Verification 子命令：
 
 - `preopen`：跑 watchlist + verification snapshot。
 - `postclose`：跑 watchlist + portfolio + verification 後半段，且 watchlist 會強制重跑，不沿用同日 preopen 的 duplicate guard。
-- `postclose`：流程尾端還會自動執行 `doctor --skip-network`，把每日健康摘要寫進 scheduler log。
+- `postclose`：流程尾端還會自動執行 `doctor --skip-network --fail-on warn`，把每日健康摘要寫進 scheduler log；只要 doctor 退化到 `warn/fail`，排程就會明確失敗。
 - `full`：整套本機流程一次跑完。
 - `portfolio`：只跑本機持股檢查。
 

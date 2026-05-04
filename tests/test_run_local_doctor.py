@@ -13,6 +13,7 @@ from stock_watch.cli.local_doctor import build_compact_summary
 from stock_watch.cli.local_doctor import build_doctor_summary
 from stock_watch.cli.local_doctor import main
 from stock_watch.cli.local_doctor import overall_status
+from stock_watch.cli.local_doctor import should_exit_nonzero
 from stock_watch.cli.local_doctor import write_doctor_outputs
 
 
@@ -60,6 +61,16 @@ class RunLocalDoctorTests(unittest.TestCase):
         self.assertIn("notification=ok", line)
         self.assertIn("verification=review", line)
         self.assertIn("report=current", line)
+
+    def test_should_exit_nonzero_respects_fail_threshold(self) -> None:
+        self.assertFalse(should_exit_nonzero(overall="ok", fail_on="fail"))
+        self.assertFalse(should_exit_nonzero(overall="warn", fail_on="fail"))
+        self.assertTrue(should_exit_nonzero(overall="fail", fail_on="fail"))
+
+    def test_should_exit_nonzero_respects_warn_threshold(self) -> None:
+        self.assertFalse(should_exit_nonzero(overall="ok", fail_on="warn"))
+        self.assertTrue(should_exit_nonzero(overall="warn", fail_on="warn"))
+        self.assertTrue(should_exit_nonzero(overall="fail", fail_on="warn"))
 
     def test_check_telegram_config_accepts_token_from_local_getupdates_url(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -297,6 +308,63 @@ class RunLocalDoctorTests(unittest.TestCase):
         self.assertEqual(payload["metrics"]["watchlist_artifact_freshness_status"], "stale_report")
         self.assertEqual(freshness_check["status"], "warn")
         self.assertIn("daily_report.md", freshness_check["detail"])
+
+    def test_main_returns_one_for_warn_when_fail_on_warn(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            theme_outdir = root / "theme_watchlist_daily"
+            verification_outdir = root / "verification" / "watchlist_daily"
+            history_cache_dir = theme_outdir / "history_cache"
+            theme_outdir.mkdir(parents=True, exist_ok=True)
+            verification_outdir.mkdir(parents=True, exist_ok=True)
+            history_cache_dir.mkdir(parents=True, exist_ok=True)
+
+            (root / "requirements.txt").write_text("pandas\n", encoding="utf-8")
+            (root / "config.json").write_text(
+                json.dumps(
+                    {
+                        "market_filter": {},
+                        "notify": {},
+                        "backtest": {},
+                        "group_weights": {},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (root / "watchlist.csv").write_text("ticker,name\n2330.TW,台積電\n", encoding="utf-8")
+            (root / "portfolio.csv.example").write_text("ticker,shares\n2330,1\n", encoding="utf-8")
+            (root / "chat_id_map.csv.example").write_text("chat_id,name\n", encoding="utf-8")
+            (root / "telegram_getupdates_url.example").write_text("https://example.com\n", encoding="utf-8")
+            (theme_outdir / "daily_rank.csv").write_text(
+                "ticker,spec_risk_score,spec_risk_label,rank\n2330.TW,0,正常,1\n",
+                encoding="utf-8",
+            )
+            (theme_outdir / "daily_report.md").write_text("# stale report\n", encoding="utf-8")
+            (theme_outdir / "runtime_metrics.json").write_text(json.dumps({"wall_seconds": 1.1}), encoding="utf-8")
+            stale_ts = (theme_outdir / "daily_rank.csv").stat().st_mtime - 10
+            os.utime(theme_outdir / "daily_report.md", (stale_ts, stale_ts))
+            os.utime(theme_outdir / "runtime_metrics.json", (stale_ts, stale_ts))
+            (theme_outdir / "portfolio_runtime_metrics.json").write_text(json.dumps({"wall_seconds": 0.7}), encoding="utf-8")
+            (verification_outdir / "runtime_metrics.json").write_text(json.dumps({"wall_seconds": 2.2}), encoding="utf-8")
+            (verification_outdir / "reco_snapshots.csv").write_text(
+                "signal_date,watch_type,ticker\n2026-04-27,short,2330.TW\n",
+                encoding="utf-8",
+            )
+            (verification_outdir / "reco_outcomes.csv").write_text(
+                "signal_date,horizon_days,watch_type,ticker,status\n2026-04-27,1,short,2330.TW,insufficient_forward_data\n",
+                encoding="utf-8",
+            )
+
+            with patch("stock_watch.cli.local_doctor.REPO_ROOT", root), patch(
+                "stock_watch.cli.local_doctor.THEME_OUTDIR", theme_outdir
+            ), patch("stock_watch.cli.local_doctor.VERIFICATION_OUTDIR", verification_outdir), patch(
+                "stock_watch.cli.local_doctor.DOCTOR_MD", theme_outdir / "local_doctor.md"
+            ), patch(
+                "stock_watch.cli.local_doctor.DOCTOR_JSON", theme_outdir / "local_doctor.json"
+            ):
+                code = main(["--skip-network", "--fail-on", "warn"])
+
+        self.assertEqual(code, 1)
 
     def test_main_accepts_synced_report_with_old_runtime(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

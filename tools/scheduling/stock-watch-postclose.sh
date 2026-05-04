@@ -81,8 +81,8 @@ PY
   cp -f "runs/verification/watchlist_daily/reco_snapshots.csv" "$archive_dir/reco_snapshots.csv" 2>/dev/null || true
   cp -f "runs/verification/watchlist_daily/reco_outcomes.csv" "$archive_dir/reco_outcomes.csv" 2>/dev/null || true
 
-  echo "doctor_command=$python_bin -m stock_watch doctor --skip-network"
-  "$python_bin" -m stock_watch doctor --skip-network
+  echo "doctor_command=$python_bin -m stock_watch doctor --skip-network --fail-on warn"
+  "$python_bin" -m stock_watch doctor --skip-network --fail-on warn
   if [[ -f "runs/theme_watchlist_daily/local_doctor_summary.txt" ]]; then
     echo "doctor_summary=$(tr -d '\n' < runs/theme_watchlist_daily/local_doctor_summary.txt)"
   fi
