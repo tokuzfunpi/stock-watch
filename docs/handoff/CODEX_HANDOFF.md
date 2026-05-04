@@ -12,6 +12,7 @@
 - `python -m stock_watch` 是目前穩定入口；`daily_theme_watchlist.py` 只保留為 compatibility shim，`portfolio_check.py` 已移除，持股流程改由 `python -m stock_watch portfolio` / `stock_watch.workflows.portfolio` 執行。
 - `python -m stock_watch report-sync` 會直接用現有 `runs/theme_watchlist_daily/daily_rank.csv` 重建 `daily_report.md/html`，不會重跑 watchlist，也不會送 Telegram。
 - `python -m stock_watch daily --mode portfolio --sync-watchlist-report` 可在需要時自動補跑 `report-sync`；`postclose` / `full` 只要 portfolio 步驟把 `daily_rank.csv` 推到比 `daily_report.md` 新，也會自動補 sync。
+- `python -m stock_watch doctor --skip-network` 現在除了 `local_doctor.md/json`，還會寫 `runs/theme_watchlist_daily/local_doctor_summary.txt`，給排程 / quick glance 用。
 - 穩健路線的效能優化已經完成到可長期使用的 checkpoint：
   - in-memory history cache
   - disk-backed history cache

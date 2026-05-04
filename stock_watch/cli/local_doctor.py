@@ -19,6 +19,7 @@ from stock_watch.cli.weekly_review import build_data_quality_gate
 
 DOCTOR_MD = THEME_OUTDIR / "local_doctor.md"
 DOCTOR_JSON = THEME_OUTDIR / "local_doctor.json"
+DOCTOR_SUMMARY_TXT = THEME_OUTDIR / "local_doctor_summary.txt"
 
 
 @dataclass(frozen=True)
@@ -454,6 +455,19 @@ def build_doctor_summary(checks: list[DoctorCheck]) -> dict[str, object]:
     }
 
 
+def build_compact_summary(*, overall: str, checks: list[DoctorCheck], metrics: dict[str, object]) -> str:
+    summary = build_doctor_summary(checks)
+    highlights: list[str] = []
+    if summary["warning_checks"]:
+        highlights.append("warnings=" + ",".join(summary["warning_checks"]))
+    if summary["advisory_checks"]:
+        highlights.append("info=" + ",".join(summary["advisory_checks"]))
+    highlights.append(f"notification={next((check.status for check in checks if check.name == 'telegram_config'), 'unknown')}")
+    highlights.append(f"verification={metrics.get('verification_gate_status', 'unknown')}")
+    highlights.append(f"report={metrics.get('watchlist_artifact_freshness_status', 'unknown')}")
+    return f"overall={overall} | " + " | ".join(highlights)
+
+
 def render_doctor_markdown(*, generated_at: str, checks: list[DoctorCheck], metrics: dict[str, object], overall: str) -> str:
     summary = build_doctor_summary(checks)
     lines = [
@@ -520,25 +534,31 @@ def write_doctor_outputs(
     metrics: dict[str, object],
     output_md: Path | None = None,
     output_json: Path | None = None,
+    output_summary_txt: Path | None = None,
 ) -> None:
     generated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     output_md = output_md or DOCTOR_MD
     output_json = output_json or DOCTOR_JSON
+    output_summary_txt = output_summary_txt or DOCTOR_SUMMARY_TXT
     summary = build_doctor_summary(checks)
+    compact_summary = build_compact_summary(overall=overall, checks=checks, metrics=metrics)
     payload = {
         "generated_at": generated_at,
         "overall": overall,
         "summary": summary,
+        "summary_line": compact_summary,
         "checks": [check.__dict__ for check in checks],
         "metrics": metrics,
     }
     output_md.parent.mkdir(parents=True, exist_ok=True)
     output_json.parent.mkdir(parents=True, exist_ok=True)
+    output_summary_txt.parent.mkdir(parents=True, exist_ok=True)
     output_md.write_text(
         render_doctor_markdown(generated_at=generated_at, checks=checks, metrics=metrics, overall=overall),
         encoding="utf-8",
     )
     output_json.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    output_summary_txt.write_text(compact_summary + "\n", encoding="utf-8")
 
 
 def main(argv: list[str] | None = None) -> int:

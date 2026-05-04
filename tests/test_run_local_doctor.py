@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 from stock_watch.cli.local_doctor import DoctorCheck
 from stock_watch.cli.local_doctor import _check_verification_health
+from stock_watch.cli.local_doctor import build_compact_summary
 from stock_watch.cli.local_doctor import build_doctor_summary
 from stock_watch.cli.local_doctor import main
 from stock_watch.cli.local_doctor import overall_status
@@ -41,6 +42,24 @@ class RunLocalDoctorTests(unittest.TestCase):
         self.assertEqual(summary["failing_checks"], ["config_json"])
         self.assertEqual(summary["warning_checks"], ["verification_health"])
         self.assertEqual(summary["advisory_checks"], ["telegram_config"])
+
+    def test_build_compact_summary_highlights_key_health_axes(self) -> None:
+        checks = [
+            DoctorCheck("telegram_config", "ok", "ok"),
+            DoctorCheck("verification_health", "warn", "warn"),
+        ]
+        metrics = {
+            "verification_gate_status": "review",
+            "watchlist_artifact_freshness_status": "current",
+        }
+
+        line = build_compact_summary(overall="warn", checks=checks, metrics=metrics)
+
+        self.assertIn("overall=warn", line)
+        self.assertIn("warnings=verification_health", line)
+        self.assertIn("notification=ok", line)
+        self.assertIn("verification=review", line)
+        self.assertIn("report=current", line)
 
     def test_check_telegram_config_accepts_token_from_local_getupdates_url(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -92,10 +111,19 @@ class RunLocalDoctorTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             output_md = Path(tmpdir) / "local_doctor.md"
             output_json = Path(tmpdir) / "local_doctor.json"
-            write_doctor_outputs(checks=checks, overall="ok", metrics=metrics, output_md=output_md, output_json=output_json)
+            output_summary = Path(tmpdir) / "local_doctor_summary.txt"
+            write_doctor_outputs(
+                checks=checks,
+                overall="ok",
+                metrics=metrics,
+                output_md=output_md,
+                output_json=output_json,
+                output_summary_txt=output_summary,
+            )
 
             markdown = output_md.read_text(encoding="utf-8")
             payload = json.loads(output_json.read_text(encoding="utf-8"))
+            summary_line = output_summary.read_text(encoding="utf-8").strip()
 
         self.assertIn("Local Doctor", markdown)
         self.assertIn("## Summary", markdown)
@@ -109,6 +137,8 @@ class RunLocalDoctorTests(unittest.TestCase):
         self.assertIn("Verification duplicate keys", markdown)
         self.assertEqual(payload["overall"], "ok")
         self.assertIn("summary", payload)
+        self.assertIn("summary_line", payload)
+        self.assertIn("overall=ok", summary_line)
         self.assertEqual(payload["checks"][0]["status"], "ok")
 
     def test_check_verification_health_reports_clean_gate(self) -> None:
