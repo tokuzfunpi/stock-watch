@@ -250,6 +250,26 @@ def _chunked(items: list[str], size: int) -> list[list[str]]:
     return [items[i : i + size] for i in range(0, len(items), size)]
 
 
+def _cache_covers_required_date(series: pd.Series | None, required_end_date: str) -> bool:
+    if series is None or getattr(series, "empty", True):
+        return False
+    required_text = str(required_end_date or "").strip()
+    if not required_text:
+        return True
+    try:
+        required_dt = pd.to_datetime(required_text).tz_localize(None)
+    except Exception:
+        return True
+    try:
+        index = pd.to_datetime(series.index, errors="coerce").tz_localize(None)
+    except Exception:
+        return False
+    index = index.dropna()
+    if len(index) == 0:
+        return False
+    return bool(index.max() >= required_dt)
+
+
 def _download_prices(
     tickers: list[str],
     cfg: EvalConfig,
@@ -283,7 +303,12 @@ def _download_prices(
     return None, last_err or "download_failed"
 
 
-def fetch_close_series(tickers: list[str], cfg: EvalConfig) -> tuple[dict[str, pd.Series], dict[str, str]]:
+def fetch_close_series(
+    tickers: list[str],
+    cfg: EvalConfig,
+    *,
+    required_end_date: str = "",
+) -> tuple[dict[str, pd.Series], dict[str, str]]:
     uniq = [str(t).strip() for t in tickers if str(t).strip()]
     seen: set[str] = set()
     uniq = [t for t in uniq if not (t in seen or seen.add(t))]
@@ -333,7 +358,20 @@ def fetch_close_series(tickers: list[str], cfg: EvalConfig) -> tuple[dict[str, p
     for ticker in uniq:
         s = load_cached(ticker)
         if s is not None:
-            out[ticker] = s
+            if _cache_covers_required_date(s, required_end_date):
+                out[ticker] = s
+            else:
+                try:
+                    last_cached = pd.to_datetime(s.index, errors="coerce").max()
+                    last_cached_text = "" if pd.isna(last_cached) else str(pd.Timestamp(last_cached).date())
+                except Exception:
+                    last_cached_text = "unknown"
+                logger.info(
+                    "Cached series stale for %s: last=%s, required_end_date=%s. Refreshing.",
+                    ticker,
+                    last_cached_text,
+                    required_end_date,
+                )
 
     # 1) Bulk (chunked) download for speed; may still miss some tickers.
     need_download = [t for t in uniq if t not in out]
@@ -670,7 +708,14 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     tickers = snapshots["ticker"].dropna().astype(str).tolist()
-    series_map, series_errors = fetch_close_series(tickers, cfg)
+    required_end_date = ""
+    if "signal_date" in snapshots.columns and not snapshots.empty:
+        non_empty_dates = snapshots["signal_date"].dropna().astype(str).str.strip()
+        non_empty_dates = non_empty_dates[non_empty_dates != ""]
+        if not non_empty_dates.empty:
+            required_end_date = str(sorted(non_empty_dates.tolist())[-1])
+
+    series_map, series_errors = fetch_close_series(tickers, cfg, required_end_date=required_end_date)
 
     now_local = datetime.now(LOCAL_TZ).strftime("%Y-%m-%d %H:%M:%S %Z")
     rows: list[dict] = []

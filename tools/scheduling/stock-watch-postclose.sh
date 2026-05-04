@@ -9,8 +9,13 @@ export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 mkdir -p runs/scheduler
 LOG_PATH="runs/scheduler/postclose.log"
 
+preferred_python="/Users/tokuzfunpi/codes/nvidia/311env/bin/python"
 python_bin="python3.11"
-if [[ -x ".venv/bin/python" ]]; then
+if [[ -x "$preferred_python" ]]; then
+  if "$preferred_python" -c "import pandas" >/dev/null 2>&1; then
+    python_bin="$preferred_python"
+  fi
+elif [[ -x ".venv/bin/python" ]]; then
   if .venv/bin/python -c "import pandas" >/dev/null 2>&1; then
     python_bin=".venv/bin/python"
   fi
@@ -19,8 +24,11 @@ fi
 {
   echo "=== stock-watch postclose ==="
   echo "started_at=$(TZ=Asia/Taipei date '+%Y-%m-%d %H:%M:%S %Z')"
+  echo "mode=postclose"
   echo "repo_root=$REPO_ROOT"
   echo "python=$python_bin"
+  echo "watchlist_force=postclose-default"
+  echo "command=$python_bin -m stock_watch daily --mode postclose --all-dates --max-days 60"
   # Keep evaluation history updated as older horizons mature.
   "$python_bin" -m stock_watch daily --mode postclose --all-dates --max-days 60
 

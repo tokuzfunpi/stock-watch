@@ -109,7 +109,7 @@ def _save_reports(daily_theme_watchlist, df_rank, market_regime: dict, bt_steady
     )
 
 
-def run_daily_watchlist(*, force_run: bool | None = False) -> int:
+def run_daily_watchlist(*, force_run: bool | None = False, success_scope: str | None = None) -> int:
     daily_theme_watchlist = _load_legacy_daily_workflow()
     main_started = time.perf_counter()
     effective_force_run = daily_theme_watchlist.FORCE_RUN if force_run is None else bool(force_run)
@@ -127,12 +127,21 @@ def run_daily_watchlist(*, force_run: bool | None = False) -> int:
         run_signature = run_state.current_run_signature(run_signature_paths)
         if (
             not effective_force_run
-            and run_state.load_last_success_date(success_file=daily_theme_watchlist.SUCCESS_FILE) == today
-            and run_state.load_last_success_signature(success_file=daily_theme_watchlist.SUCCESS_FILE) == run_signature
+            and run_state.load_last_success_date(
+                success_file=daily_theme_watchlist.SUCCESS_FILE,
+                success_scope=success_scope,
+            )
+            == today
+            and run_state.load_last_success_signature(
+                success_file=daily_theme_watchlist.SUCCESS_FILE,
+                success_scope=success_scope,
+            )
+            == run_signature
         ):
             daily_theme_watchlist.logger.info(
-                "Already completed successfully for %s with same code/config. Skip duplicate run.",
+                "Already completed successfully for %s with same code/config. Skip duplicate run. scope=%s",
                 today,
+                success_scope or "default",
             )
             return 0
 
@@ -276,6 +285,7 @@ def run_daily_watchlist(*, force_run: bool | None = False) -> int:
             success_file=daily_theme_watchlist.SUCCESS_FILE,
             success_date=today,
             signature=run_signature,
+            success_scope=success_scope,
         )
         runtime_metrics.write_runtime_metrics(
             runtime_metrics_json=daily_theme_watchlist.RUNTIME_METRICS_JSON,

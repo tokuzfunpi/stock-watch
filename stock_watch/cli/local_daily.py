@@ -11,6 +11,7 @@ import pandas as pd
 from stock_watch.paths import THEME_OUTDIR
 from stock_watch.paths import VERIFICATION_OUTDIR
 from stock_watch.cli.weekly_review import build_data_quality_gate
+from stock_watch.cli import report_sync
 from stock_watch.workflows.daily_watchlist import run_daily_watchlist
 from stock_watch.workflows.portfolio import run_default_portfolio_check
 from verification.reports.summarize_outcomes import summarize_outcomes
@@ -22,6 +23,7 @@ RUNTIME_METRICS_JSON = THEME_OUTDIR / "runtime_metrics.json"
 PORTFOLIO_RUNTIME_METRICS_JSON = THEME_OUTDIR / "portfolio_runtime_metrics.json"
 VERIFICATION_RUNTIME_METRICS_JSON = VERIFICATION_OUTDIR / "runtime_metrics.json"
 PORTFOLIO_RUNTIME_METRICS_MD = THEME_OUTDIR / "portfolio_runtime_metrics.md"
+REPORT_SYNC_METRICS_JSON = THEME_OUTDIR / "report_sync_metrics.json"
 
 MODE_STEPS: dict[str, tuple[str, ...]] = {
     "preopen": ("watchlist", "verification"),
@@ -40,6 +42,7 @@ STEP_LABELS = {
     "watchlist": "Watchlist",
     "portfolio": "Portfolio",
     "verification": "Verification",
+    "report_sync": "Report Sync",
 }
 
 
@@ -55,6 +58,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--skip-portfolio", action="store_true")
     parser.add_argument("--skip-verification", action="store_true")
     parser.add_argument("--force-watchlist", action="store_true", help="Ignore same-day watchlist duplicate guard.")
+    parser.add_argument(
+        "--sync-watchlist-report",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Auto-run `report-sync` when a portfolio step leaves daily_rank.csv newer than daily_report.md. Defaults to on for modes that include portfolio.",
+    )
 
     parser.add_argument("--top-n-short", type=int, default=5)
     parser.add_argument("--top-n-midlong", type=int, default=5)
@@ -176,6 +185,43 @@ def _load_runtime_metrics(path: Path) -> dict[str, object]:
     return payload
 
 
+def _watchlist_artifact_freshness(theme_outdir: Path) -> dict[str, str]:
+    daily_rank_csv = theme_outdir / "daily_rank.csv"
+    daily_report_md = theme_outdir / "daily_report.md"
+    runtime_metrics_json = theme_outdir / "runtime_metrics.json"
+    required = [daily_rank_csv, daily_report_md, runtime_metrics_json]
+    missing = [path.name for path in required if not path.exists()]
+    if missing:
+        return {
+            "status": "missing",
+            "detail": f"missing: {', '.join(missing)}",
+        }
+
+    rank_mtime = daily_rank_csv.stat().st_mtime
+    report_lag_seconds = int(rank_mtime - daily_report_md.stat().st_mtime)
+    runtime_lag_seconds = int(rank_mtime - runtime_metrics_json.stat().st_mtime)
+
+    if report_lag_seconds > 1:
+        stale_targets = ["daily_report.md"]
+        if runtime_lag_seconds > 1:
+            stale_targets.append("runtime_metrics.json")
+        return {
+            "status": "stale_report",
+            "detail": f"daily_rank.csv newer than {', '.join(stale_targets)} by up to {max(report_lag_seconds, runtime_lag_seconds)}s",
+        }
+
+    if runtime_lag_seconds > 1:
+        return {
+            "status": "report_current_runtime_stale",
+            "detail": f"daily_report.md is synced to daily_rank.csv; runtime_metrics.json is older by {runtime_lag_seconds}s",
+        }
+
+    return {
+        "status": "current",
+        "detail": "daily_rank.csv, daily_report.md, and runtime_metrics.json look in sync",
+    }
+
+
 def _spec_risk_bucket(df: pd.DataFrame) -> pd.Series:
     if df.empty:
         return pd.Series(dtype=str)
@@ -232,8 +278,10 @@ def collect_status_metrics(theme_outdir: Path = THEME_OUTDIR, verification_outdi
     snapshots_csv = verification_outdir / "reco_snapshots.csv"
     outcomes_csv = verification_outdir / "reco_outcomes.csv"
     daily_rank_csv = theme_outdir / "daily_rank.csv"
+    artifact_freshness = _watchlist_artifact_freshness(theme_outdir)
     watchlist_runtime = _load_runtime_metrics(theme_outdir / "runtime_metrics.json")
     portfolio_runtime = _load_runtime_metrics(theme_outdir / "portfolio_runtime_metrics.json")
+    report_sync_runtime = _load_runtime_metrics(theme_outdir / "report_sync_metrics.json")
     verification_runtime = _load_runtime_metrics(verification_outdir / "runtime_metrics.json")
     spec_risk_metrics = _collect_spec_risk_metrics(daily_rank_csv)
     snapshots_df = _load_csv_safely(snapshots_csv)
@@ -284,6 +332,8 @@ def collect_status_metrics(theme_outdir: Path = THEME_OUTDIR, verification_outdi
         "midlong_threshold_gate_horizon": midlong_gate_horizon,
         "midlong_threshold_gate_detail": midlong_gate_detail,
         "verification_gate_status": str(verification_gate.get("status", "unknown") or "unknown"),
+        "watchlist_artifact_freshness_status": artifact_freshness["status"],
+        "watchlist_artifact_freshness_detail": artifact_freshness["detail"],
         "snapshot_dup_keys": int(verification_gate_metrics.get("snapshot_dup_keys", 0) or 0),
         "outcome_dup_keys": int(verification_gate_metrics.get("outcome_dup_keys", 0) or 0),
         "signal_date_missing_rows": int(verification_gate_metrics.get("signal_date_missing_rows", 0) or 0),
@@ -292,6 +342,9 @@ def collect_status_metrics(theme_outdir: Path = THEME_OUTDIR, verification_outdi
         "watchlist_runtime_status": str(watchlist_runtime.get("status", "") or ""),
         "portfolio_runtime_seconds": float(portfolio_runtime.get("wall_seconds", 0.0) or 0.0),
         "portfolio_runtime_status": str(portfolio_runtime.get("status", "") or ""),
+        "report_sync_runtime_seconds": float(report_sync_runtime.get("wall_seconds", 0.0) or 0.0),
+        "report_sync_runtime_status": str(report_sync_runtime.get("status", "") or ""),
+        "report_sync_generated_at": str(report_sync_runtime.get("generated_at", "") or ""),
         "verification_runtime_seconds": float(verification_runtime.get("wall_seconds", 0.0) or 0.0),
         "verification_runtime_status": str(verification_runtime.get("status", "") or ""),
         "spec_risk_high_rows": int(spec_risk_metrics["spec_risk_high_rows"]),
@@ -330,6 +383,7 @@ def render_local_status_markdown(
             f"- Latest snapshot signal date: `{metrics.get('latest_snapshot_signal_date') or 'n/a'}`",
             f"- Latest outcome signal date: `{metrics.get('latest_outcome_signal_date') or 'n/a'}`",
             f"- Daily rank rows: `{metrics.get('daily_rank_rows', 0)}`",
+            f"- Watchlist artifact freshness: `{metrics.get('watchlist_artifact_freshness_status') or 'unknown'}` ({metrics.get('watchlist_artifact_freshness_detail') or 'n/a'})",
             f"- Snapshot rows: `{metrics.get('snapshot_rows', 0)}`",
             f"- Outcome rows: `{metrics.get('outcome_rows', 0)}`",
             f"- Outcome OK rows: `{metrics.get('outcome_ok_rows', 0)}`",
@@ -348,6 +402,8 @@ def render_local_status_markdown(
             f"- Spec risk top tickers: `{', '.join(metrics.get('spec_risk_top_tickers', [])) or 'n/a'}`",
             f"- Watchlist runtime: `{metrics.get('watchlist_runtime_seconds', 0.0):.3f}s` ({metrics.get('watchlist_runtime_status') or 'n/a'})",
             f"- Portfolio runtime: `{metrics.get('portfolio_runtime_seconds', 0.0):.3f}s` ({metrics.get('portfolio_runtime_status') or 'n/a'})",
+            f"- Report sync runtime: `{metrics.get('report_sync_runtime_seconds', 0.0):.3f}s` ({metrics.get('report_sync_runtime_status') or 'n/a'})"
+            + (f", generated `{metrics.get('report_sync_generated_at')}`" if metrics.get("report_sync_generated_at") else ""),
             f"- Verification runtime: `{metrics.get('verification_runtime_seconds', 0.0):.3f}s` ({metrics.get('verification_runtime_status') or 'n/a'})",
             "",
             "## Key Outputs",
@@ -356,6 +412,7 @@ def render_local_status_markdown(
             f"- Watchlist runtime: `{theme_outdir_str('runtime_metrics.md')}`",
             f"- Portfolio report: `{theme_outdir_str('portfolio_report.md')}`",
             f"- Portfolio runtime: `{theme_outdir_str('portfolio_runtime_metrics.md')}`",
+            f"- Report sync runtime: `{theme_outdir_str('report_sync_metrics.md')}`",
             f"- Verification report: `{verification_outdir_str('verification_report.md')}`",
             f"- Verification runtime: `{verification_outdir_str('runtime_metrics.md')}`",
             f"- Outcomes summary: `{verification_outdir_str('outcomes_summary.md')}`",
@@ -396,6 +453,7 @@ def write_local_status_dashboard(
             "watchlist_runtime": str(theme_outdir / "runtime_metrics.md"),
             "portfolio_report": str(theme_outdir / "portfolio_report.md"),
             "portfolio_runtime": str(theme_outdir / "portfolio_runtime_metrics.md"),
+            "report_sync_runtime": str(theme_outdir / "report_sync_metrics.md"),
             "verification_report": str(verification_outdir / "verification_report.md"),
             "verification_runtime": str(verification_outdir / "runtime_metrics.md"),
             "outcomes_summary": str(verification_outdir / "outcomes_summary.md"),
@@ -421,9 +479,12 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     steps: list[dict[str, str]] = []
     overall_status = "ok"
+    force_watchlist = args.force_watchlist or args.mode == "postclose"
+    watchlist_success_scope = args.mode if args.mode in {"preopen", "postclose", "full"} else None
+    sync_watchlist_report = args.sync_watchlist_report if args.sync_watchlist_report is not None else args.mode in {"portfolio", "postclose", "full"}
 
     step_runners = {
-        "watchlist": lambda: run_daily_watchlist(force_run=args.force_watchlist),
+        "watchlist": lambda: run_daily_watchlist(force_run=force_watchlist, success_scope=watchlist_success_scope),
         "portfolio": run_portfolio_step,
         "verification": lambda: run_daily_verification.main(build_verification_argv(args)),
     }
@@ -447,6 +508,19 @@ def main(argv: list[str] | None = None) -> int:
             return code
 
         steps.append({"name": step_name, "label": STEP_LABELS[step_name], "status": "completed", "detail": "OK"})
+
+    if sync_watchlist_report and should_run_step(args, "portfolio"):
+        artifact_freshness = _watchlist_artifact_freshness(THEME_OUTDIR)
+        if artifact_freshness["status"] == "stale_report":
+            sync_code = report_sync.main([])
+            if sync_code:
+                overall_status = "failed"
+                steps.append({"name": "report_sync", "label": STEP_LABELS["report_sync"], "status": "failed", "detail": f"Exit code {sync_code}"})
+                write_local_status_dashboard(args=args, steps=steps, overall_status=overall_status)
+                return sync_code
+            steps.append({"name": "report_sync", "label": STEP_LABELS["report_sync"], "status": "completed", "detail": "Synced watchlist report"})
+        else:
+            steps.append({"name": "report_sync", "label": STEP_LABELS["report_sync"], "status": "skipped", "detail": "Watchlist report already synced"})
 
     write_local_status_dashboard(args=args, steps=steps, overall_status=overall_status)
     return 0

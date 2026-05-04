@@ -37,6 +37,9 @@
 - `python3 -m stock_watch daily --mode portfolio`
 - `python3 -m stock_watch doctor`
 - `python3 -m stock_watch doctor --skip-network`
+- `python3 -m stock_watch report-sync`
+- `python3 -m stock_watch daily --mode portfolio --sync-watchlist-report`
+- `python3 -m stock_watch daily --mode portfolio --no-sync-watchlist-report`
 - `python3 -m stock_watch weekly`
 - `python3 -m stock_watch weekly --max-signal-dates 5`
 - `python3 -m stock_watch housekeeping`
@@ -63,7 +66,7 @@ Verification 子命令：
 ## Daily 模式
 
 - `preopen`：跑 watchlist + verification snapshot。
-- `postclose`：跑 watchlist + portfolio + verification 後半段。
+- `postclose`：跑 watchlist + portfolio + verification 後半段，且 watchlist 會強制重跑，不沿用同日 preopen 的 duplicate guard。
 - `full`：整套本機流程一次跑完。
 - `portfolio`：只跑本機持股檢查。
 
@@ -77,6 +80,9 @@ Verification 子命令：
 - 複製 `portfolio.csv.example` 成本機的 `portfolio.csv`。
 - 填入自己的持股資料。
 - 執行 `python3 -m stock_watch portfolio`。
+- 這個流程會更新 `runs/theme_watchlist_daily/daily_rank.csv` 供持股檢查使用，但不會重建 `daily_report.md/html`。
+- `daily --mode portfolio`、`daily --mode postclose`、`daily --mode full` 現在預設都會在需要時自動補跑 `report-sync`；若不想補跑，可加 `--no-sync-watchlist-report`。
+- 如果想手動把 watchlist 報表補齊到最新排行，再跑 `python3 -m stock_watch report-sync`。
 
 輸出：
 
@@ -84,6 +90,8 @@ Verification 子命令：
 - `runs/theme_watchlist_daily/portfolio_report.html`
 - `runs/theme_watchlist_daily/portfolio_runtime_metrics.md`
 - `runs/theme_watchlist_daily/portfolio_runtime_metrics.json`
+- `runs/theme_watchlist_daily/report_sync_metrics.md`
+- `runs/theme_watchlist_daily/report_sync_metrics.json`
 
 ## 重要輸出
 

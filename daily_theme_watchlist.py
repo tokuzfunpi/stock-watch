@@ -50,6 +50,7 @@ from stock_watch.state import run_state
 from stock_watch.strategy import candidates as strategy_candidates
 from stock_watch.strategy import feedback as strategy_feedback
 from stock_watch.strategy import scenario as strategy_scenario
+from stock_watch.telegram_config import resolve_telegram_token
 from stock_watch.workflows import market_context
 from stock_watch.workflows import runtime_metrics
 from stock_watch.signals.detect import (
@@ -98,7 +99,7 @@ SHADOW_OPEN_NOT_CHASE_SNAPSHOTS_CSV = STOCK_WATCH_VERIFICATION_OUTDIR / "shadow_
 LOG_DIR = OUTDIR / "logs"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "").strip()
+TELEGRAM_TOKEN, TELEGRAM_TOKEN_SOURCE = resolve_telegram_token()
 FINMIND_TOKEN = os.getenv("FINMIND_TOKEN", "").strip()
 HTTP_TIMEOUT = int(os.getenv("HTTP_TIMEOUT", "20"))
 FORCE_RUN = os.getenv("FORCE_RUN", "").strip().lower() in {"1", "true", "yes", "y"}

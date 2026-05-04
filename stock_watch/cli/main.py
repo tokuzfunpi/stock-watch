@@ -8,6 +8,7 @@ from stock_watch.cli import local_daily
 from stock_watch.cli import local_doctor
 from stock_watch.cli import local_housekeeping
 from stock_watch.cli import local_website
+from stock_watch.cli import report_sync
 from stock_watch.cli import weekly_review
 from verification.cli import backfill_from_git
 from verification.cli import evaluate_recommendations
@@ -23,6 +24,7 @@ COMMANDS: dict[str, tuple[str, ModuleType]] = {
     "housekeeping": ("Clean or inspect generated local artifacts.", local_housekeeping),
     "website": ("Generate the local static dashboard.", local_website),
     "weekly": ("Generate weekly review outputs.", weekly_review),
+    "report-sync": ("Rebuild daily watchlist reports from the latest daily_rank.csv only.", report_sync),
 }
 
 

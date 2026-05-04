@@ -9,6 +9,29 @@ from zoneinfo import ZoneInfo
 import pandas as pd
 
 
+def _load_success_payload(success_file: Path) -> dict[str, object]:
+    if not success_file.exists():
+        return {}
+    raw = success_file.read_text(encoding="utf-8").strip()
+    if not raw:
+        return {}
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError:
+        return {"date": raw}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _scoped_success_payload(payload: dict[str, object], scope: str | None) -> dict[str, object]:
+    if not scope:
+        return payload
+    scopes = payload.get("scopes", {})
+    if not isinstance(scopes, dict):
+        return {}
+    scoped = scopes.get(scope, {})
+    return scoped if isinstance(scoped, dict) else {}
+
+
 def load_last_state(*, state_file: Path, state_enabled: bool) -> str:
     if not state_enabled or not state_file.exists():
         return ""
@@ -24,17 +47,11 @@ def today_local_str(*, local_tz: ZoneInfo) -> str:
     return datetime.now(local_tz).strftime("%Y-%m-%d")
 
 
-def load_last_success_date(*, success_file: Path) -> str:
-    if not success_file.exists():
-        return ""
-    raw = success_file.read_text(encoding="utf-8").strip()
-    if not raw:
-        return ""
-    try:
-        data = json.loads(raw)
-        return str(data.get("date", ""))
-    except json.JSONDecodeError:
-        return raw
+def load_last_success_date(*, success_file: Path, success_scope: str | None = None) -> str:
+    payload = _load_success_payload(success_file)
+    if success_scope:
+        return str(_scoped_success_payload(payload, success_scope).get("date", ""))
+    return str(payload.get("date", ""))
 
 
 def current_run_signature(paths: list[Path]) -> str:
@@ -45,24 +62,30 @@ def current_run_signature(paths: list[Path]) -> str:
     return hasher.hexdigest()[:16]
 
 
-def load_last_success_signature(*, success_file: Path) -> str:
-    if not success_file.exists():
-        return ""
-    raw = success_file.read_text(encoding="utf-8").strip()
-    if not raw:
-        return ""
-    try:
-        data = json.loads(raw)
-        return str(data.get("signature", ""))
-    except json.JSONDecodeError:
-        return ""
+def load_last_success_signature(*, success_file: Path, success_scope: str | None = None) -> str:
+    payload = _load_success_payload(success_file)
+    if success_scope:
+        return str(_scoped_success_payload(payload, success_scope).get("signature", ""))
+    return str(payload.get("signature", ""))
 
 
-def save_last_success_date(*, success_file: Path, success_date: str, signature: str) -> None:
-    success_file.write_text(
-        json.dumps({"date": success_date, "signature": signature}, ensure_ascii=False),
-        encoding="utf-8",
-    )
+def save_last_success_date(
+    *,
+    success_file: Path,
+    success_date: str,
+    signature: str,
+    success_scope: str | None = None,
+) -> None:
+    payload = _load_success_payload(success_file)
+    payload["date"] = success_date
+    payload["signature"] = signature
+    if success_scope:
+        scopes = payload.get("scopes", {})
+        if not isinstance(scopes, dict):
+            scopes = {}
+        scopes[success_scope] = {"date": success_date, "signature": signature}
+        payload["scopes"] = scopes
+    success_file.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
 
 
 def build_rank_state(df_rank: pd.DataFrame, market_regime: dict) -> str:

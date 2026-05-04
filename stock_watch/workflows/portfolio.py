@@ -230,6 +230,9 @@ def run_portfolio_check(
         print_fn(macro_message)
         print_fn()
         print_fn(portfolio_message)
+        print_fn()
+        print_fn("Note: portfolio mode refreshes `daily_rank.csv` for holdings review only.")
+        print_fn("Run `python -m stock_watch report-sync` if you also want `daily_report.md/html` to match the latest rank.")
 
     _timed_call(step_timings, "print_output", _print_outputs)
     _write_runtime_metrics(

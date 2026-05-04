@@ -8,12 +8,15 @@ from unittest.mock import patch
 import pandas as pd
 
 from verification.workflows import evaluate_recommendations as er
+from verification.workflows.evaluate_recommendations import EvalConfig
 from verification.workflows.evaluate_recommendations import compute_forward_return_pct
 from verification.workflows.evaluate_recommendations import dedupe_outcomes_by_key
 from verification.workflows.evaluate_recommendations import dedupe_snapshots_by_key
 from verification.workflows.evaluate_recommendations import enrich_scenario_label_columns
+from verification.workflows.evaluate_recommendations import fetch_close_series
 from verification.workflows.evaluate_recommendations import is_valid_signal_date
 from verification.workflows.evaluate_recommendations import _spec_profile_from_snapshot_row
+from verification.workflows.evaluate_recommendations import _cache_covers_required_date
 from verification.workflows.evaluate_recommendations import _chunked
 
 
@@ -113,6 +116,45 @@ class EvaluateRecommendationsTests(unittest.TestCase):
         self.assertIn("signal_date_shifted", detail)
         self.assertAlmostEqual(out_close or 0.0, 110.0)
         self.assertAlmostEqual(ret_pct or 0.0, 10.0)
+
+    def test_cache_covers_required_date_checks_latest_index(self) -> None:
+        s = pd.Series(
+            [100.0, 110.0],
+            index=pd.to_datetime(["2026-04-28", "2026-04-29"]),
+            name="Close",
+        )
+
+        self.assertTrue(_cache_covers_required_date(s, "2026-04-29"))
+        self.assertFalse(_cache_covers_required_date(s, "2026-04-30"))
+
+    def test_fetch_close_series_refreshes_stale_cache_for_required_signal_date(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache_dir = Path(tmpdir)
+            pd.DataFrame(
+                {
+                    "Date": ["2026-04-28", "2026-04-29"],
+                    "Close": [100.0, 101.0],
+                }
+            ).to_csv(cache_dir / "2330_TW.csv", index=False)
+            cfg = EvalConfig(cache_dir=cache_dir)
+
+            fresh_df = pd.DataFrame(
+                {
+                    "Close": [100.0, 101.0, 102.0],
+                },
+                index=pd.to_datetime(["2026-04-28", "2026-04-29", "2026-04-30"]),
+            )
+
+            with patch.object(er, "_download_prices", return_value=(fresh_df, "")) as mock_download:
+                series_map, errors = fetch_close_series(["2330.TW"], cfg, required_end_date="2026-04-30")
+
+            self.assertEqual(errors, {})
+            self.assertIn("2330.TW", series_map)
+            self.assertEqual(str(series_map["2330.TW"].index.max().date()), "2026-04-30")
+            self.assertEqual(len(series_map["2330.TW"]), 3)
+            mock_download.assert_called()
+            refreshed = pd.read_csv(cache_dir / "2330_TW.csv")
+            self.assertEqual(refreshed.iloc[-1]["Date"], "2026-04-30")
 
     def test_enrich_scenario_label_columns_prefers_snapshots_then_alert_tracking(self) -> None:
         outcomes = pd.DataFrame(
@@ -279,3 +321,70 @@ class EvaluateRecommendationsTests(unittest.TestCase):
             cleaned = pd.read_csv(outcomes_csv)
             self.assertEqual(len(cleaned), 1)
             self.assertEqual(cleaned.iloc[0]["ticker"], "2495.TW")
+
+    def test_main_refreshes_stale_cache_before_evaluating_latest_signal_date(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            snapshot_csv = root / "reco_snapshots.csv"
+            outcomes_csv = root / "reco_outcomes.csv"
+            cache_dir = root / "cache"
+            cache_dir.mkdir(parents=True, exist_ok=True)
+
+            pd.DataFrame(
+                [
+                    {
+                        "generated_at": "2026-05-01 14:00:00 CST",
+                        "signal_date": "2026-04-30",
+                        "watch_type": "short",
+                        "ticker": "2330.TW",
+                        "name": "台積電",
+                        "action": "等拉回",
+                        "reco_status": "ok",
+                        "grade": "A",
+                        "setup_score": 8,
+                        "risk_score": 2,
+                        "ret5_pct": 6.0,
+                        "ret20_pct": 18.0,
+                        "volume_ratio20": 1.6,
+                        "signals": "TREND",
+                        "scenario_label": "高檔震盪盤",
+                    }
+                ]
+            ).to_csv(snapshot_csv, index=False)
+
+            pd.DataFrame(
+                {
+                    "Date": ["2026-04-28", "2026-04-29"],
+                    "Close": [100.0, 101.0],
+                }
+            ).to_csv(cache_dir / "2330_TW.csv", index=False)
+
+            fresh_df = pd.DataFrame(
+                {"Close": [100.0, 101.0, 102.0, 103.0]},
+                index=pd.to_datetime(["2026-04-28", "2026-04-29", "2026-04-30", "2026-05-01"]),
+            )
+
+            with patch.object(er, "_download_prices", return_value=(fresh_df, "")) as mock_download:
+                code = er.main(
+                    [
+                        "--snapshot-csv",
+                        str(snapshot_csv),
+                        "--outcomes-csv",
+                        str(outcomes_csv),
+                        "--cache-dir",
+                        str(cache_dir),
+                        "--signal-date",
+                        "2026-04-30",
+                        "--horizons",
+                        "1",
+                    ]
+                )
+
+            self.assertEqual(code, 0)
+            mock_download.assert_called()
+            outcomes = pd.read_csv(outcomes_csv)
+            self.assertEqual(len(outcomes), 1)
+            self.assertEqual(str(outcomes.iloc[0]["status"]), "ok")
+            self.assertEqual(str(outcomes.iloc[0]["signal_date"]), "2026-04-30")
+            refreshed = pd.read_csv(cache_dir / "2330_TW.csv")
+            self.assertEqual(refreshed.iloc[-1]["Date"], "2026-05-01")

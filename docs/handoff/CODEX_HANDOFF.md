@@ -10,6 +10,8 @@
   - `verification`
   - `local runners / doctor / housekeeping / weekly review`
 - `python -m stock_watch` 是目前穩定入口；`daily_theme_watchlist.py` 只保留為 compatibility shim，`portfolio_check.py` 已移除，持股流程改由 `python -m stock_watch portfolio` / `stock_watch.workflows.portfolio` 執行。
+- `python -m stock_watch report-sync` 會直接用現有 `runs/theme_watchlist_daily/daily_rank.csv` 重建 `daily_report.md/html`，不會重跑 watchlist，也不會送 Telegram。
+- `python -m stock_watch daily --mode portfolio --sync-watchlist-report` 可在需要時自動補跑 `report-sync`；`postclose` / `full` 只要 portfolio 步驟把 `daily_rank.csv` 推到比 `daily_report.md` 新，也會自動補 sync。
 - 穩健路線的效能優化已經完成到可長期使用的 checkpoint：
   - in-memory history cache
   - disk-backed history cache
@@ -55,6 +57,8 @@
   - `spec_risk_high_rows`
   - `spec_risk_watch_rows`
   - `spec_risk_top_tickers`
+  - `watchlist_artifact_freshness`
+  - `report_sync_runtime`
 
 ## 3. 目前最重要的分析結論
 - 這條 `spec_risk` 線**已經有辨識力，但還沒有足夠證據變成硬規則**。
@@ -118,6 +122,7 @@
 
 ## 9. 本機執行
 - 本機固定 venv：`/Users/tokuzfunpi/codes/nvidia/311env`
+- 之後在這個 repo 內，預設優先使用這個 venv；不要再優先用 repo 內 `.venv`
 - 建議直接用：
   - `VENV_PY=/Users/tokuzfunpi/codes/nvidia/311env/bin/python`
 - 常用入口：

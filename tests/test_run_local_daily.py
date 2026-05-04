@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -73,6 +74,7 @@ class RunLocalDailyTests(unittest.TestCase):
                     {"signal_date": "2026-04-23", "watch_type": "midlong", "ticker": "2317.TW"},
                 ]
             ).to_csv(verification_outdir / "reco_snapshots.csv", index=False)
+            (theme_outdir / "daily_report.md").write_text("# report\n", encoding="utf-8")
             pd.DataFrame(
                 [
                     {"signal_date": "2026-04-22", "horizon_days": 1, "watch_type": "short", "ticker": "2330.TW", "status": "ok"},
@@ -121,6 +123,7 @@ class RunLocalDailyTests(unittest.TestCase):
         self.assertEqual(metrics["spec_risk_high_rows"], 1)
         self.assertEqual(metrics["spec_risk_watch_rows"], 1)
         self.assertEqual(metrics["spec_risk_top_tickers"], ["3057.TW", "6669.TW"])
+        self.assertEqual(metrics["watchlist_artifact_freshness_status"], "current")
 
     def test_collect_status_metrics_reads_midlong_threshold_gate(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -163,6 +166,54 @@ class RunLocalDailyTests(unittest.TestCase):
         self.assertEqual(metrics["midlong_threshold_gate_horizon"], "1")
         self.assertIn("normal_below_n=0", metrics["midlong_threshold_gate_detail"])
 
+    def test_collect_status_metrics_marks_stale_watchlist_report(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            theme_outdir = Path(tmpdir) / "theme_watchlist_daily"
+            verification_outdir = Path(tmpdir) / "verification" / "watchlist_daily"
+            theme_outdir.mkdir(parents=True, exist_ok=True)
+            verification_outdir.mkdir(parents=True, exist_ok=True)
+
+            daily_rank_csv = theme_outdir / "daily_rank.csv"
+            daily_report_md = theme_outdir / "daily_report.md"
+            runtime_metrics_json = theme_outdir / "runtime_metrics.json"
+            pd.DataFrame([{"ticker": "2330.TW", "spec_risk_score": 0, "spec_risk_label": "正常", "rank": 1}]).to_csv(
+                daily_rank_csv, index=False
+            )
+            daily_report_md.write_text("# report\n", encoding="utf-8")
+            runtime_metrics_json.write_text(json.dumps({"status": "ok", "wall_seconds": 1.0}), encoding="utf-8")
+            stale_ts = daily_rank_csv.stat().st_mtime - 10
+            os.utime(daily_report_md, (stale_ts, stale_ts))
+            os.utime(runtime_metrics_json, (stale_ts, stale_ts))
+
+            metrics = collect_status_metrics(theme_outdir, verification_outdir)
+
+        self.assertEqual(metrics["watchlist_artifact_freshness_status"], "stale_report")
+        self.assertIn("daily_report.md", metrics["watchlist_artifact_freshness_detail"])
+        self.assertIn("runtime_metrics.json", metrics["watchlist_artifact_freshness_detail"])
+
+    def test_collect_status_metrics_treats_synced_report_with_old_runtime_as_expected(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            theme_outdir = Path(tmpdir) / "theme_watchlist_daily"
+            verification_outdir = Path(tmpdir) / "verification" / "watchlist_daily"
+            theme_outdir.mkdir(parents=True, exist_ok=True)
+            verification_outdir.mkdir(parents=True, exist_ok=True)
+
+            daily_rank_csv = theme_outdir / "daily_rank.csv"
+            daily_report_md = theme_outdir / "daily_report.md"
+            runtime_metrics_json = theme_outdir / "runtime_metrics.json"
+            pd.DataFrame([{"ticker": "2330.TW", "spec_risk_score": 0, "spec_risk_label": "正常", "rank": 1}]).to_csv(
+                daily_rank_csv, index=False
+            )
+            daily_report_md.write_text("# report\n", encoding="utf-8")
+            runtime_metrics_json.write_text(json.dumps({"status": "ok", "wall_seconds": 1.0}), encoding="utf-8")
+            stale_ts = daily_rank_csv.stat().st_mtime - 10
+            os.utime(runtime_metrics_json, (stale_ts, stale_ts))
+
+            metrics = collect_status_metrics(theme_outdir, verification_outdir)
+
+        self.assertEqual(metrics["watchlist_artifact_freshness_status"], "report_current_runtime_stale")
+        self.assertIn("daily_report.md is synced", metrics["watchlist_artifact_freshness_detail"])
+
     def test_write_local_status_dashboard_writes_markdown_and_json(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             theme_outdir = Path(tmpdir) / "theme_watchlist_daily"
@@ -171,13 +222,17 @@ class RunLocalDailyTests(unittest.TestCase):
             status_json = theme_outdir / "local_run_status.json"
             theme_outdir.mkdir(parents=True, exist_ok=True)
             verification_outdir.mkdir(parents=True, exist_ok=True)
-            pd.DataFrame([{"ticker": "2330.TW"}]).to_csv(theme_outdir / "daily_rank.csv", index=False)
             pd.DataFrame(
                 [
                     {"ticker": "3057.TW", "spec_risk_score": 8, "spec_risk_label": "疑似炒作風險高", "rank": 1},
                     {"ticker": "2330.TW", "spec_risk_score": 0, "spec_risk_label": "正常", "rank": 2},
                 ]
             ).to_csv(theme_outdir / "daily_rank.csv", index=False)
+            (theme_outdir / "daily_report.md").write_text("# report\n", encoding="utf-8")
+            (theme_outdir / "runtime_metrics.json").write_text(
+                json.dumps({"status": "ok", "wall_seconds": 1.0}),
+                encoding="utf-8",
+            )
             pd.DataFrame(
                 [{"signal_date": "2026-04-23", "watch_type": "short", "ticker": "3057.TW"}]
             ).to_csv(verification_outdir / "reco_snapshots.csv", index=False)
@@ -217,6 +272,7 @@ class RunLocalDailyTests(unittest.TestCase):
         self.assertIn("Verification duplicate keys", markdown)
         self.assertIn("Midlong threshold gate", markdown)
         self.assertIn("Spec risk high rows", markdown)
+        self.assertIn("Watchlist artifact freshness", markdown)
         self.assertIn("3057.TW", markdown)
         self.assertEqual(payload["mode"], "preopen")
         self.assertEqual(payload["overall_status"], "ok")
@@ -225,6 +281,7 @@ class RunLocalDailyTests(unittest.TestCase):
         self.assertIn("portfolio_runtime", payload["outputs"])
         self.assertIn("verification_runtime", payload["outputs"])
         self.assertEqual(payload["metrics"]["spec_risk_high_rows"], 1)
+        self.assertEqual(payload["metrics"]["watchlist_artifact_freshness_status"], "current")
         self.assertEqual(payload["metrics"]["verification_gate_status"], "ok")
 
     def test_main_runs_preopen_steps_in_order(self) -> None:
@@ -255,7 +312,55 @@ class RunLocalDailyTests(unittest.TestCase):
             code = main(["--mode", "preopen", "--force-watchlist"])
 
         self.assertEqual(code, 0)
-        mock_watchlist.assert_called_once_with(force_run=True)
+        mock_watchlist.assert_called_once_with(force_run=True, success_scope="preopen")
+
+    def test_main_forces_watchlist_for_postclose_mode(self) -> None:
+        with patch("stock_watch.cli.local_daily.run_daily_watchlist", return_value=0) as mock_watchlist, patch(
+            "stock_watch.cli.local_daily.run_portfolio_step", return_value=0
+        ), patch("stock_watch.cli.local_daily.run_daily_verification.main", return_value=0), patch(
+            "stock_watch.cli.local_daily._watchlist_artifact_freshness",
+            return_value={"status": "current", "detail": "synced"},
+        ), patch(
+            "stock_watch.cli.local_daily.write_local_status_dashboard"
+        ):
+            code = main(["--mode", "postclose"])
+
+        self.assertEqual(code, 0)
+        mock_watchlist.assert_called_once_with(force_run=True, success_scope="postclose")
+
+    def test_main_portfolio_mode_auto_syncs_watchlist_report_by_default(self) -> None:
+        calls: list[str] = []
+
+        def _portfolio(*args, **kwargs) -> int:
+            calls.append("portfolio")
+            return 0
+
+        with patch("stock_watch.cli.local_daily.run_portfolio_step", side_effect=_portfolio), patch(
+            "stock_watch.cli.local_daily.report_sync.main", return_value=0
+        ) as mock_report_sync, patch(
+            "stock_watch.cli.local_daily._watchlist_artifact_freshness",
+            return_value={"status": "stale_report", "detail": "rank newer than report"},
+        ), patch("stock_watch.cli.local_daily.write_local_status_dashboard") as mock_status:
+            code = main(["--mode", "portfolio"])
+
+        self.assertEqual(code, 0)
+        self.assertEqual(calls, ["portfolio"])
+        mock_report_sync.assert_called_once_with([])
+        steps = mock_status.call_args.kwargs["steps"]
+        self.assertEqual(steps[-1]["name"], "report_sync")
+        self.assertEqual(steps[-1]["status"], "completed")
+
+    def test_main_portfolio_mode_can_disable_auto_sync(self) -> None:
+        with patch("stock_watch.cli.local_daily.run_portfolio_step", return_value=0), patch(
+            "stock_watch.cli.local_daily.report_sync.main", return_value=0
+        ) as mock_report_sync, patch(
+            "stock_watch.cli.local_daily.write_local_status_dashboard"
+        ) as mock_status:
+            code = main(["--mode", "portfolio", "--no-sync-watchlist-report"])
+
+        self.assertEqual(code, 0)
+        mock_report_sync.assert_not_called()
+        self.assertTrue(all(step["name"] != "report_sync" for step in mock_status.call_args.kwargs["steps"]))
 
     def test_main_runs_postclose_steps_in_order(self) -> None:
         calls: list[str] = []
@@ -270,6 +375,9 @@ class RunLocalDailyTests(unittest.TestCase):
         with patch("stock_watch.cli.local_daily.run_daily_watchlist", side_effect=_runner("watchlist")), patch(
             "stock_watch.cli.local_daily.run_portfolio_step", side_effect=_runner("portfolio")
         ), patch("stock_watch.cli.local_daily.run_daily_verification.main", side_effect=_runner("verification")), patch(
+            "stock_watch.cli.local_daily._watchlist_artifact_freshness",
+            return_value={"status": "current", "detail": "synced"},
+        ), patch(
             "stock_watch.cli.local_daily.write_local_status_dashboard"
         ) as mock_status:
             code = main(["--mode", "postclose"])
@@ -277,6 +385,123 @@ class RunLocalDailyTests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertEqual(calls, ["watchlist", "portfolio", "verification"])
         mock_status.assert_called_once()
+
+    def test_main_postclose_auto_syncs_when_portfolio_refreshes_rank(self) -> None:
+        calls: list[str] = []
+
+        def _runner(name: str):
+            def _inner(*args, **kwargs) -> int:
+                calls.append(name)
+                return 0
+
+            return _inner
+
+        with patch("stock_watch.cli.local_daily.run_daily_watchlist", side_effect=_runner("watchlist")), patch(
+            "stock_watch.cli.local_daily.run_portfolio_step", side_effect=_runner("portfolio")
+        ), patch("stock_watch.cli.local_daily.run_daily_verification.main", side_effect=_runner("verification")), patch(
+            "stock_watch.cli.local_daily._watchlist_artifact_freshness",
+            return_value={"status": "stale_report", "detail": "rank newer than report"},
+        ), patch("stock_watch.cli.local_daily.report_sync.main", return_value=0) as mock_report_sync, patch(
+            "stock_watch.cli.local_daily.write_local_status_dashboard"
+        ) as mock_status:
+            code = main(["--mode", "postclose"])
+
+        self.assertEqual(code, 0)
+        self.assertEqual(calls, ["watchlist", "portfolio", "verification"])
+        mock_report_sync.assert_called_once_with([])
+        steps = mock_status.call_args.kwargs["steps"]
+        self.assertEqual(steps[-1]["name"], "report_sync")
+        self.assertEqual(steps[-1]["status"], "completed")
+
+    def test_main_preopen_then_postclose_smoke_keeps_outputs_in_sync(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            theme_outdir = Path(tmpdir) / "theme_watchlist_daily"
+            verification_outdir = Path(tmpdir) / "verification" / "watchlist_daily"
+            theme_outdir.mkdir(parents=True, exist_ok=True)
+            verification_outdir.mkdir(parents=True, exist_ok=True)
+
+            write_status = write_local_status_dashboard
+            watchlist_calls: list[tuple[bool, str | None]] = []
+            verification_modes: list[str] = []
+
+            def _write_watchlist_outputs(tag: str) -> None:
+                pd.DataFrame(
+                    [{"ticker": "2330.TW", "spec_risk_score": 0, "spec_risk_label": "正常", "rank": 1, "tag": tag}]
+                ).to_csv(theme_outdir / "daily_rank.csv", index=False)
+                (theme_outdir / "daily_report.md").write_text(f"# {tag} report\n", encoding="utf-8")
+                (theme_outdir / "runtime_metrics.json").write_text(
+                    json.dumps({"status": "ok", "wall_seconds": 1.0, "tag": tag}),
+                    encoding="utf-8",
+                )
+
+            def _watchlist(*, force_run: bool, success_scope: str | None) -> int:
+                watchlist_calls.append((force_run, success_scope))
+                _write_watchlist_outputs(success_scope or "watchlist")
+                return 0
+
+            def _portfolio() -> int:
+                (theme_outdir / "portfolio_report.md").write_text("# portfolio\n", encoding="utf-8")
+                (theme_outdir / "portfolio_runtime_metrics.json").write_text(
+                    json.dumps({"status": "ok", "wall_seconds": 0.5}),
+                    encoding="utf-8",
+                )
+                return 0
+
+            def _verification(argv: list[str]) -> int:
+                mode = argv[argv.index("--mode") + 1]
+                verification_modes.append(mode)
+                pd.DataFrame(
+                    [{"signal_date": "2026-05-04", "watch_type": "short", "ticker": "2330.TW"}]
+                ).to_csv(verification_outdir / "reco_snapshots.csv", index=False)
+                pd.DataFrame(
+                    [
+                        {
+                            "signal_date": "2026-05-04",
+                            "horizon_days": 1,
+                            "watch_type": "short",
+                            "ticker": "2330.TW",
+                            "status": "insufficient_forward_data",
+                        }
+                    ]
+                ).to_csv(verification_outdir / "reco_outcomes.csv", index=False)
+                (verification_outdir / "runtime_metrics.json").write_text(
+                    json.dumps({"status": "ok", "wall_seconds": 2.0, "mode": mode}),
+                    encoding="utf-8",
+                )
+                return 0
+
+            def _status_proxy(*, args, steps, overall_status, **kwargs) -> None:
+                write_status(
+                    args=args,
+                    steps=steps,
+                    overall_status=overall_status,
+                    theme_outdir=theme_outdir,
+                    verification_outdir=verification_outdir,
+                    status_md=theme_outdir / "local_run_status.md",
+                    status_json=theme_outdir / "local_run_status.json",
+                )
+
+            with patch("stock_watch.cli.local_daily.run_daily_watchlist", side_effect=_watchlist), patch(
+                "stock_watch.cli.local_daily.run_portfolio_step", side_effect=_portfolio
+            ), patch("stock_watch.cli.local_daily.run_daily_verification.main", side_effect=_verification), patch(
+                "stock_watch.cli.local_daily.write_local_status_dashboard", side_effect=_status_proxy
+            ):
+                preopen_code = main(["--mode", "preopen"])
+                postclose_code = main(["--mode", "postclose"])
+
+            payload = json.loads((theme_outdir / "local_run_status.json").read_text(encoding="utf-8"))
+
+        self.assertEqual(preopen_code, 0)
+        self.assertEqual(postclose_code, 0)
+        self.assertEqual(watchlist_calls, [(False, "preopen"), (True, "postclose")])
+        self.assertEqual(verification_modes, ["preopen", "postclose"])
+        self.assertEqual(payload["mode"], "postclose")
+        self.assertEqual(payload["overall_status"], "ok")
+        self.assertEqual(payload["metrics"]["watchlist_artifact_freshness_status"], "current")
+        self.assertEqual([step["status"] for step in payload["steps"][:3]], ["completed", "completed", "completed"])
+        self.assertEqual(payload["steps"][-1]["name"], "report_sync")
+        self.assertEqual(payload["steps"][-1]["status"], "skipped")
+        self.assertEqual(payload["metrics"]["verification_gate_status"], "ok")
 
     def test_main_runs_portfolio_only_mode(self) -> None:
         calls: list[str] = []

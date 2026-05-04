@@ -21,6 +21,13 @@ class StockWatchCliTests(unittest.TestCase):
         self.assertEqual(code, 0)
         mock_daily.assert_called_once_with(["--mode", "portfolio"])
 
+    def test_report_sync_command_delegates_to_report_sync_module(self) -> None:
+        with patch("stock_watch.cli.main.report_sync.main", return_value=0) as mock_report_sync:
+            code = main(["report-sync"])
+
+        self.assertEqual(code, 0)
+        mock_report_sync.assert_called_once_with([])
+
     def test_verification_subcommand_delegates_to_verification_cli(self) -> None:
         with patch("stock_watch.cli.main.summarize_outcomes.main", return_value=0) as mock_summary:
             code = main(["verification", "summary", "--outcomes-csv", "sample.csv"])

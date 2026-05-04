@@ -14,6 +14,7 @@ import pandas as pd
 from stock_watch.cli import local_daily as local_daily_module
 from stock_watch.backtesting.core import run_backtest_dual as run_backtest_dual_module
 from stock_watch.ranking.scoring import build_rank_table
+from stock_watch.state import run_state
 from stock_watch.signals.detect import (
     add_indicators as module_add_indicators,
     build_speculative_risk_profile as module_build_speculative_risk_profile,
@@ -22,6 +23,7 @@ from stock_watch.signals.detect import (
 )
 from stock_watch.strategy import scenario as strategy_scenario
 from stock_watch.workflows import market_context
+from stock_watch.workflows.daily_watchlist import run_daily_watchlist as run_daily_watchlist_module
 
 from daily_theme_watchlist import (
     add_indicators,
@@ -155,6 +157,83 @@ class DetectRowTests(unittest.TestCase):
 
         self.assertEqual(result, 0)
         market_regime_mock.assert_called_once()
+
+    def test_run_daily_watchlist_scope_allows_postclose_after_preopen_success(self) -> None:
+        df_rank = pd.DataFrame(
+            [
+                {
+                    "rank": 1,
+                    "ticker": "AAA.TW",
+                    "name": "Alpha",
+                    "group": "theme",
+                    "layer": "short_attack",
+                    "setup_score": 7,
+                    "risk_score": 2,
+                    "signals": "ACCEL",
+                    "ret5_pct": 9.0,
+                    "ret10_pct": 12.0,
+                    "ret20_pct": 15.0,
+                    "volume_ratio20": 1.4,
+                    "spec_risk_label": "正常",
+                    "regime": "轉強速度有出來",
+                    "rank_change": 0,
+                    "setup_change": 0,
+                    "grade": "A",
+                }
+            ]
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            success_file = Path(tmpdir) / "last_success_date.txt"
+            run_state.save_last_success_date(
+                success_file=success_file,
+                success_date=dtw.today_local_str(),
+                signature="sig",
+                success_scope="preopen",
+            )
+            with patch.object(dtw, "SUCCESS_FILE", success_file), patch(
+                "stock_watch.workflows.daily_watchlist.run_state.current_run_signature", return_value="sig"
+            ), patch(
+                "daily_theme_watchlist.get_market_regime", return_value={"comment": "ok", "is_bullish": True}
+            ) as market_regime_mock, patch(
+                "daily_theme_watchlist.get_us_market_reference", return_value={"summary": "ok", "rows": []}
+            ), patch(
+                "stock_watch.workflows.daily_watchlist.strategy_scenario.build_market_scenario",
+                return_value={"label": "正常盤", "stance": "中性", "exit_note": "照計畫"},
+            ), patch(
+                "stock_watch.workflows.daily_watchlist.strategy_scenario.adjust_strategy_by_scenario", return_value=dtw.CONFIG.strategy
+            ), patch(
+                "daily_theme_watchlist.prewarm_watchlist_indicator_cache"
+            ), patch(
+                "daily_theme_watchlist.run_watchlist", return_value=df_rank
+            ), patch(
+                "daily_theme_watchlist.run_backtest_dual", return_value=(None, None)
+            ), patch(
+                "daily_theme_watchlist.build_candidate_sets",
+                return_value=(pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()),
+            ), patch(
+                "stock_watch.workflows.daily_watchlist._save_reports"
+            ), patch(
+                "daily_theme_watchlist.upsert_alert_tracking"
+            ), patch(
+                "stock_watch.workflows.daily_watchlist.strategy_scenario.strategy_preview_lines", return_value=["- noop"]
+            ), patch(
+                "stock_watch.workflows.daily_watchlist.run_state.build_rank_state", return_value="STATE"
+            ), patch(
+                "stock_watch.workflows.daily_watchlist.run_state.load_last_state", return_value=""
+            ), patch(
+                "daily_theme_watchlist.should_alert", return_value=False
+            ), patch(
+                "stock_watch.workflows.daily_watchlist.run_state.save_last_state"
+            ):
+                result = run_daily_watchlist_module(force_run=False, success_scope="postclose")
+
+            payload = json.loads(success_file.read_text(encoding="utf-8"))
+
+        self.assertEqual(result, 0)
+        market_regime_mock.assert_called_once()
+        self.assertEqual(payload["scopes"]["preopen"]["signature"], "sig")
+        self.assertEqual(payload["scopes"]["postclose"]["signature"], "sig")
 
     def test_detect_row_generates_expected_fields_for_accel_case(self) -> None:
         dates = pd.date_range("2025-01-01", periods=260, freq="B")
@@ -756,6 +835,8 @@ class FeedbackTests(unittest.TestCase):
             return_value={"label": "正常盤", "stance": "中性", "exit_note": "照計畫"},
         ), patch(
             "stock_watch.workflows.daily_watchlist.strategy_scenario.adjust_strategy_by_scenario", return_value=dtw.CONFIG.strategy
+        ), patch(
+            "daily_theme_watchlist.prewarm_watchlist_indicator_cache"
         ), patch(
             "daily_theme_watchlist.run_watchlist", return_value=df_rank
         ), patch(
@@ -2433,6 +2514,8 @@ class PushMessageTests(unittest.TestCase):
             "stock_watch.workflows.daily_watchlist.run_state.current_run_signature", return_value="sig"
         ), patch("daily_theme_watchlist.get_market_regime", return_value=market_regime), patch(
             "daily_theme_watchlist.get_us_market_reference", return_value=us_market
+        ), patch(
+            "daily_theme_watchlist.prewarm_watchlist_indicator_cache"
         ), patch("daily_theme_watchlist.run_watchlist", return_value=df) as run_watchlist_mock, patch(
             "daily_theme_watchlist.run_backtest_dual", return_value=(None, None)
         ), patch("daily_theme_watchlist.upsert_alert_tracking"), patch(
@@ -2487,6 +2570,8 @@ class PushMessageTests(unittest.TestCase):
             "stock_watch.workflows.daily_watchlist.run_state.current_run_signature", return_value="sig"
         ), patch("daily_theme_watchlist.get_market_regime", return_value=market_regime), patch(
             "daily_theme_watchlist.get_us_market_reference", return_value=us_market
+        ), patch(
+            "daily_theme_watchlist.prewarm_watchlist_indicator_cache"
         ), patch("daily_theme_watchlist.run_watchlist", return_value=df), patch(
             "daily_theme_watchlist.run_backtest_dual", return_value=(None, None)
         ), patch("daily_theme_watchlist.upsert_alert_tracking"), patch(
