@@ -1,0 +1,10 @@
+signal_window,watch_type,reco_status,action,n,win_rate_pct,avg_ret_pct,med_ret_pct
+2026-04-29..2026-05-04,midlong,below_threshold,分批落袋,1,100.0,5.05,5.05
+2026-04-29..2026-05-04,midlong,ok,續抱,14,64.3,1.84,1.51
+2026-04-29..2026-05-04,midlong,ok,可分批,5,20.0,-1.05,-1.78
+2026-04-29..2026-05-04,midlong,below_threshold,觀察,1,0.0,-1.42,-1.42
+2026-04-29..2026-05-04,short,below_threshold,只觀察不追,1,100.0,9.98,9.98
+2026-04-29..2026-05-04,short,below_threshold,開高不追,2,50.0,4.35,4.35
+2026-04-29..2026-05-04,short,ok,等拉回,4,75.0,3.07,3.92
+2026-04-29..2026-05-04,short,below_threshold,分批落袋,4,25.0,1.48,-0.29
+2026-04-29..2026-05-04,short,below_threshold,續追蹤,4,25.0,-1.84,-2.56
