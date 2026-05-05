@@ -27,6 +27,7 @@ def report_specs(theme_outdir: Path, verification_outdir: Path) -> tuple[tuple[s
         ("Daily Watchlist", theme_outdir / "daily_report.md", "Ranked names, short/midlong candidates, spec-risk notes, and feedback."),
         ("Portfolio Review", theme_outdir / "portfolio_report.md", "Holdings review and market context."),
         ("Weekly Review", theme_outdir / "weekly_review.md", "Strategy decisions, data gate, research diagnostics, and tuning watchlist."),
+        ("Recent Estimate Effectiveness", theme_outdir / "recent_estimate_effectiveness.md", "Short read on the latest realized effectiveness and gate posture."),
         ("Verification Report", verification_outdir / "verification_report.md", "Snapshot-level recommendation verification."),
         ("Outcomes Summary", verification_outdir / "outcomes_summary.md", "Full-history realized outcomes, factors, tail risk, and sensitivity."),
         ("Feedback Sensitivity", verification_outdir / "feedback_weight_sensitivity.md", "Feedback-weight sensitivity across action labels."),
@@ -37,6 +38,7 @@ def report_specs(theme_outdir: Path, verification_outdir: Path) -> tuple[tuple[s
         ("New Additions Priority", theme_outdir / "new_additions_priority.md", "Priority read for recently added names."),
         ("Local Runbook", REPO_ROOT / "docs" / "runbooks" / "LOCAL_RUNBOOK.md", "How to run the local daily workflow."),
         ("Signal Glossary", REPO_ROOT / "docs" / "runbooks" / "SIGNAL_GLOSSARY.md", "Signal rules, report semantics, and template bundles."),
+        ("Standard Tuning Proposal", REPO_ROOT / "docs" / "research" / "STANDARD_TUNING_PROPOSAL_2026_05_05.md", "Current stance on what stays live vs what remains shadow-only research."),
         ("Public Repo Scouting", REPO_ROOT / "docs" / "research" / "PUBLIC_REPO_SCOUTING.md", "External repo ideas worth borrowing without copying stock rules."),
         ("Structure Plan", REPO_ROOT / "docs" / "refactor" / "STRUCTURE_PLAN.md", "Phased folder structure cleanup plan."),
     )
@@ -50,6 +52,7 @@ def artifact_links(theme_outdir: Path, verification_outdir: Path) -> tuple[tuple
         ("Portfolio HTML", theme_outdir / "portfolio_report.html"),
         ("Portfolio Markdown", theme_outdir / "portfolio_report.md"),
         ("Weekly review JSON", theme_outdir / "weekly_review.json"),
+        ("Recent action effectiveness CSV", theme_outdir / "recent_action_effectiveness.csv"),
         ("Local status JSON", theme_outdir / "local_run_status.json"),
         ("Local doctor JSON", theme_outdir / "local_doctor.json"),
         ("Verification report", verification_outdir / "verification_report.md"),

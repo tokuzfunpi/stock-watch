@@ -18,6 +18,7 @@
 - `docs/runbooks/SIGNAL_GLOSSARY.md`
 - `docs/runbooks/LOCAL_RUNBOOK.md`
 - `docs/refactor/STRUCTURE_PLAN.md`
+- `docs/research/STANDARD_TUNING_PROPOSAL_2026_05_05.md`
 
 ## 安裝
 
