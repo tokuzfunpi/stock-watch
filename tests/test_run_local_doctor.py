@@ -81,8 +81,8 @@ class RunLocalDoctorTests(unittest.TestCase):
             getupdates_path.write_text("https://api.telegram.org/bot123456:ABCDEF/getUpdates", encoding="utf-8")
 
             with patch.dict(os.environ, {}, clear=True), patch(
-                "stock_watch.telegram_config.GETUPDATES_URL_PATH", getupdates_path
-            ):
+                "stock_watch.cli.local_doctor.REPO_ROOT", root
+            ), patch("stock_watch.telegram_config.GETUPDATES_URL_PATH", getupdates_path):
                 from stock_watch.cli.local_doctor import _check_telegram_config
 
                 check = _check_telegram_config(chat_ids_path)
