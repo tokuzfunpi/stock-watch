@@ -11,6 +11,8 @@ import pandas as pd
 from stock_watch.paths import THEME_OUTDIR
 from stock_watch.paths import VERIFICATION_OUTDIR
 from stock_watch.cli.weekly_review import build_data_quality_gate
+from stock_watch.cli.weekly_review import build_short_gate_tuning_draft
+from stock_watch.cli.weekly_review import filter_recent_signal_dates
 from stock_watch.cli import report_sync
 from stock_watch.workflows.daily_watchlist import run_daily_watchlist
 from stock_watch.workflows.portfolio import run_default_portfolio_check
@@ -24,6 +26,8 @@ PORTFOLIO_RUNTIME_METRICS_JSON = THEME_OUTDIR / "portfolio_runtime_metrics.json"
 VERIFICATION_RUNTIME_METRICS_JSON = VERIFICATION_OUTDIR / "runtime_metrics.json"
 PORTFOLIO_RUNTIME_METRICS_MD = THEME_OUTDIR / "portfolio_runtime_metrics.md"
 REPORT_SYNC_METRICS_JSON = THEME_OUTDIR / "report_sync_metrics.json"
+SHADOW_OPEN_NOT_CHASE_TRACKING_MD = THEME_OUTDIR / "shadow_open_not_chase_tracking.md"
+SHADOW_OPEN_NOT_CHASE_TRACKING_CSV = THEME_OUTDIR / "shadow_open_not_chase_tracking.csv"
 
 MODE_STEPS: dict[str, tuple[str, ...]] = {
     "preopen": ("watchlist", "verification"),
@@ -183,6 +187,256 @@ def _load_runtime_metrics(path: Path) -> dict[str, object]:
     if not isinstance(payload, dict):
         return {}
     return payload
+
+
+def _empty_shadow_open_not_chase_tracking_df() -> pd.DataFrame:
+    return pd.DataFrame(
+        columns=[
+            "signal_date",
+            "ticker",
+            "name",
+            "rank",
+            "scenario_label",
+            "market_heat",
+            "spec_risk_bucket",
+            "shadow_status",
+            "shadow_eligible",
+            "action_label",
+            "outcome_status_1d",
+            "realized_ret_pct_1d",
+            "matured_1d",
+            "win_1d",
+        ]
+    )
+
+
+def build_shadow_open_not_chase_tracking_df(
+    shadow_snapshots_df: pd.DataFrame,
+    outcomes_df: pd.DataFrame,
+) -> pd.DataFrame:
+    if shadow_snapshots_df is None or shadow_snapshots_df.empty:
+        return _empty_shadow_open_not_chase_tracking_df()
+
+    required_snapshot_cols = {"signal_date", "ticker"}
+    if not required_snapshot_cols.issubset(set(shadow_snapshots_df.columns)):
+        return _empty_shadow_open_not_chase_tracking_df()
+
+    shadow = shadow_snapshots_df.copy()
+    shadow["signal_date"] = shadow["signal_date"].astype(str).str.strip()
+    shadow["ticker"] = shadow["ticker"].astype(str).str.strip()
+    if "rank" in shadow.columns:
+        shadow["rank"] = pd.to_numeric(shadow["rank"], errors="coerce")
+    if "shadow_eligible" in shadow.columns:
+        shadow["shadow_eligible"] = shadow["shadow_eligible"].astype(str).str.strip().str.lower().isin(["true", "1", "yes"])
+    else:
+        shadow["shadow_eligible"] = False
+    shadow["shadow_status"] = shadow.get("shadow_status", pd.Series(index=shadow.index, dtype=object)).fillna("").astype(str)
+    shadow["action_label"] = shadow.get("action_label", pd.Series(index=shadow.index, dtype=object)).fillna("").astype(str)
+
+    merged = shadow.copy()
+    if outcomes_df is not None and not outcomes_df.empty and {"signal_date", "ticker", "horizon_days"}.issubset(set(outcomes_df.columns)):
+        outcomes = outcomes_df.copy()
+        outcomes["signal_date"] = outcomes["signal_date"].astype(str).str.strip()
+        outcomes["ticker"] = outcomes["ticker"].astype(str).str.strip()
+        outcomes["horizon_days"] = pd.to_numeric(outcomes["horizon_days"], errors="coerce")
+        outcomes = outcomes[
+            (outcomes["horizon_days"] == 1)
+            & (outcomes.get("watch_type", pd.Series(index=outcomes.index, dtype=object)).fillna("").astype(str) == "short")
+        ].copy()
+        if not outcomes.empty:
+            outcomes["outcome_status_1d"] = outcomes.get("status", pd.Series(index=outcomes.index, dtype=object)).fillna("").astype(str)
+            outcomes["realized_ret_pct_1d"] = pd.to_numeric(outcomes.get("realized_ret_pct"), errors="coerce")
+            outcomes["matured_1d"] = outcomes["outcome_status_1d"].eq("ok")
+            outcomes["win_1d"] = outcomes["realized_ret_pct_1d"] > 0
+            outcomes = outcomes.drop_duplicates(subset=["signal_date", "ticker"], keep="last")
+            merged = merged.merge(
+                outcomes[["signal_date", "ticker", "outcome_status_1d", "realized_ret_pct_1d", "matured_1d", "win_1d"]],
+                on=["signal_date", "ticker"],
+                how="left",
+            )
+
+    if "outcome_status_1d" not in merged.columns:
+        merged["outcome_status_1d"] = ""
+    merged["outcome_status_1d"] = merged["outcome_status_1d"].fillna("").astype(str)
+    if "realized_ret_pct_1d" not in merged.columns:
+        merged["realized_ret_pct_1d"] = pd.Series(index=merged.index, dtype=float)
+    merged["realized_ret_pct_1d"] = pd.to_numeric(merged["realized_ret_pct_1d"], errors="coerce")
+    if "matured_1d" not in merged.columns:
+        merged["matured_1d"] = False
+    merged["matured_1d"] = merged["matured_1d"].map(lambda value: bool(value) if pd.notna(value) else False)
+    if "win_1d" not in merged.columns:
+        merged["win_1d"] = False
+    merged["win_1d"] = merged["win_1d"].map(lambda value: bool(value) if pd.notna(value) else False)
+
+    keep_cols = _empty_shadow_open_not_chase_tracking_df().columns.tolist()
+    for col in keep_cols:
+        if col not in merged.columns:
+            merged[col] = ""
+    sort_cols: list[str] = []
+    ascending: list[bool] = []
+    if "signal_date" in merged.columns:
+        sort_cols.append("signal_date")
+        ascending.append(False)
+    if "shadow_eligible" in merged.columns:
+        sort_cols.append("shadow_eligible")
+        ascending.append(False)
+    if "rank" in merged.columns:
+        sort_cols.append("rank")
+        ascending.append(True)
+    if sort_cols:
+        merged = merged.sort_values(by=sort_cols, ascending=ascending)
+    return merged[keep_cols].reset_index(drop=True)
+
+
+def render_shadow_open_not_chase_tracking_markdown(
+    tracking_df: pd.DataFrame,
+    *,
+    tuning_draft: dict[str, object],
+    recent_dates: list[str],
+    generated_at: str,
+) -> str:
+    lines = [
+        "# 開高不追 Daily Tracking",
+        f"- Generated: {generated_at}",
+        "- Scope: `開高不追` / `1D short` / shadow-only daily tracking",
+    ]
+    if recent_dates:
+        lines.append(f"- Recent signal window: `{recent_dates[0]} -> {recent_dates[-1]}` (`{len(recent_dates)}` dates)")
+    else:
+        lines.append("- Recent signal window: `n/a`")
+    lines.append("")
+
+    historical = tuning_draft.get("historical", {}) if isinstance(tuning_draft, dict) else {}
+    recent = tuning_draft.get("recent", {}) if isinstance(tuning_draft, dict) else {}
+    simulation = tuning_draft.get("simulation", {}) if isinstance(tuning_draft, dict) else {}
+
+    total_rows = int(len(tracking_df)) if tracking_df is not None else 0
+    eligible_rows = int(tracking_df.get("shadow_eligible", pd.Series(dtype=bool)).astype(bool).sum()) if tracking_df is not None and not tracking_df.empty else 0
+    matured_rows = int(tracking_df.get("matured_1d", pd.Series(dtype=bool)).astype(bool).sum()) if tracking_df is not None and not tracking_df.empty else 0
+    matured_eligible = int(
+        (
+            tracking_df.get("shadow_eligible", pd.Series(dtype=bool)).astype(bool)
+            & tracking_df.get("matured_1d", pd.Series(dtype=bool)).astype(bool)
+        ).sum()
+    ) if tracking_df is not None and not tracking_df.empty else 0
+
+    lines.extend(
+        [
+            "## Summary",
+            "",
+            f"- Observed rows: `{total_rows}`",
+            f"- Eligible rows: `{eligible_rows}`",
+            f"- Matured 1D rows: `{matured_rows}`",
+            f"- Matured eligible rows: `{matured_eligible}`",
+            f"- Current draft status: `{tuning_draft.get('status', 'hold') if isinstance(tuning_draft, dict) else 'hold'}`",
+        ]
+    )
+    if isinstance(tuning_draft, dict) and tuning_draft.get("why_now"):
+        lines.append(f"- Why now: {tuning_draft.get('why_now')}")
+    if isinstance(tuning_draft, dict) and tuning_draft.get("proposal"):
+        lines.append(f"- Proposal: {tuning_draft.get('proposal')}")
+    if historical:
+        lines.append(
+            f"- Historical gate progress: `below_n={historical.get('below_n', 0)}` / `ok_n={historical.get('ok_n', 0)}` / "
+            f"`below-ok={historical.get('delta_avg_ret_below_minus_ok', 0.0)}%` / `promotion_ready={historical.get('promotion_ready', False)}`"
+        )
+    if recent:
+        lines.append(
+            f"- Recent gate progress: `below_n={recent.get('below_n', 0)}` / `ok_n={recent.get('ok_n', 0)}` / "
+            f"`below-ok={recent.get('delta_avg_ret_below_minus_ok', 0.0)}%` / `promotion_ready={recent.get('promotion_ready', False)}`"
+        )
+    if simulation:
+        lines.append(
+            f"- Simulation: `promoted_n={simulation.get('promoted_n', 0)}` / "
+            f"`delta_avg_ret={simulation.get('delta_avg_ret_simulated_minus_current', 0.0)}%` / "
+            f"`delta_win_rate={simulation.get('delta_win_rate_simulated_minus_current', 0.0)}%`"
+        )
+
+    lines.extend(
+        [
+            "",
+            "## Promotion Criteria",
+            "",
+            "- `below_n >= 3`",
+            "- `action_signal_dates >= 2`",
+            "- `dominant_positive_share_pct <= 70`",
+            "- recent `below-ok > 0`",
+            "- edge should not come only from `hot` + non-normal `spec_risk`",
+            "",
+        ]
+    )
+
+    if tracking_df is None or tracking_df.empty:
+        lines.extend(["## Daily Rows", "", "- None", ""])
+        return "\n".join(lines)
+
+    lines.extend(
+        [
+            "## Daily Rows",
+            "",
+            "| Signal Date | Ticker | Name | Rank | Scenario | Heat | Spec | Eligible | Status | 1D Outcome | 1D Ret |",
+            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+        ]
+    )
+    for _, row in tracking_df.iterrows():
+        ret_value = row.get("realized_ret_pct_1d")
+        ret_text = "" if pd.isna(ret_value) else f"{float(ret_value):.2f}%"
+        lines.append(
+            f"| {row.get('signal_date', '')} | {row.get('ticker', '')} | {row.get('name', '')} | "
+            f"{'' if pd.isna(row.get('rank')) else int(float(row.get('rank')))} | {row.get('scenario_label', '')} | "
+            f"{row.get('market_heat', '')} | {row.get('spec_risk_bucket', '')} | "
+            f"{bool(row.get('shadow_eligible', False))} | {row.get('shadow_status', '')} | "
+            f"{row.get('outcome_status_1d', '') or 'pending'} | {ret_text} |"
+        )
+    lines.append("")
+    return "\n".join(lines)
+
+
+def write_shadow_open_not_chase_tracking_outputs(
+    *,
+    theme_outdir: Path = THEME_OUTDIR,
+    verification_outdir: Path = VERIFICATION_OUTDIR,
+    tracking_md: Path = SHADOW_OPEN_NOT_CHASE_TRACKING_MD,
+    tracking_csv: Path = SHADOW_OPEN_NOT_CHASE_TRACKING_CSV,
+) -> None:
+    shadow_snapshots = _load_csv_safely(verification_outdir / "shadow_open_not_chase_snapshots.csv")
+    outcomes = _load_csv_safely(verification_outdir / "reco_outcomes.csv")
+    tracking_df = build_shadow_open_not_chase_tracking_df(shadow_snapshots, outcomes)
+
+    if outcomes.empty:
+        recent_dates: list[str] = []
+        tuning_draft: dict[str, object] = {
+            "status": "hold",
+            "why_now": "No verification outcomes yet.",
+            "proposal": "Wait for mature 1D outcomes before evaluating promotion.",
+        }
+    else:
+        try:
+            recent_outcomes, recent_dates = filter_recent_signal_dates(outcomes, max_signal_dates=3)
+            recent_parts = summarize_outcomes(recent_outcomes)
+            full_parts = summarize_outcomes(outcomes)
+            tuning_draft = build_short_gate_tuning_draft(full_parts, recent_parts)
+        except Exception:
+            recent_dates = []
+            tuning_draft = {
+                "status": "hold",
+                "why_now": "Shadow tracking summary is waiting for richer verification fields.",
+                "proposal": "Keep collecting outcomes; do not promote the action yet.",
+            }
+
+    tracking_csv.parent.mkdir(parents=True, exist_ok=True)
+    tracking_md.parent.mkdir(parents=True, exist_ok=True)
+    tracking_df.to_csv(tracking_csv, index=False, encoding="utf-8-sig")
+    generated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    tracking_md.write_text(
+        render_shadow_open_not_chase_tracking_markdown(
+            tracking_df,
+            tuning_draft=tuning_draft,
+            recent_dates=recent_dates,
+            generated_at=generated_at,
+        ),
+        encoding="utf-8",
+    )
 
 
 def _watchlist_artifact_freshness(theme_outdir: Path) -> dict[str, str]:
@@ -417,6 +671,7 @@ def render_local_status_markdown(
             f"- Verification runtime: `{verification_outdir_str('runtime_metrics.md')}`",
             f"- Outcomes summary: `{verification_outdir_str('outcomes_summary.md')}`",
             f"- Feedback sensitivity: `{verification_outdir_str('feedback_weight_sensitivity.md')}`",
+            f"- Shadow tracking: `{theme_outdir_str('shadow_open_not_chase_tracking.md')}`",
         ]
     )
     return "\n".join(lines)
@@ -441,6 +696,12 @@ def write_local_status_dashboard(
     status_json: Path = LOCAL_STATUS_JSON,
 ) -> None:
     generated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    write_shadow_open_not_chase_tracking_outputs(
+        theme_outdir=theme_outdir,
+        verification_outdir=verification_outdir,
+        tracking_md=theme_outdir / "shadow_open_not_chase_tracking.md",
+        tracking_csv=theme_outdir / "shadow_open_not_chase_tracking.csv",
+    )
     metrics = collect_status_metrics(theme_outdir, verification_outdir)
     payload = {
         "generated_at": generated_at,
@@ -458,6 +719,8 @@ def write_local_status_dashboard(
             "verification_runtime": str(verification_outdir / "runtime_metrics.md"),
             "outcomes_summary": str(verification_outdir / "outcomes_summary.md"),
             "feedback_sensitivity": str(verification_outdir / "feedback_weight_sensitivity.md"),
+            "shadow_tracking": str(theme_outdir / "shadow_open_not_chase_tracking.md"),
+            "shadow_tracking_csv": str(theme_outdir / "shadow_open_not_chase_tracking.csv"),
         },
     }
     status_md.parent.mkdir(parents=True, exist_ok=True)

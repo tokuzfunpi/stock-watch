@@ -66,6 +66,7 @@ class RunLocalWebsiteTests(unittest.TestCase):
             (theme_outdir / "weekly_review.json").write_text(json.dumps({"generated_at": "2026-04-27"}), encoding="utf-8")
             (theme_outdir / "local_run_status.md").write_text("# Local Run Status\n- Overall: `ok`\n", encoding="utf-8")
             (theme_outdir / "weekly_review.md").write_text("# Weekly Review\n- Status: `ok`\n", encoding="utf-8")
+            (theme_outdir / "shadow_open_not_chase_tracking.md").write_text("# 開高不追 Daily Tracking\n", encoding="utf-8")
             (theme_outdir / "daily_report.md").write_text("# Daily Watchlist\n", encoding="utf-8")
             (verification_outdir / "outcomes_summary.md").write_text("# Outcomes Summary\n", encoding="utf-8")
             pd.DataFrame(
@@ -100,6 +101,9 @@ class RunLocalWebsiteTests(unittest.TestCase):
             pd.DataFrame(
                 columns=["rank", "ticker", "name", "shadow_eligible", "shadow_status"]
             ).to_csv(theme_outdir / "shadow_open_not_chase_candidates.csv", index=False)
+            pd.DataFrame(
+                columns=["signal_date", "ticker", "shadow_eligible", "outcome_status_1d"]
+            ).to_csv(theme_outdir / "shadow_open_not_chase_tracking.csv", index=False)
 
             index_path = write_local_website(outdir=site_dir, theme_outdir=theme_outdir, verification_outdir=verification_outdir)
             content = index_path.read_text(encoding="utf-8")
@@ -124,6 +128,7 @@ class RunLocalWebsiteTests(unittest.TestCase):
         self.assertIn("2330.TW", content)
         self.assertIn("Local Run Status", content)
         self.assertIn("Outcomes Summary", content)
+        self.assertIn("Shadow 開高不追 Tracking", content)
         self.assertIn("views/daily_report.md.html", content)
         self.assertNotIn("../daily_report.md", content)
         self.assertFalse(root_compat_exists)

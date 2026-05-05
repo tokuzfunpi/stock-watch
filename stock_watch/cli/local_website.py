@@ -34,6 +34,7 @@ def report_specs(theme_outdir: Path, verification_outdir: Path) -> tuple[tuple[s
         ("Local Doctor", theme_outdir / "local_doctor.md", "Environment and local artifact health."),
         ("Local Housekeeping", theme_outdir / "local_housekeeping.md", "Generated-file cleanup and backup notes."),
         ("Shadow 開高不追", theme_outdir / "shadow_open_not_chase.md", "Shadow-only action-level tuning candidates."),
+        ("Shadow 開高不追 Tracking", theme_outdir / "shadow_open_not_chase_tracking.md", "Daily tracking for the 開高不追 research line and promotion criteria progress."),
         ("Watchlist Additions", theme_outdir / "watchlist_addition_draft.md", "Next-wave watchlist expansion draft."),
         ("New Additions Priority", theme_outdir / "new_additions_priority.md", "Priority read for recently added names."),
         ("Local Runbook", REPO_ROOT / "docs" / "runbooks" / "LOCAL_RUNBOOK.md", "How to run the local daily workflow."),
@@ -60,6 +61,7 @@ def artifact_links(theme_outdir: Path, verification_outdir: Path) -> tuple[tuple
         ("Recommendation snapshots", verification_outdir / "reco_snapshots.csv"),
         ("Recommendation outcomes", verification_outdir / "reco_outcomes.csv"),
         ("Shadow candidates CSV", theme_outdir / "shadow_open_not_chase_candidates.csv"),
+        ("Shadow tracking CSV", theme_outdir / "shadow_open_not_chase_tracking.csv"),
         ("Watchlist additions JSON", theme_outdir / "watchlist_addition_draft.json"),
     )
 

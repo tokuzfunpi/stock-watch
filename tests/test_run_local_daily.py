@@ -10,10 +10,12 @@ from unittest.mock import patch
 import pandas as pd
 
 from stock_watch.cli.local_daily import build_verification_argv
+from stock_watch.cli.local_daily import build_shadow_open_not_chase_tracking_df
 from stock_watch.cli.local_daily import collect_status_metrics
 from stock_watch.cli.local_daily import main
 from stock_watch.cli.local_daily import parse_args
 from stock_watch.cli.local_daily import should_run_step
+from stock_watch.cli.local_daily import write_shadow_open_not_chase_tracking_outputs
 from stock_watch.cli.local_daily import write_local_status_dashboard
 
 
@@ -263,6 +265,8 @@ class RunLocalDailyTests(unittest.TestCase):
 
             markdown = status_md.read_text(encoding="utf-8")
             payload = json.loads(status_json.read_text(encoding="utf-8"))
+            shadow_md_exists = (theme_outdir / "shadow_open_not_chase_tracking.md").exists()
+            shadow_csv_exists = (theme_outdir / "shadow_open_not_chase_tracking.csv").exists()
 
         self.assertIn("Local Run Status", markdown)
         self.assertIn("Watchlist", markdown)
@@ -280,9 +284,125 @@ class RunLocalDailyTests(unittest.TestCase):
         self.assertIn("watchlist_runtime", payload["outputs"])
         self.assertIn("portfolio_runtime", payload["outputs"])
         self.assertIn("verification_runtime", payload["outputs"])
+        self.assertIn("shadow_tracking", payload["outputs"])
         self.assertEqual(payload["metrics"]["spec_risk_high_rows"], 1)
         self.assertEqual(payload["metrics"]["watchlist_artifact_freshness_status"], "current")
         self.assertEqual(payload["metrics"]["verification_gate_status"], "ok")
+        self.assertTrue(shadow_md_exists)
+        self.assertTrue(shadow_csv_exists)
+
+    def test_build_shadow_open_not_chase_tracking_df_joins_1d_outcomes(self) -> None:
+        shadow_snapshots = pd.DataFrame(
+            [
+                {
+                    "signal_date": "2026-05-04",
+                    "ticker": "5386.TWO",
+                    "name": "青雲",
+                    "rank": 1,
+                    "scenario_label": "高檔震盪盤",
+                    "market_heat": "hot",
+                    "spec_risk_bucket": "normal",
+                    "shadow_status": "eligible",
+                    "shadow_eligible": True,
+                    "action_label": "開高不追",
+                }
+            ]
+        )
+        outcomes = pd.DataFrame(
+            [
+                {
+                    "signal_date": "2026-05-04",
+                    "ticker": "5386.TWO",
+                    "watch_type": "short",
+                    "horizon_days": 1,
+                    "status": "ok",
+                    "realized_ret_pct": 9.92,
+                },
+                {
+                    "signal_date": "2026-05-04",
+                    "ticker": "5386.TWO",
+                    "watch_type": "short",
+                    "horizon_days": 5,
+                    "status": "insufficient_forward_data",
+                },
+            ]
+        )
+
+        tracking = build_shadow_open_not_chase_tracking_df(shadow_snapshots, outcomes)
+
+        self.assertEqual(len(tracking), 1)
+        self.assertEqual(str(tracking.iloc[0]["outcome_status_1d"]), "ok")
+        self.assertAlmostEqual(float(tracking.iloc[0]["realized_ret_pct_1d"]), 9.92, places=2)
+        self.assertTrue(bool(tracking.iloc[0]["matured_1d"]))
+        self.assertTrue(bool(tracking.iloc[0]["win_1d"]))
+
+    def test_write_shadow_open_not_chase_tracking_outputs_writes_summary_and_csv(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            theme_outdir = Path(tmpdir) / "theme_watchlist_daily"
+            verification_outdir = Path(tmpdir) / "verification" / "watchlist_daily"
+            theme_outdir.mkdir(parents=True, exist_ok=True)
+            verification_outdir.mkdir(parents=True, exist_ok=True)
+
+            pd.DataFrame(
+                [
+                    {
+                        "signal_date": "2026-05-04",
+                        "ticker": "5386.TWO",
+                        "name": "青雲",
+                        "rank": 1,
+                        "scenario_label": "高檔震盪盤",
+                        "market_heat": "hot",
+                        "spec_risk_bucket": "normal",
+                        "shadow_status": "eligible",
+                        "shadow_eligible": True,
+                        "action_label": "開高不追",
+                    }
+                ]
+            ).to_csv(verification_outdir / "shadow_open_not_chase_snapshots.csv", index=False)
+            pd.DataFrame(
+                [
+                    {
+                        "signal_date": "2026-05-04",
+                        "horizon_days": 1,
+                        "watch_type": "short",
+                        "ticker": "5386.TWO",
+                        "name": "青雲",
+                        "reco_status": "below_threshold",
+                        "action": "開高不追",
+                        "status": "ok",
+                        "realized_ret_pct": 9.92,
+                        "market_heat": "hot",
+                    },
+                    {
+                        "signal_date": "2026-05-04",
+                        "horizon_days": 1,
+                        "watch_type": "short",
+                        "ticker": "2374.TW",
+                        "name": "佳能",
+                        "reco_status": "ok",
+                        "action": "等拉回",
+                        "status": "ok",
+                        "realized_ret_pct": 3.07,
+                        "market_heat": "hot",
+                    },
+                ]
+            ).to_csv(verification_outdir / "reco_outcomes.csv", index=False)
+
+            write_shadow_open_not_chase_tracking_outputs(
+                theme_outdir=theme_outdir,
+                verification_outdir=verification_outdir,
+                tracking_md=theme_outdir / "shadow_open_not_chase_tracking.md",
+                tracking_csv=theme_outdir / "shadow_open_not_chase_tracking.csv",
+            )
+
+            markdown = (theme_outdir / "shadow_open_not_chase_tracking.md").read_text(encoding="utf-8")
+            tracking_csv = pd.read_csv(theme_outdir / "shadow_open_not_chase_tracking.csv")
+
+        self.assertIn("開高不追 Daily Tracking", markdown)
+        self.assertIn("Promotion Criteria", markdown)
+        self.assertIn("2026-05-04", markdown)
+        self.assertEqual(len(tracking_csv), 1)
+        self.assertEqual(str(tracking_csv.iloc[0]["ticker"]), "5386.TWO")
 
     def test_main_runs_preopen_steps_in_order(self) -> None:
         calls: list[str] = []
