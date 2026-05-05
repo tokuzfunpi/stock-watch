@@ -1,1 +1,1 @@
-{"date": "2026-05-05", "signature": "b1bcef847bd92077", "scopes": {"postclose": {"date": "2026-05-05", "signature": "b1bcef847bd92077"}}}
+{"date": "2026-05-05", "signature": "04ad4966c91d3725", "scopes": {"postclose": {"date": "2026-05-05", "signature": "b1bcef847bd92077"}, "preopen": {"date": "2026-05-05", "signature": "04ad4966c91d3725"}}}

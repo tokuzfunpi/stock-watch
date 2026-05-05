@@ -1,1 +1,1 @@
-overall=ok | notification=ok | verification=ok | report=current
+overall=ok | info=portfolio_csv,telegram_config | notification=info | verification=ok | report=current
