@@ -213,11 +213,11 @@ class RunLocalDoctorTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            with patch("stock_watch.cli.local_doctor.REPO_ROOT", root), patch(
-                "stock_watch.cli.local_doctor.THEME_OUTDIR", theme_outdir
-            ), patch("stock_watch.cli.local_doctor.VERIFICATION_OUTDIR", verification_outdir), patch(
-                "stock_watch.cli.local_doctor.DOCTOR_MD", theme_outdir / "local_doctor.md"
-            ), patch(
+            with patch.dict(os.environ, {}, clear=True), patch(
+                "stock_watch.cli.local_doctor.REPO_ROOT", root
+            ), patch("stock_watch.cli.local_doctor.THEME_OUTDIR", theme_outdir), patch(
+                "stock_watch.cli.local_doctor.VERIFICATION_OUTDIR", verification_outdir
+            ), patch("stock_watch.cli.local_doctor.DOCTOR_MD", theme_outdir / "local_doctor.md"), patch(
                 "stock_watch.cli.local_doctor.DOCTOR_JSON", theme_outdir / "local_doctor.json"
             ):
                 code = main(["--skip-network"])
@@ -288,11 +288,11 @@ class RunLocalDoctorTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            with patch("stock_watch.cli.local_doctor.REPO_ROOT", root), patch(
-                "stock_watch.cli.local_doctor.THEME_OUTDIR", theme_outdir
-            ), patch("stock_watch.cli.local_doctor.VERIFICATION_OUTDIR", verification_outdir), patch(
-                "stock_watch.cli.local_doctor.DOCTOR_MD", theme_outdir / "local_doctor.md"
-            ), patch(
+            with patch.dict(os.environ, {}, clear=True), patch(
+                "stock_watch.cli.local_doctor.REPO_ROOT", root
+            ), patch("stock_watch.cli.local_doctor.THEME_OUTDIR", theme_outdir), patch(
+                "stock_watch.cli.local_doctor.VERIFICATION_OUTDIR", verification_outdir
+            ), patch("stock_watch.cli.local_doctor.DOCTOR_MD", theme_outdir / "local_doctor.md"), patch(
                 "stock_watch.cli.local_doctor.DOCTOR_JSON", theme_outdir / "local_doctor.json"
             ):
                 code = main(["--skip-network"])
@@ -355,11 +355,11 @@ class RunLocalDoctorTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            with patch("stock_watch.cli.local_doctor.REPO_ROOT", root), patch(
-                "stock_watch.cli.local_doctor.THEME_OUTDIR", theme_outdir
-            ), patch("stock_watch.cli.local_doctor.VERIFICATION_OUTDIR", verification_outdir), patch(
-                "stock_watch.cli.local_doctor.DOCTOR_MD", theme_outdir / "local_doctor.md"
-            ), patch(
+            with patch.dict(os.environ, {}, clear=True), patch(
+                "stock_watch.cli.local_doctor.REPO_ROOT", root
+            ), patch("stock_watch.cli.local_doctor.THEME_OUTDIR", theme_outdir), patch(
+                "stock_watch.cli.local_doctor.VERIFICATION_OUTDIR", verification_outdir
+            ), patch("stock_watch.cli.local_doctor.DOCTOR_MD", theme_outdir / "local_doctor.md"), patch(
                 "stock_watch.cli.local_doctor.DOCTOR_JSON", theme_outdir / "local_doctor.json"
             ):
                 code = main(["--skip-network", "--fail-on", "warn"])
@@ -411,11 +411,11 @@ class RunLocalDoctorTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            with patch("stock_watch.cli.local_doctor.REPO_ROOT", root), patch(
-                "stock_watch.cli.local_doctor.THEME_OUTDIR", theme_outdir
-            ), patch("stock_watch.cli.local_doctor.VERIFICATION_OUTDIR", verification_outdir), patch(
-                "stock_watch.cli.local_doctor.DOCTOR_MD", theme_outdir / "local_doctor.md"
-            ), patch(
+            with patch.dict(os.environ, {}, clear=True), patch(
+                "stock_watch.cli.local_doctor.REPO_ROOT", root
+            ), patch("stock_watch.cli.local_doctor.THEME_OUTDIR", theme_outdir), patch(
+                "stock_watch.cli.local_doctor.VERIFICATION_OUTDIR", verification_outdir
+            ), patch("stock_watch.cli.local_doctor.DOCTOR_MD", theme_outdir / "local_doctor.md"), patch(
                 "stock_watch.cli.local_doctor.DOCTOR_JSON", theme_outdir / "local_doctor.json"
             ):
                 code = main(["--skip-network"])
@@ -442,11 +442,11 @@ class RunLocalDoctorTests(unittest.TestCase):
             (root / "chat_id_map.csv.example").write_text("chat_id,name\n", encoding="utf-8")
             (root / "telegram_getupdates_url.example").write_text("https://example.com\n", encoding="utf-8")
 
-            with patch("stock_watch.cli.local_doctor.REPO_ROOT", root), patch(
-                "stock_watch.cli.local_doctor.THEME_OUTDIR", theme_outdir
-            ), patch("stock_watch.cli.local_doctor.VERIFICATION_OUTDIR", verification_outdir), patch(
-                "stock_watch.cli.local_doctor.DOCTOR_MD", theme_outdir / "local_doctor.md"
-            ), patch(
+            with patch.dict(os.environ, {}, clear=True), patch(
+                "stock_watch.cli.local_doctor.REPO_ROOT", root
+            ), patch("stock_watch.cli.local_doctor.THEME_OUTDIR", theme_outdir), patch(
+                "stock_watch.cli.local_doctor.VERIFICATION_OUTDIR", verification_outdir
+            ), patch("stock_watch.cli.local_doctor.DOCTOR_MD", theme_outdir / "local_doctor.md"), patch(
                 "stock_watch.cli.local_doctor.DOCTOR_JSON", theme_outdir / "local_doctor.json"
             ):
                 code = main(["--skip-network"])
