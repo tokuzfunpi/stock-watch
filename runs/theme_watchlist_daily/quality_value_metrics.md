@@ -1,10 +1,10 @@
 # Quality Value Metrics
-- Generated: 2026-05-06 19:06:18
+- Generated: 2026-05-06 19:45:53
 - Status: `ok`
-- Rows: `19`
+- Rows: `26`
 - Low-price rows: `4`
-- Quality-value rows: `15`
-- Fundamental rows: `19`
-- Similar scout rows: `21`
-- Similar scout draft rows: `15`
-- Wall-clock seconds: `10.938`
+- Quality-value rows: `22`
+- Fundamental rows: `26`
+- Similar scout rows: `15`
+- Similar scout draft rows: `13`
+- Wall-clock seconds: `13.797`

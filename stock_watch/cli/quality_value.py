@@ -105,7 +105,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--fundamental-limit",
         type=int,
-        default=20,
+        default=40,
         help="Maximum selected tickers to enrich with fundamentals.",
     )
     parser.add_argument(

@@ -1,0 +1,2 @@
+﻿date,ticker,name,group,layer,close,ret1_pct,ret5_pct,ret10_pct,ret20_pct,volume,avg_vol20,volume_ratio20,ma20,ma60,ma120,drawdown120_pct,bias20_pct,setup_score,risk_score,signals,score_band,regime,spec_risk_score,spec_risk_label,spec_risk_subtype,spec_risk_note,spec_risk_flags,spec_price_action_score,spec_crowding_score,spec_extension_score,spec_structure_score,atr_pct,volatility_tag
+2026-05-06,2441.TW,超豐,satellite,quality_value,93.2,-0.85,4.37,-1.17,8.37,16878053,12553565,1.34,91.11,89.69,86.16,-13.3,2.29,6,0,TREND,偏強可追蹤,中段延續中,0,正常,正常,波動劇烈,波動劇烈,0,1,0,0,6.05,活潑
