@@ -383,14 +383,20 @@ def summarize_sensitivity_matrix(df: pd.DataFrame) -> pd.DataFrame:
                 return pd.Series(pd.NA, index=group.index, dtype="Float64")
             return pd.to_numeric(group[column], errors="coerce")
 
+        def _safe_median(series: pd.Series) -> float | None:
+            values = series.dropna()
+            if values.empty:
+                return None
+            return float(values.median())
+
         setup = _num_series("setup_score")
         risk = _num_series("risk_score")
         ret5 = _num_series("ret5_pct")
         volume = _num_series("volume_ratio20")
-        setup_med = setup.median()
-        risk_med = risk.median()
-        ret5_med = ret5.median()
-        volume_med = volume.median()
+        setup_med = _safe_median(setup)
+        risk_med = _safe_median(risk)
+        ret5_med = _safe_median(ret5)
+        volume_med = _safe_median(volume)
 
         filters: list[tuple[str, pd.Series]] = [
             ("baseline_all", pd.Series(True, index=group.index)),
