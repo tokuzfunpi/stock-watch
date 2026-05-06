@@ -1,5 +1,5 @@
 {
-  "signature": "5c01bb304d0bfe9b",
+  "signature": "87c53baddd90e7cc",
   "backtest_period": "5y",
   "lookahead_days": [
     1,
@@ -67,8 +67,14 @@
     "3034.TW": "2026-04-07",
     "6510.TWO": "2026-04-07",
     "2376.TW": "2026-04-07",
-    "2313.TW": "2026-04-07"
+    "2313.TW": "2026-04-07",
+    "6161.TWO": "2026-04-07",
+    "5225.TW": "2026-04-07",
+    "6486.TWO": "2026-04-07",
+    "2347.TW": "2026-04-07",
+    "3679.TW": "2026-04-07",
+    "3592.TW": "2026-04-07"
   },
-  "last_run_mode": "incremental_noop",
-  "last_run_scanned_cutoffs": 0
+  "last_run_mode": "full_rebuild",
+  "last_run_scanned_cutoffs": 62215
 }

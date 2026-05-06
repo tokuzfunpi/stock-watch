@@ -8,8 +8,12 @@ from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
+import requests
 
 from stock_watch.data.fundamentals import FinMindFundamentalProvider
+from stock_watch.data.fundamentals import FINMIND_API_URL
+from stock_watch.data.fundamentals import OfficialValuationProvider
+from stock_watch.data.fundamentals import _local_env_value
 from stock_watch.paths import THEME_OUTDIR
 
 NUMERIC_COLUMNS = [
@@ -26,6 +30,45 @@ NUMERIC_COLUMNS = [
     "bias20_pct",
     "drawdown120_pct",
 ]
+
+ENTRY_PLAN_COLUMNS = [
+    "ticker",
+    "name",
+    "bucket",
+    "decision_priority",
+    "entry_bias",
+    "buy_zone_low",
+    "buy_zone_high",
+    "stop_loss",
+    "add_rule",
+    "trim_rule",
+    "decision_reason",
+]
+
+SIMILAR_SCOUT_INDUSTRIES = {
+    "電機機械",
+    "半導體業",
+    "電子零組件業",
+    "電腦及週邊設備業",
+    "光電業",
+    "通信網路業",
+    "其他電子業",
+    "資訊服務業",
+    "電子通路業",
+}
+TWSE_COMPANY_INFO_URL = "https://openapi.twse.com.tw/v1/opendata/t187ap03_L"
+TPEX_COMPANY_INFO_URL = "https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap03_O"
+INDUSTRY_CODE_LABELS = {
+    "05": "電機機械",
+    "24": "半導體業",
+    "25": "電腦及週邊設備業",
+    "26": "光電業",
+    "27": "通信網路業",
+    "28": "電子零組件業",
+    "29": "電子通路業",
+    "30": "資訊服務業",
+    "31": "其他電子業",
+}
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -50,6 +93,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=20,
         help="Maximum selected tickers to enrich with fundamentals.",
     )
+    parser.add_argument(
+        "--similar-scout",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Scan adjacent TWSE/TPEx industries for more quality/value names using public fundamentals.",
+    )
+    parser.add_argument("--scout-limit", type=int, default=20)
+    parser.add_argument("--scout-candidate-limit", type=int, default=120)
     return parser.parse_args(argv)
 
 
@@ -193,6 +244,204 @@ def _fetch_fundamentals(export: pd.DataFrame, *, enabled: bool, limit: int) -> p
     return FinMindFundamentalProvider().fetch_many(tickers)
 
 
+def _prefer_cached_full_fundamentals(current: pd.DataFrame, cache_path: Path) -> pd.DataFrame:
+    if not cache_path.exists():
+        return current
+    try:
+        cached = pd.read_csv(cache_path)
+    except Exception:
+        return current
+    if cached.empty or "ticker" not in cached.columns:
+        return current
+    if "fundamental_data_status" not in cached.columns:
+        return current
+    cached = cached[cached["fundamental_data_status"].astype(str) == "ok"].copy()
+    if cached.empty:
+        return current
+    if current.empty or "ticker" not in current.columns:
+        return cached
+
+    current = current.copy()
+    cached = cached.drop_duplicates(subset=["ticker"], keep="first").set_index("ticker")
+    for index, row in current.iterrows():
+        ticker = str(row.get("ticker", ""))
+        status = str(row.get("fundamental_data_status", ""))
+        if status == "ok" or ticker not in cached.index:
+            continue
+        for column, value in cached.loc[ticker].items():
+            if column in current.columns:
+                current.at[index, column] = value
+    return current
+
+
+def _watchlist_tickers(path: Path = Path("watchlist.csv")) -> set[str]:
+    if not path.exists():
+        return set()
+    try:
+        df = pd.read_csv(path)
+    except Exception:
+        return set()
+    if "ticker" not in df.columns:
+        return set()
+    return set(df["ticker"].dropna().astype(str).str.strip())
+
+
+def _fetch_stock_info_universe(session: requests.Session | None = None) -> pd.DataFrame:
+    session = session or requests.Session()
+    token = _local_env_value("FINMIND_TOKEN")
+    headers = {"Authorization": f"Bearer {token}"} if token else {}
+    response = session.get(FINMIND_API_URL, params={"dataset": "TaiwanStockInfo"}, headers=headers, timeout=20)
+    response.raise_for_status()
+    payload = response.json()
+    data = payload.get("data") or []
+    frame = pd.DataFrame(data)
+    if frame.empty:
+        return pd.DataFrame(columns=["ticker", "stock_id", "name", "industry_category", "type"])
+    frame = frame[frame["type"].astype(str).isin(["twse", "tpex"])].copy()
+    frame["ticker"] = frame.apply(
+        lambda row: f"{str(row.get('stock_id', '')).strip()}.{('TW' if str(row.get('type', '')).strip() == 'twse' else 'TWO')}",
+        axis=1,
+    )
+    frame["name"] = frame.get("stock_name", pd.Series(index=frame.index, dtype=object)).fillna("").astype(str)
+    frame["industry_category"] = frame.get("industry_category", pd.Series(index=frame.index, dtype=object)).fillna("").astype(str)
+    frame["_specificity"] = frame["industry_category"].map(lambda value: 0 if value in {"電子工業", "其他"} else 1)
+    frame = frame.sort_values(by=["ticker", "date", "_specificity"], ascending=[True, False, False])
+    return frame.drop_duplicates(subset=["ticker"], keep="first")[
+        ["ticker", "stock_id", "name", "industry_category", "type"]
+    ].reset_index(drop=True)
+
+
+def _fetch_official_stock_info_universe(session: requests.Session | None = None) -> pd.DataFrame:
+    session = session or requests.Session()
+    rows: list[dict[str, object]] = []
+    twse_response = session.get(TWSE_COMPANY_INFO_URL, headers={"User-Agent": "stock-watch/1.0"}, timeout=20)
+    twse_response.raise_for_status()
+    twse_payload = twse_response.json()
+    if isinstance(twse_payload, list):
+        for item in twse_payload:
+            if not isinstance(item, dict):
+                continue
+            stock_id = str(item.get("公司代號", "")).strip()
+            industry_code = str(item.get("產業別", "")).strip()
+            rows.append(
+                {
+                    "ticker": f"{stock_id}.TW",
+                    "stock_id": stock_id,
+                    "name": str(item.get("公司簡稱", "")).strip(),
+                    "industry_category": INDUSTRY_CODE_LABELS.get(industry_code, industry_code),
+                    "type": "twse",
+                }
+            )
+    tpex_response = session.get(TPEX_COMPANY_INFO_URL, headers={"User-Agent": "stock-watch/1.0"}, timeout=20)
+    tpex_response.raise_for_status()
+    tpex_payload = tpex_response.json()
+    if isinstance(tpex_payload, list):
+        for item in tpex_payload:
+            if not isinstance(item, dict):
+                continue
+            stock_id = str(item.get("SecuritiesCompanyCode", "")).strip()
+            industry_code = str(item.get("SecuritiesIndustryCode", "")).strip()
+            rows.append(
+                {
+                    "ticker": f"{stock_id}.TWO",
+                    "stock_id": stock_id,
+                    "name": str(item.get("CompanyAbbreviation", "")).strip(),
+                    "industry_category": INDUSTRY_CODE_LABELS.get(industry_code, industry_code),
+                    "type": "tpex",
+                }
+            )
+    if not rows:
+        return pd.DataFrame(columns=["ticker", "stock_id", "name", "industry_category", "type"])
+    return pd.DataFrame(rows).drop_duplicates(subset=["ticker"], keep="first").reset_index(drop=True)
+
+
+def build_similar_scout(
+    *,
+    existing_tickers: set[str] | None = None,
+    candidate_limit: int = 120,
+    output_limit: int = 20,
+    session: requests.Session | None = None,
+) -> pd.DataFrame:
+    existing = {str(ticker).strip() for ticker in (existing_tickers or set()) if str(ticker).strip()}
+    provider = OfficialValuationProvider(timeout=30)
+    try:
+        valuations = provider.fetch_all()
+    except Exception:
+        return pd.DataFrame()
+    if valuations.empty:
+        return pd.DataFrame()
+
+    try:
+        universe = _fetch_stock_info_universe(session=session)
+    except Exception:
+        try:
+            universe = _fetch_official_stock_info_universe(session=session)
+        except Exception:
+            universe = pd.DataFrame()
+    if not universe.empty:
+        universe = universe[universe["industry_category"].isin(SIMILAR_SCOUT_INDUSTRIES)].copy()
+    if universe.empty:
+        universe = valuations[["ticker", "stock_id", "name"]].copy()
+        universe["industry_category"] = "public_fundamental_seed"
+        universe["type"] = universe["ticker"].map(lambda ticker: "tpex" if str(ticker).endswith(".TWO") else "twse")
+
+    if existing:
+        universe = universe[~universe["ticker"].astype(str).isin(existing)].copy()
+    if universe.empty:
+        return pd.DataFrame()
+
+    valuation_cols = ["ticker", "pe", "pbr", "dividend_yield", "name"]
+    valuation_work = valuations[[col for col in valuation_cols if col in valuations.columns]].copy()
+    if "name" in valuation_work.columns:
+        valuation_work = valuation_work.rename(columns={"name": "valuation_name"})
+    pool = universe.merge(valuation_work, on="ticker", how="left")
+    if "valuation_name" in pool.columns:
+        pool["name"] = pool["name"].fillna("").astype(str)
+        pool.loc[pool["name"].str.strip() == "", "name"] = pool.loc[pool["name"].str.strip() == "", "valuation_name"]
+    for column in ["pe", "pbr", "dividend_yield"]:
+        pool[column] = pd.to_numeric(pool.get(column), errors="coerce")
+    pool = pool[
+        pool["pe"].between(0.1, 28.0, inclusive="both")
+        & pool["pbr"].between(0.1, 4.5, inclusive="both")
+        & (pool["dividend_yield"].fillna(0) >= 1.5)
+    ].copy()
+    if pool.empty:
+        return pd.DataFrame()
+    pool["_valuation_seed_score"] = (
+        (28.0 - pool["pe"]).clip(lower=0) * 0.35
+        + (4.5 - pool["pbr"]).clip(lower=0) * 1.2
+        + pool["dividend_yield"].fillna(0) * 0.8
+    )
+    pool = pool.sort_values(by=["_valuation_seed_score", "dividend_yield"], ascending=[False, False]).head(candidate_limit)
+
+    fundamentals = provider.fetch_many(pool["ticker"].astype(str).tolist())
+    if fundamentals.empty:
+        return pd.DataFrame()
+    scout = pool[["ticker", "name", "industry_category", "type"]].merge(fundamentals, on="ticker", how="left")
+    for column in ["quality_score", "value_score", "pe", "pbr", "dividend_yield", "revenue_yoy_pct", "roe_pct", "debt_to_equity_pct"]:
+        scout[column] = pd.to_numeric(scout.get(column), errors="coerce")
+    scout = scout[(scout["quality_score"] >= 3) & (scout["value_score"] >= 2)].copy()
+    if scout.empty:
+        return pd.DataFrame()
+    scout["similar_score"] = (
+        scout["quality_score"].fillna(0) * 2.0
+        + scout["value_score"].fillna(0) * 1.5
+        + scout["dividend_yield"].fillna(0) * 0.5
+        + (scout["revenue_yoy_pct"].fillna(0).clip(lower=0, upper=50) / 25)
+        + (scout["roe_pct"].fillna(0).clip(lower=0, upper=30) / 15)
+        - (scout["pe"].fillna(99).clip(lower=0, upper=99) / 25)
+    ).round(2)
+    scout["scout_reason"] = scout.apply(
+        lambda row: (
+            f"{row.get('industry_category', '')}；"
+            f"Q/V={_format_number(row.get('quality_score'), 0)}/{_format_number(row.get('value_score'), 0)}；"
+            f"PE={_format_number(row.get('pe'))}；殖利率={_format_with_suffix(row.get('dividend_yield'), '%')}"
+        ),
+        axis=1,
+    )
+    return scout.sort_values(by=["similar_score", "quality_score", "value_score"], ascending=[False, False, False]).head(output_limit).reset_index(drop=True)
+
+
 def _format_number(value: object, digits: int = 2) -> str:
     number = _safe_number(value)
     if not number:
@@ -204,6 +453,190 @@ def _format_number(value: object, digits: int = 2) -> str:
 def _format_with_suffix(value: object, suffix: str, digits: int = 2) -> str:
     text = _format_number(value, digits)
     return f"{text}{suffix}" if text else ""
+
+
+def _atr_amount(row: pd.Series) -> float:
+    close = _safe_number(row.get("close"))
+    atr_pct = _safe_number(row.get("atr_pct"))
+    return close * atr_pct / 100.0 if close and atr_pct else 0.0
+
+
+def _zone_text(low: object, high: object) -> str:
+    low_text = _format_number(low)
+    high_text = _format_number(high)
+    return f"{low_text}–{high_text}" if low_text and high_text else ""
+
+
+def _entry_bias(row: pd.Series) -> str:
+    action = str(row.get("_action", ""))
+    fundamental_action = str(row.get("fundamental_action", ""))
+    if action == "過熱先等":
+        return "等待降溫"
+    if action == "優先研究" and fundamental_action == "品質價值優先":
+        return "分批試單"
+    if action == "優先研究":
+        return "研究試單"
+    if action == "等拉回確認":
+        return "等拉回"
+    if action == "觀察轉強":
+        return "等轉強"
+    return "暫不急"
+
+
+def _entry_plan_for_row(row: pd.Series) -> dict[str, object]:
+    close = _safe_number(row.get("close"))
+    ma20 = _safe_number(row.get("ma20"))
+    ma60 = _safe_number(row.get("ma60"))
+    atr = _atr_amount(row)
+    atr_pct = _safe_number(row.get("atr_pct"))
+    quality_score = _safe_number(row.get("quality_score"))
+    value_score = _safe_number(row.get("value_score"))
+    setup_score = _safe_number(row.get("setup_score"))
+    risk_score = _safe_number(row.get("risk_score"))
+    spec_risk_score = _safe_number(row.get("spec_risk_score"))
+    action = str(row.get("_action", ""))
+    bias = _entry_bias(row)
+
+    if action == "過熱先等":
+        zone_low = ma20 if ma20 else close * 0.92
+        zone_high = (ma20 + atr) if ma20 and atr else close * 0.96
+    elif action == "觀察轉強":
+        zone_low = ma20 if ma20 else close
+        zone_high = (ma20 + atr * 0.5) if ma20 and atr else close * 1.02
+    elif action == "等拉回確認":
+        zone_low = max(ma20, close - atr * 1.5) if ma20 and atr else close * 0.96
+        zone_high = max(ma20, close - atr * 0.5) if ma20 and atr else close * 0.99
+    elif action == "優先研究":
+        zone_low = max(ma20, close - atr) if ma20 and atr else close * 0.97
+        zone_high = close
+    else:
+        zone_low = ma20 if ma20 else close * 0.95
+        zone_high = close
+
+    zone_mid = (zone_low + zone_high) / 2 if zone_low and zone_high else close
+    stop_pct = max(atr_pct * 2, 6.0)
+    stop_by_pct = zone_mid * (1 - stop_pct / 100.0) if zone_mid else 0.0
+    stop_by_ma = ma20 - atr * 1.5 if ma20 and atr else 0.0
+    stop_loss = max(stop_by_pct, stop_by_ma) if stop_by_pct and stop_by_ma else stop_by_pct or stop_by_ma
+    if ma60 and stop_loss and stop_loss > ma60 and action in {"觀察轉強", "等拉回確認"}:
+        stop_loss = ma60
+
+    priority = quality_score * 2.0 + value_score * 1.5 + setup_score - risk_score * 2.0 - spec_risk_score
+    if action == "優先研究":
+        priority += 3.0
+    if action == "過熱先等":
+        priority -= 5.0
+    if str(row.get("fundamental_action", "")) == "品質價值優先":
+        priority += 3.0
+    if _has_signal(row, "SURGE"):
+        priority -= 4.0
+
+    if action == "過熱先等":
+        add_rule = "不追高；等量縮回 MA20 附近後，再看站回 5 日高點"
+        trim_rule = "若已持有，急拉或跌破前一日低點先降風險"
+    elif action == "觀察轉強":
+        add_rule = "收盤站回 MA20 且量能回到 0.8–1.4 倍，再開第一筆"
+        trim_rule = "未站回 MA20 前不加碼；跌破停損直接退出觀察單"
+    elif action == "等拉回確認":
+        add_rule = "回到買區後若守住 MA20，第二天轉強再加"
+        trim_rule = "跌破買區下緣或放量轉弱先撤"
+    elif action == "優先研究":
+        add_rule = "第一筆 1/3；突破前高且未爆量再加 1/3"
+        trim_rule = "跌破停損或出現 SURGE+爆量失衡先減"
+    else:
+        add_rule = "只追蹤，不主動建立部位"
+        trim_rule = "訊號改善前不處理"
+
+    reasons = [
+        f"technical={action}",
+        f"fundamental={row.get('fundamental_action', '') or 'n/a'}",
+        f"Q/V={_format_number(quality_score, 0)}/{_format_number(value_score, 0)}",
+    ]
+    if _has_signal(row, "SURGE"):
+        reasons.append("SURGE")
+    if _has_signal(row, "PULLBACK"):
+        reasons.append("PULLBACK")
+
+    return {
+        "ticker": row.get("ticker", ""),
+        "name": row.get("name", ""),
+        "bucket": row.get("bucket", ""),
+        "decision_priority": round(priority, 2),
+        "entry_bias": bias,
+        "buy_zone_low": round(zone_low, 2) if zone_low else "",
+        "buy_zone_high": round(zone_high, 2) if zone_high else "",
+        "stop_loss": round(stop_loss, 2) if stop_loss else "",
+        "add_rule": add_rule,
+        "trim_rule": trim_rule,
+        "decision_reason": "、".join(reasons),
+    }
+
+
+def build_entry_plan(export: pd.DataFrame) -> pd.DataFrame:
+    if export.empty:
+        return pd.DataFrame(columns=ENTRY_PLAN_COLUMNS)
+    work = export.copy()
+    for column in ["quality_score", "value_score"]:
+        if column not in work.columns:
+            work[column] = 0
+    rows = [_entry_plan_for_row(row) for _, row in work.iterrows()]
+    plan = pd.DataFrame(rows, columns=ENTRY_PLAN_COLUMNS)
+    if plan.empty:
+        return plan
+    plan["decision_priority"] = pd.to_numeric(plan["decision_priority"], errors="coerce").fillna(0)
+    return plan.sort_values(by=["decision_priority", "ticker"], ascending=[False, True]).reset_index(drop=True)
+
+
+def _entry_plan_table(plan: pd.DataFrame, *, limit: int = 12) -> list[str]:
+    if plan.empty:
+        return ["- None"]
+    lines = [
+        "| Ticker | Name | Priority | Bias | Buy Zone | Stop | Add Rule | Trim Rule |",
+        "| --- | --- | ---: | --- | ---: | ---: | --- | --- |",
+    ]
+    for _, row in plan.head(limit).iterrows():
+        lines.append(
+            f"| {row.get('ticker', '')} | {row.get('name', '')} | {_format_number(row.get('decision_priority'))} | "
+            f"{row.get('entry_bias', '')} | {_zone_text(row.get('buy_zone_low'), row.get('buy_zone_high'))} | "
+            f"{_format_number(row.get('stop_loss'))} | {row.get('add_rule', '')} | {row.get('trim_rule', '')} |"
+        )
+    return lines
+
+
+def _similar_scout_table(scout: pd.DataFrame, *, limit: int = 15) -> list[str]:
+    if scout.empty:
+        return ["- None"]
+    lines = [
+        "| Ticker | Name | Industry | Score | Fundamental | Q/V | PE | PBR | Yield | Rev YoY | ROE | Reason |",
+        "| --- | --- | --- | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
+    ]
+    for _, row in scout.head(limit).iterrows():
+        lines.append(
+            f"| {row.get('ticker', '')} | {row.get('name', '')} | {row.get('industry_category', '')} | "
+            f"{_format_number(row.get('similar_score'))} | {row.get('fundamental_action', '')} | "
+            f"{_format_number(row.get('quality_score'), 0)}/{_format_number(row.get('value_score'), 0)} | "
+            f"{_format_number(row.get('pe'))} | {_format_number(row.get('pbr'))} | {_format_with_suffix(row.get('dividend_yield'), '%')} | "
+            f"{_format_with_suffix(row.get('revenue_yoy_pct'), '%')} | {_format_with_suffix(row.get('roe_pct'), '%')} | "
+            f"{row.get('scout_reason', '')} |"
+        )
+    return lines
+
+
+def build_entry_plan_notification(entry_plan: pd.DataFrame, *, limit: int = 6) -> str:
+    if entry_plan.empty:
+        return "🧭 品質價值買點雷達\n今天沒有符合條件的新買點。"
+    work = entry_plan.copy()
+    work["decision_priority"] = pd.to_numeric(work.get("decision_priority"), errors="coerce").fillna(0)
+    work = work.sort_values(by=["decision_priority", "ticker"], ascending=[False, True]).head(limit)
+    lines = ["🧭 品質價值買點雷達", "規則：不追過熱；先看買區、停損、加碼條件。"]
+    for _, row in work.iterrows():
+        bias = str(row.get("entry_bias", ""))
+        emoji = "🟢" if bias in {"分批試單", "研究試單"} else "🟡" if bias in {"等轉強", "等拉回"} else "🔴"
+        lines.append(
+            f"{emoji} {row.get('name', '')}({row.get('ticker', '')})｜{bias}｜"
+            f"買區 {_zone_text(row.get('buy_zone_low'), row.get('buy_zone_high'))}｜停損 {_format_number(row.get('stop_loss'))}"
+        )
+    return "\n".join(lines)
 
 
 def _markdown_table(df: pd.DataFrame, *, limit: int = 15) -> list[str]:
@@ -257,7 +690,7 @@ def build_quality_value_report(
     *,
     args: argparse.Namespace,
     generated_at: str,
-) -> tuple[str, pd.DataFrame, pd.DataFrame]:
+) -> tuple[str, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     low_price = _select_low_price_pool(df_rank, args)
     quality_value = _select_quality_value_pool(df_rank)
     export = pd.concat(
@@ -273,7 +706,18 @@ def build_quality_value_report(
         enabled=bool(args.fundamentals),
         limit=int(args.fundamental_limit),
     )
+    fundamentals = _prefer_cached_full_fundamentals(fundamentals, Path(args.outdir) / "quality_value_fundamentals.csv")
     export = _merge_fundamentals(export, fundamentals)
+    entry_plan = build_entry_plan(export)
+    scout = (
+        build_similar_scout(
+            existing_tickers=_watchlist_tickers() | set(export["ticker"].astype(str)),
+            candidate_limit=int(args.scout_candidate_limit),
+            output_limit=int(args.scout_limit),
+        )
+        if bool(args.similar_scout)
+        else pd.DataFrame()
+    )
 
     lines = [
         "# 冷門高品質 / 低價健康 Research",
@@ -296,6 +740,20 @@ def build_quality_value_report(
         "",
         *_fundamental_table(export),
         "",
+        "## 買點 / 停損 / 加碼紀律",
+        "",
+        "- `Buy Zone` 是研究用價格區間，不是市價追單；先用小部位驗證，再依規則加碼。",
+        "- `Stop` 優先視為收盤跌破或放量跌破的風控線；若隔日跳空失守，先處理風險。",
+        "",
+        *_entry_plan_table(entry_plan),
+        "",
+        "## 更多類似標的雷達",
+        "",
+        "- Scope: 類似 `3034/3005/3044` 的電子/半導體/零組件/電腦週邊族群；排除既有 watchlist，先用公開基本面找研究種子。",
+        "- 注意：這是 `seed list`，還沒通過日線技術與流動性確認；下一步要加入 watchlist 觀察價量。",
+        "",
+        *_similar_scout_table(scout),
+        "",
         "## 使用方式",
         "",
         "- `優先研究`：價量結構乾淨，值得深入看基本面與買點。",
@@ -304,7 +762,7 @@ def build_quality_value_report(
         "- `過熱先等`：先看不碰，等熱度退或重新整理。",
         "",
     ]
-    return "\n".join(lines), export, fundamentals
+    return "\n".join(lines), export, fundamentals, entry_plan, scout
 
 
 def _write_metrics(
@@ -315,6 +773,7 @@ def _write_metrics(
     low_price_rows: int,
     quality_value_rows: int,
     fundamental_rows: int,
+    scout_rows: int,
     wall_seconds: float,
 ) -> None:
     payload = {
@@ -324,6 +783,7 @@ def _write_metrics(
         "low_price_rows": int(low_price_rows),
         "quality_value_rows": int(quality_value_rows),
         "fundamental_rows": int(fundamental_rows),
+        "scout_rows": int(scout_rows),
         "wall_seconds": round(wall_seconds, 3),
     }
     outdir.mkdir(parents=True, exist_ok=True)
@@ -338,6 +798,7 @@ def _write_metrics(
                 f"- Low-price rows: `{low_price_rows}`",
                 f"- Quality-value rows: `{quality_value_rows}`",
                 f"- Fundamental rows: `{fundamental_rows}`",
+                f"- Similar scout rows: `{scout_rows}`",
                 f"- Wall-clock seconds: `{wall_seconds:.3f}`",
             ]
         ),
@@ -356,12 +817,14 @@ def main(argv: list[str] | None = None) -> int:
 
     df_rank = _prepare_rank(rank_csv)
     generated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    markdown, export, fundamentals = build_quality_value_report(df_rank, args=args, generated_at=generated_at)
+    markdown, export, fundamentals, entry_plan, scout = build_quality_value_report(df_rank, args=args, generated_at=generated_at)
 
     outdir.mkdir(parents=True, exist_ok=True)
     report_md = outdir / "quality_value_report.md"
     report_csv = outdir / "quality_value_candidates.csv"
     fundamentals_csv = outdir / "quality_value_fundamentals.csv"
+    entry_plan_csv = outdir / "quality_value_entry_plan.csv"
+    scout_csv = outdir / "quality_value_similar_scout.csv"
     report_md.write_text(markdown, encoding="utf-8")
 
     export_cols = [
@@ -405,6 +868,9 @@ def main(argv: list[str] | None = None) -> int:
     export[[col for col in export_cols if col in export.columns]].to_csv(report_csv, index=False, encoding="utf-8-sig")
     if not fundamentals.empty:
         fundamentals.to_csv(fundamentals_csv, index=False, encoding="utf-8-sig")
+    entry_plan.to_csv(entry_plan_csv, index=False, encoding="utf-8-sig")
+    if not scout.empty:
+        scout.to_csv(scout_csv, index=False, encoding="utf-8-sig")
 
     low_price_rows = int((export.get("bucket", pd.Series(dtype=str)) == "low_price_health").sum())
     quality_value_rows = int((export.get("bucket", pd.Series(dtype=str)) == "quality_value_research").sum())
@@ -416,6 +882,7 @@ def main(argv: list[str] | None = None) -> int:
         low_price_rows=low_price_rows,
         quality_value_rows=quality_value_rows,
         fundamental_rows=len(fundamentals),
+        scout_rows=len(scout),
         wall_seconds=wall_seconds,
     )
 
@@ -424,6 +891,9 @@ def main(argv: list[str] | None = None) -> int:
     print(f"- csv: {report_csv}")
     if not fundamentals.empty:
         print(f"- fundamentals: {fundamentals_csv}")
+    print(f"- entry_plan: {entry_plan_csv}")
+    if not scout.empty:
+        print(f"- similar_scout: {scout_csv}")
     print(f"- rows: {len(export)}")
     print(f"- wall_seconds: {wall_seconds:.3f}")
     return 0

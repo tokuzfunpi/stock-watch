@@ -1,0 +1,2 @@
+﻿date,ticker,name,group,layer,close,ret1_pct,ret5_pct,ret10_pct,ret20_pct,volume,avg_vol20,volume_ratio20,ma20,ma60,ma120,drawdown120_pct,bias20_pct,setup_score,risk_score,signals,score_band,regime,spec_risk_score,spec_risk_label,spec_risk_subtype,spec_risk_note,spec_risk_flags,spec_price_action_score,spec_crowding_score,spec_extension_score,spec_structure_score,atr_pct,volatility_tag
+2026-05-06,3679.TW,新至陞,satellite,quality_value,119.5,-0.42,0.42,0.42,1.7,56730,62388,0.91,120.47,118.29,116.9,-4.4,-0.81,7,1,BASE,偏強可追蹤,低檔慢慢墊高,0,正常,正常,高檔無回檔,高檔無回檔,0,0,1,0,1.85,穩健

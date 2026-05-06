@@ -331,6 +331,7 @@ class OfficialValuationProvider:
                     {
                         "ticker": f"{item.get('Code', '')}.TW",
                         "stock_id": str(item.get("Code", "")).strip(),
+                        "name": str(item.get("Name", "")).strip(),
                         "pe": _first_float(item, "PEratio"),
                         "pbr": _first_float(item, "PBratio"),
                         "dividend_yield": _first_float(item, "DividendYield"),
@@ -347,6 +348,7 @@ class OfficialValuationProvider:
                     {
                         "ticker": f"{item.get('SecuritiesCompanyCode', '')}.TWO",
                         "stock_id": str(item.get("SecuritiesCompanyCode", "")).strip(),
+                        "name": str(item.get("CompanyName", "")).strip(),
                         "pe": _first_float(item, "PriceEarningRatio"),
                         "pbr": _first_float(item, "PriceBookRatio"),
                         "dividend_yield": _first_float(item, "YieldRatio"),

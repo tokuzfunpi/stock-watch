@@ -24,6 +24,9 @@ class RunLocalDailyTests(unittest.TestCase):
         self._quality_value_patch = patch("stock_watch.cli.local_daily.quality_value.main", return_value=0)
         self._quality_value_patch.start()
         self.addCleanup(self._quality_value_patch.stop)
+        self._quality_value_notification_patch = patch("stock_watch.cli.local_daily.send_quality_value_notification")
+        self._quality_value_notification_patch.start()
+        self.addCleanup(self._quality_value_notification_patch.stop)
 
     def test_parse_args_defaults_to_full_mode(self) -> None:
         args = parse_args([])

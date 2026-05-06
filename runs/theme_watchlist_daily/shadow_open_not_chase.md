@@ -1,5 +1,5 @@
 # 開高不追 Shadow Observation
-- Generated: 2026-05-06 14:13:20 CST
+- Generated: 2026-05-06 14:33:31 CST
 - Scope: 只做影子觀察，不影響正式 short candidates / Telegram notifications。
 - Experiment: `開高不追` / `1D short only` / shadow promotion watch
 

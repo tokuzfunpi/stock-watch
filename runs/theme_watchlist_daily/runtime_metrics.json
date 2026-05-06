@@ -1,24 +1,24 @@
 {
-  "generated_at": "2026-05-06 14:13:20",
+  "generated_at": "2026-05-06 14:33:31",
   "status": "ok",
   "step_timings": {
-    "market_regime": 4.04199818149209e-06,
-    "us_market": 3.4999975468963385e-06,
-    "cache_warmup": 5.3957992349751294e-05,
-    "watchlist": 6.041998858563602e-06,
-    "backtest": 3.459004801698029e-06,
-    "candidate_sets": 0.04448587499791756,
-    "reports": 0.00011279099271632731,
-    "shadow_observation": 0.003837708994979039,
-    "alert_tracking": 0.00013062500511296093,
-    "should_alert": 4.249988705851138e-06,
-    "notifications": 0.131449166990933,
-    "persist_state": 0.000109500004327856,
-    "persist_success": 6.191700231283903e-05
+    "market_regime": 3.2919924706220627e-06,
+    "us_market": 3.2079988159239292e-06,
+    "cache_warmup": 4.312499368097633e-05,
+    "watchlist": 3.7080026231706142e-06,
+    "backtest": 2.5420013116672635e-06,
+    "candidate_sets": 0.041790625007706694,
+    "reports": 8.179199357982725e-05,
+    "shadow_observation": 0.0033130840020021424,
+    "alert_tracking": 0.00011766699026338756,
+    "should_alert": 3.4999975468963385e-06,
+    "notifications": 0.13989679199585225,
+    "persist_state": 0.00010741699952632189,
+    "persist_success": 5.979200068395585e-05
   },
   "warnings": [],
-  "total_seconds": 0.18,
-  "wall_seconds": 0.182,
+  "total_seconds": 0.185,
+  "wall_seconds": 0.187,
   "cache_stats": {
     "history_hit": 0,
     "history_disk_hit": 0,
@@ -29,7 +29,7 @@
     "indicator_miss": 0
   },
   "backtest_meta": {
-    "signature": "5c01bb304d0bfe9b",
+    "signature": "87c53baddd90e7cc",
     "backtest_period": "5y",
     "lookahead_days": [
       1,
@@ -97,9 +97,15 @@
       "3034.TW": "2026-04-07",
       "6510.TWO": "2026-04-07",
       "2376.TW": "2026-04-07",
-      "2313.TW": "2026-04-07"
+      "2313.TW": "2026-04-07",
+      "6161.TWO": "2026-04-07",
+      "5225.TW": "2026-04-07",
+      "6486.TWO": "2026-04-07",
+      "2347.TW": "2026-04-07",
+      "3679.TW": "2026-04-07",
+      "3592.TW": "2026-04-07"
     },
-    "last_run_mode": "incremental_noop",
-    "last_run_scanned_cutoffs": 0
+    "last_run_mode": "full_rebuild",
+    "last_run_scanned_cutoffs": 62215
   }
 }

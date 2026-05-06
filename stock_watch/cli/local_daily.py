@@ -29,6 +29,7 @@ PORTFOLIO_RUNTIME_METRICS_MD = THEME_OUTDIR / "portfolio_runtime_metrics.md"
 REPORT_SYNC_METRICS_JSON = THEME_OUTDIR / "report_sync_metrics.json"
 SHADOW_OPEN_NOT_CHASE_TRACKING_MD = THEME_OUTDIR / "shadow_open_not_chase_tracking.md"
 SHADOW_OPEN_NOT_CHASE_TRACKING_CSV = THEME_OUTDIR / "shadow_open_not_chase_tracking.csv"
+QUALITY_VALUE_ENTRY_PLAN_CSV = THEME_OUTDIR / "quality_value_entry_plan.csv"
 
 MODE_STEPS: dict[str, tuple[str, ...]] = {
     "preopen": ("watchlist", "verification"),
@@ -69,6 +70,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action=argparse.BooleanOptionalAction,
         default=None,
         help="Auto-run `report-sync` when a portfolio step leaves daily_rank.csv newer than daily_report.md. Defaults to on for modes that include portfolio.",
+    )
+    parser.add_argument(
+        "--quality-value-notification",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Send a concise Telegram quality/value entry-plan summary after the quality-value step.",
     )
 
     parser.add_argument("--top-n-short", type=int, default=5)
@@ -142,6 +149,24 @@ def run_portfolio_step() -> int:
         print_fn=print,
         stderr=sys.stderr,
     )
+
+
+def send_quality_value_notification(entry_plan_csv: Path = QUALITY_VALUE_ENTRY_PLAN_CSV) -> None:
+    if not entry_plan_csv.exists():
+        return
+    try:
+        entry_plan = pd.read_csv(entry_plan_csv)
+    except Exception:
+        return
+    if entry_plan.empty:
+        return
+    try:
+        import daily_theme_watchlist
+
+        message = quality_value.build_entry_plan_notification(entry_plan)
+        daily_theme_watchlist.send_telegram_message(message)
+    except Exception:
+        return
 
 
 def _count_csv_rows(path: Path) -> int:
@@ -608,6 +633,7 @@ def collect_status_metrics(theme_outdir: Path = THEME_OUTDIR, verification_outdi
         "quality_value_low_price_rows": int(quality_value_runtime.get("low_price_rows", 0) or 0),
         "quality_value_research_rows": int(quality_value_runtime.get("quality_value_rows", 0) or 0),
         "quality_value_fundamental_rows": int(quality_value_runtime.get("fundamental_rows", 0) or 0),
+        "quality_value_scout_rows": int(quality_value_runtime.get("scout_rows", 0) or 0),
         "verification_runtime_seconds": float(verification_runtime.get("wall_seconds", 0.0) or 0.0),
         "verification_runtime_status": str(verification_runtime.get("status", "") or ""),
         "spec_risk_high_rows": int(spec_risk_metrics["spec_risk_high_rows"]),
@@ -668,6 +694,7 @@ def render_local_status_markdown(
             f"- Report sync runtime: `{metrics.get('report_sync_runtime_seconds', 0.0):.3f}s` ({metrics.get('report_sync_runtime_status') or 'n/a'})"
             + (f", generated `{metrics.get('report_sync_generated_at')}`" if metrics.get("report_sync_generated_at") else ""),
             f"- Quality value rows: low-price=`{metrics.get('quality_value_low_price_rows', 0)}`, research=`{metrics.get('quality_value_research_rows', 0)}`, fundamentals=`{metrics.get('quality_value_fundamental_rows', 0)}`",
+            f"- Quality value similar scout rows: `{metrics.get('quality_value_scout_rows', 0)}`",
             f"- Quality value runtime: `{metrics.get('quality_value_runtime_seconds', 0.0):.3f}s` ({metrics.get('quality_value_runtime_status') or 'n/a'})"
             + (f", generated `{metrics.get('quality_value_generated_at')}`" if metrics.get("quality_value_generated_at") else ""),
             f"- Verification runtime: `{metrics.get('verification_runtime_seconds', 0.0):.3f}s` ({metrics.get('verification_runtime_status') or 'n/a'})",
@@ -682,6 +709,8 @@ def render_local_status_markdown(
             f"- Quality value report: `{theme_outdir_str('quality_value_report.md')}`",
             f"- Quality value CSV: `{theme_outdir_str('quality_value_candidates.csv')}`",
             f"- Quality value fundamentals: `{theme_outdir_str('quality_value_fundamentals.csv')}`",
+            f"- Quality value entry plan: `{theme_outdir_str('quality_value_entry_plan.csv')}`",
+            f"- Quality value similar scout: `{theme_outdir_str('quality_value_similar_scout.csv')}`",
             f"- Verification report: `{verification_outdir_str('verification_report.md')}`",
             f"- Verification runtime: `{verification_outdir_str('runtime_metrics.md')}`",
             f"- Outcomes summary: `{verification_outdir_str('outcomes_summary.md')}`",
@@ -733,6 +762,8 @@ def write_local_status_dashboard(
             "quality_value_report": str(theme_outdir / "quality_value_report.md"),
             "quality_value_candidates": str(theme_outdir / "quality_value_candidates.csv"),
             "quality_value_fundamentals": str(theme_outdir / "quality_value_fundamentals.csv"),
+            "quality_value_entry_plan": str(theme_outdir / "quality_value_entry_plan.csv"),
+            "quality_value_similar_scout": str(theme_outdir / "quality_value_similar_scout.csv"),
             "verification_report": str(verification_outdir / "verification_report.md"),
             "verification_runtime": str(verification_outdir / "runtime_metrics.md"),
             "outcomes_summary": str(verification_outdir / "outcomes_summary.md"),
@@ -810,6 +841,8 @@ def main(argv: list[str] | None = None) -> int:
             steps.append({"name": "quality_value", "label": STEP_LABELS["quality_value"], "status": "failed", "detail": f"Exit code {quality_code}"})
             write_local_status_dashboard(args=args, steps=steps, overall_status=overall_status)
             return quality_code
+        if args.quality_value_notification:
+            send_quality_value_notification()
         steps.append({"name": "quality_value", "label": STEP_LABELS["quality_value"], "status": "completed", "detail": "Updated research report"})
 
     write_local_status_dashboard(args=args, steps=steps, overall_status=overall_status)
