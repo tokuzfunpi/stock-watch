@@ -13,6 +13,7 @@ from stock_watch.paths import VERIFICATION_OUTDIR
 from stock_watch.cli.weekly_review import build_data_quality_gate
 from stock_watch.cli.weekly_review import build_short_gate_tuning_draft
 from stock_watch.cli.weekly_review import filter_recent_signal_dates
+from stock_watch.cli import quality_value
 from stock_watch.cli import report_sync
 from stock_watch.workflows.daily_watchlist import run_daily_watchlist
 from stock_watch.workflows.portfolio import run_default_portfolio_check
@@ -47,6 +48,7 @@ STEP_LABELS = {
     "portfolio": "Portfolio",
     "verification": "Verification",
     "report_sync": "Report Sync",
+    "quality_value": "Quality Value",
 }
 
 
@@ -536,6 +538,7 @@ def collect_status_metrics(theme_outdir: Path = THEME_OUTDIR, verification_outdi
     watchlist_runtime = _load_runtime_metrics(theme_outdir / "runtime_metrics.json")
     portfolio_runtime = _load_runtime_metrics(theme_outdir / "portfolio_runtime_metrics.json")
     report_sync_runtime = _load_runtime_metrics(theme_outdir / "report_sync_metrics.json")
+    quality_value_runtime = _load_runtime_metrics(theme_outdir / "quality_value_metrics.json")
     verification_runtime = _load_runtime_metrics(verification_outdir / "runtime_metrics.json")
     spec_risk_metrics = _collect_spec_risk_metrics(daily_rank_csv)
     snapshots_df = _load_csv_safely(snapshots_csv)
@@ -599,6 +602,12 @@ def collect_status_metrics(theme_outdir: Path = THEME_OUTDIR, verification_outdi
         "report_sync_runtime_seconds": float(report_sync_runtime.get("wall_seconds", 0.0) or 0.0),
         "report_sync_runtime_status": str(report_sync_runtime.get("status", "") or ""),
         "report_sync_generated_at": str(report_sync_runtime.get("generated_at", "") or ""),
+        "quality_value_runtime_seconds": float(quality_value_runtime.get("wall_seconds", 0.0) or 0.0),
+        "quality_value_runtime_status": str(quality_value_runtime.get("status", "") or ""),
+        "quality_value_generated_at": str(quality_value_runtime.get("generated_at", "") or ""),
+        "quality_value_low_price_rows": int(quality_value_runtime.get("low_price_rows", 0) or 0),
+        "quality_value_research_rows": int(quality_value_runtime.get("quality_value_rows", 0) or 0),
+        "quality_value_fundamental_rows": int(quality_value_runtime.get("fundamental_rows", 0) or 0),
         "verification_runtime_seconds": float(verification_runtime.get("wall_seconds", 0.0) or 0.0),
         "verification_runtime_status": str(verification_runtime.get("status", "") or ""),
         "spec_risk_high_rows": int(spec_risk_metrics["spec_risk_high_rows"]),
@@ -658,6 +667,9 @@ def render_local_status_markdown(
             f"- Portfolio runtime: `{metrics.get('portfolio_runtime_seconds', 0.0):.3f}s` ({metrics.get('portfolio_runtime_status') or 'n/a'})",
             f"- Report sync runtime: `{metrics.get('report_sync_runtime_seconds', 0.0):.3f}s` ({metrics.get('report_sync_runtime_status') or 'n/a'})"
             + (f", generated `{metrics.get('report_sync_generated_at')}`" if metrics.get("report_sync_generated_at") else ""),
+            f"- Quality value rows: low-price=`{metrics.get('quality_value_low_price_rows', 0)}`, research=`{metrics.get('quality_value_research_rows', 0)}`, fundamentals=`{metrics.get('quality_value_fundamental_rows', 0)}`",
+            f"- Quality value runtime: `{metrics.get('quality_value_runtime_seconds', 0.0):.3f}s` ({metrics.get('quality_value_runtime_status') or 'n/a'})"
+            + (f", generated `{metrics.get('quality_value_generated_at')}`" if metrics.get("quality_value_generated_at") else ""),
             f"- Verification runtime: `{metrics.get('verification_runtime_seconds', 0.0):.3f}s` ({metrics.get('verification_runtime_status') or 'n/a'})",
             "",
             "## Key Outputs",
@@ -667,6 +679,9 @@ def render_local_status_markdown(
             f"- Portfolio report: `{theme_outdir_str('portfolio_report.md')}`",
             f"- Portfolio runtime: `{theme_outdir_str('portfolio_runtime_metrics.md')}`",
             f"- Report sync runtime: `{theme_outdir_str('report_sync_metrics.md')}`",
+            f"- Quality value report: `{theme_outdir_str('quality_value_report.md')}`",
+            f"- Quality value CSV: `{theme_outdir_str('quality_value_candidates.csv')}`",
+            f"- Quality value fundamentals: `{theme_outdir_str('quality_value_fundamentals.csv')}`",
             f"- Verification report: `{verification_outdir_str('verification_report.md')}`",
             f"- Verification runtime: `{verification_outdir_str('runtime_metrics.md')}`",
             f"- Outcomes summary: `{verification_outdir_str('outcomes_summary.md')}`",
@@ -715,6 +730,9 @@ def write_local_status_dashboard(
             "portfolio_report": str(theme_outdir / "portfolio_report.md"),
             "portfolio_runtime": str(theme_outdir / "portfolio_runtime_metrics.md"),
             "report_sync_runtime": str(theme_outdir / "report_sync_metrics.md"),
+            "quality_value_report": str(theme_outdir / "quality_value_report.md"),
+            "quality_value_candidates": str(theme_outdir / "quality_value_candidates.csv"),
+            "quality_value_fundamentals": str(theme_outdir / "quality_value_fundamentals.csv"),
             "verification_report": str(verification_outdir / "verification_report.md"),
             "verification_runtime": str(verification_outdir / "runtime_metrics.md"),
             "outcomes_summary": str(verification_outdir / "outcomes_summary.md"),
@@ -784,6 +802,15 @@ def main(argv: list[str] | None = None) -> int:
             steps.append({"name": "report_sync", "label": STEP_LABELS["report_sync"], "status": "completed", "detail": "Synced watchlist report"})
         else:
             steps.append({"name": "report_sync", "label": STEP_LABELS["report_sync"], "status": "skipped", "detail": "Watchlist report already synced"})
+
+    if should_run_step(args, "watchlist") or should_run_step(args, "portfolio"):
+        quality_code = quality_value.main([])
+        if quality_code:
+            overall_status = "failed"
+            steps.append({"name": "quality_value", "label": STEP_LABELS["quality_value"], "status": "failed", "detail": f"Exit code {quality_code}"})
+            write_local_status_dashboard(args=args, steps=steps, overall_status=overall_status)
+            return quality_code
+        steps.append({"name": "quality_value", "label": STEP_LABELS["quality_value"], "status": "completed", "detail": "Updated research report"})
 
     write_local_status_dashboard(args=args, steps=steps, overall_status=overall_status)
     return 0

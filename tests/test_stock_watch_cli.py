@@ -28,6 +28,13 @@ class StockWatchCliTests(unittest.TestCase):
         self.assertEqual(code, 0)
         mock_report_sync.assert_called_once_with([])
 
+    def test_quality_value_command_delegates_to_quality_value_module(self) -> None:
+        with patch("stock_watch.cli.main.quality_value.main", return_value=0) as mock_quality_value:
+            code = main(["quality-value"])
+
+        self.assertEqual(code, 0)
+        mock_quality_value.assert_called_once_with([])
+
     def test_verification_subcommand_delegates_to_verification_cli(self) -> None:
         with patch("stock_watch.cli.main.summarize_outcomes.main", return_value=0) as mock_summary:
             code = main(["verification", "summary", "--outcomes-csv", "sample.csv"])

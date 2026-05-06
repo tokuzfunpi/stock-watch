@@ -300,6 +300,14 @@ def build_session() -> requests.Session:
 HTTP = build_session()
 
 
+TELEGRAM_HTTP = requests.Session()
+TELEGRAM_SEND_ATTEMPTS = 3
+
+
+def sanitize_telegram_error(message: str) -> str:
+    return re.sub(r"/bot[^/\s]+", "/bot<redacted>", message)
+
+
 def _make_daily_price_provider(name: str):
     if name == "yahoo":
         return YahooFinancePriceProvider(yf_module=yf, logger=logger)
@@ -2513,12 +2521,28 @@ def send_telegram_message(message: str) -> None:
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
     for part in split_message(message, CONFIG.max_message_length):
         for chat_id in TELEGRAM_CHAT_IDS:
-            try:
-                resp = HTTP.post(url, json={"chat_id": chat_id, "text": part}, timeout=HTTP_TIMEOUT)
-                if not resp.ok:
-                    logger.error("Telegram send failed. chat_id=%s status=%s body=%s", chat_id, resp.status_code, resp.text[:500])
-            except Exception as exc:
-                    logger.exception("Telegram send exception for chat_id=%s: %s", chat_id, exc)
+            for attempt in range(1, TELEGRAM_SEND_ATTEMPTS + 1):
+                try:
+                    resp = TELEGRAM_HTTP.post(url, json={"chat_id": chat_id, "text": part}, timeout=HTTP_TIMEOUT)
+                    if resp.ok:
+                        break
+                    logger.error(
+                        "Telegram send failed. chat_id=%s status=%s body=%s",
+                        chat_id,
+                        resp.status_code,
+                        resp.text[:500],
+                    )
+                    break
+                except Exception as exc:
+                    logger.error(
+                        "Telegram send exception. chat_id=%s attempt=%s/%s error=%s",
+                        chat_id,
+                        attempt,
+                        TELEGRAM_SEND_ATTEMPTS,
+                        sanitize_telegram_error(str(exc)),
+                    )
+                    if attempt < TELEGRAM_SEND_ATTEMPTS:
+                        time.sleep(min(2 ** (attempt - 1), 4))
 
 
 def parse_cli_args(argv: list[str] | None = None) -> argparse.Namespace:

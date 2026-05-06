@@ -60,6 +60,7 @@ from daily_theme_watchlist import (
     select_midlong_candidates,
     select_short_term_candidates,
     select_push_candidates,
+    sanitize_telegram_error,
     split_message,
     CONFIG,
     _DAILY_OHLCV_CACHE,
@@ -1081,6 +1082,14 @@ class TelegramChatIdTests(unittest.TestCase):
             chat_ids_path.write_text("123456789\n-1001111111111\n", encoding="utf-8")
             with patch.dict("os.environ", {"TELEGRAM_CHAT_IDS": ""}, clear=False):
                 self.assertEqual(load_telegram_chat_ids(chat_ids_path), [123456789, -1001111111111])
+
+    def test_sanitize_telegram_error_redacts_bot_token(self) -> None:
+        error = "Max retries exceeded with url: /bot123:secret/sendMessage"
+
+        self.assertEqual(
+            sanitize_telegram_error(error),
+            "Max retries exceeded with url: /bot<redacted>/sendMessage",
+        )
 
 
 class ChatIdMapUpdateTests(unittest.TestCase):
@@ -2116,7 +2125,11 @@ class PushMessageTests(unittest.TestCase):
                 return df_hist
             raise AssertionError(f"unexpected ticker {ticker}")
 
-        with patch("daily_theme_watchlist.yf.download", side_effect=fake_download):
+        with patch("daily_theme_watchlist.yf.download", side_effect=fake_download), patch(
+            "daily_theme_watchlist.ENABLE_HISTORY_CACHE", False
+        ), patch("daily_theme_watchlist.ENABLE_DISK_HISTORY_CACHE", False), patch.dict(
+            "daily_theme_watchlist._DAILY_OHLCV_CACHE", {}, clear=True
+        ):
             out = yf_download_one("3491.TW", "3y")
 
         self.assertEqual(len(out), 260)

@@ -1,34 +1,34 @@
 # Runtime Metrics
-- Generated: 2026-05-05 09:30:53
+- Generated: 2026-05-06 14:13:20
 - Status: `ok`
 
 ## Steps
 
 | Step | Seconds |
 | --- | --- |
-| market_regime | 0.2272 |
-| us_market | 0.5455 |
-| cache_warmup | 12.3418 |
-| watchlist | 0.2336 |
-| backtest | 17.8763 |
-| candidate_sets | 0.1604 |
-| reports | 0.4222 |
-| shadow_observation | 0.0146 |
-| alert_tracking | 0.0654 |
+| market_regime | 0.0000 |
+| us_market | 0.0000 |
+| cache_warmup | 0.0001 |
+| watchlist | 0.0000 |
+| backtest | 0.0000 |
+| candidate_sets | 0.0445 |
+| reports | 0.0001 |
+| shadow_observation | 0.0038 |
+| alert_tracking | 0.0001 |
 | should_alert | 0.0000 |
-| notifications | 7.7682 |
-| persist_state | 0.0002 |
-| persist_success | 0.0002 |
+| notifications | 0.1314 |
+| persist_state | 0.0001 |
+| persist_success | 0.0001 |
 
-- Total tracked seconds: `39.656`
-- Wall-clock seconds: `39.676`
+- Total tracked seconds: `0.180`
+- Wall-clock seconds: `0.182`
 
 ## Cache
 
-- History cache: `0` exact hit / `0` disk hit / `43` superset hit / `57` miss
-- Indicator cache: `52` exact hit / `52` superset hit / `57` miss
+- History cache: `0` exact hit / `0` disk hit / `0` superset hit / `0` miss
+- Indicator cache: `0` exact hit / `0` superset hit / `0` miss
 
 ## Backtest
 
-- Mode: `full_rebuild`
-- Scanned cutoffs: `48225`
+- Mode: `incremental_noop`
+- Scanned cutoffs: `0`

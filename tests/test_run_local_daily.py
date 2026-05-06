@@ -20,6 +20,11 @@ from stock_watch.cli.local_daily import write_local_status_dashboard
 
 
 class RunLocalDailyTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self._quality_value_patch = patch("stock_watch.cli.local_daily.quality_value.main", return_value=0)
+        self._quality_value_patch.start()
+        self.addCleanup(self._quality_value_patch.stop)
+
     def test_parse_args_defaults_to_full_mode(self) -> None:
         args = parse_args([])
         self.assertEqual(args.mode, "full")
@@ -458,6 +463,8 @@ class RunLocalDailyTests(unittest.TestCase):
         with patch("stock_watch.cli.local_daily.run_portfolio_step", side_effect=_portfolio), patch(
             "stock_watch.cli.local_daily.report_sync.main", return_value=0
         ) as mock_report_sync, patch(
+            "stock_watch.cli.local_daily.quality_value.main", return_value=0
+        ), patch(
             "stock_watch.cli.local_daily._watchlist_artifact_freshness",
             return_value={"status": "stale_report", "detail": "rank newer than report"},
         ), patch("stock_watch.cli.local_daily.write_local_status_dashboard") as mock_status:
@@ -467,7 +474,9 @@ class RunLocalDailyTests(unittest.TestCase):
         self.assertEqual(calls, ["portfolio"])
         mock_report_sync.assert_called_once_with([])
         steps = mock_status.call_args.kwargs["steps"]
-        self.assertEqual(steps[-1]["name"], "report_sync")
+        self.assertEqual(steps[-2]["name"], "report_sync")
+        self.assertEqual(steps[-2]["status"], "completed")
+        self.assertEqual(steps[-1]["name"], "quality_value")
         self.assertEqual(steps[-1]["status"], "completed")
 
     def test_main_portfolio_mode_can_disable_auto_sync(self) -> None:
@@ -521,7 +530,9 @@ class RunLocalDailyTests(unittest.TestCase):
         ), patch("stock_watch.cli.local_daily.run_daily_verification.main", side_effect=_runner("verification")), patch(
             "stock_watch.cli.local_daily._watchlist_artifact_freshness",
             return_value={"status": "stale_report", "detail": "rank newer than report"},
-        ), patch("stock_watch.cli.local_daily.report_sync.main", return_value=0) as mock_report_sync, patch(
+        ), patch("stock_watch.cli.local_daily.quality_value.main", return_value=0), patch(
+            "stock_watch.cli.local_daily.report_sync.main", return_value=0
+        ) as mock_report_sync, patch(
             "stock_watch.cli.local_daily.write_local_status_dashboard"
         ) as mock_status:
             code = main(["--mode", "postclose"])
@@ -530,7 +541,9 @@ class RunLocalDailyTests(unittest.TestCase):
         self.assertEqual(calls, ["watchlist", "portfolio", "verification"])
         mock_report_sync.assert_called_once_with([])
         steps = mock_status.call_args.kwargs["steps"]
-        self.assertEqual(steps[-1]["name"], "report_sync")
+        self.assertEqual(steps[-2]["name"], "report_sync")
+        self.assertEqual(steps[-2]["status"], "completed")
+        self.assertEqual(steps[-1]["name"], "quality_value")
         self.assertEqual(steps[-1]["status"], "completed")
 
     def test_main_preopen_then_postclose_smoke_keeps_outputs_in_sync(self) -> None:
@@ -604,6 +617,8 @@ class RunLocalDailyTests(unittest.TestCase):
             with patch("stock_watch.cli.local_daily.run_daily_watchlist", side_effect=_watchlist), patch(
                 "stock_watch.cli.local_daily.run_portfolio_step", side_effect=_portfolio
             ), patch("stock_watch.cli.local_daily.run_daily_verification.main", side_effect=_verification), patch(
+                "stock_watch.cli.local_daily.quality_value.main", return_value=0
+            ), patch(
                 "stock_watch.cli.local_daily.write_local_status_dashboard", side_effect=_status_proxy
             ):
                 preopen_code = main(["--mode", "preopen"])
@@ -619,8 +634,10 @@ class RunLocalDailyTests(unittest.TestCase):
         self.assertEqual(payload["overall_status"], "ok")
         self.assertEqual(payload["metrics"]["watchlist_artifact_freshness_status"], "current")
         self.assertEqual([step["status"] for step in payload["steps"][:3]], ["completed", "completed", "completed"])
-        self.assertEqual(payload["steps"][-1]["name"], "report_sync")
-        self.assertEqual(payload["steps"][-1]["status"], "skipped")
+        self.assertEqual(payload["steps"][-2]["name"], "report_sync")
+        self.assertEqual(payload["steps"][-2]["status"], "skipped")
+        self.assertEqual(payload["steps"][-1]["name"], "quality_value")
+        self.assertEqual(payload["steps"][-1]["status"], "completed")
         self.assertEqual(payload["metrics"]["verification_gate_status"], "ok")
 
     def test_main_runs_portfolio_only_mode(self) -> None:

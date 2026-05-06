@@ -12,6 +12,7 @@ def layer_label(layer: str) -> str:
         "short_attack": "短線主攻",
         "midlong_core": "中長線核心",
         "defensive_watch": "防守觀察",
+        "quality_value": "冷門高品質",
     }
     return labels.get(layer, layer)
 
