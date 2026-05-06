@@ -1,3 +1,1 @@
 ﻿rank,ticker,name,group,layer,grade,setup_score,risk_score,ret5_pct,ret20_pct,volume_ratio20,signals,spec_risk_label,scenario_label,market_heat,spec_risk_bucket,action_label,shadow_target,shadow_guardrail_scope,shadow_eligible,shadow_status,shadow_reason
-2,5386.TWO,青雲,theme,short_attack,B,12,4,13.62,49.64,0.31,TREND,投機偏高,高檔震盪盤,hot,watch,開高不追,開高不追,1D short only,False,observe_only,spec_risk 非 normal
-7,2374.TW,佳能,theme,short_attack,B,11,1,15.23,22.86,0.67,NONE,投機偏高,高檔震盪盤,hot,watch,開高不追,開高不追,1D short only,False,observe_only,spec_risk 非 normal
