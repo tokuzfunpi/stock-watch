@@ -14,6 +14,7 @@ from stock_watch.cli.local_daily import build_action_summary_notification
 from stock_watch.cli.local_daily import build_shadow_open_not_chase_tracking_df
 from stock_watch.cli.local_daily import collect_status_metrics
 from stock_watch.cli.local_daily import configure_local_telegram_chat_ids
+from stock_watch.cli.local_daily import default_local_telegram_chat_ids
 from stock_watch.cli.local_daily import main
 from stock_watch.cli.local_daily import parse_local_telegram_chat_ids
 from stock_watch.cli.local_daily import parse_args
@@ -38,9 +39,20 @@ class RunLocalDailyTests(unittest.TestCase):
         self.addCleanup(self._quality_value_notification_patch.stop)
 
     def test_parse_args_defaults_to_full_mode(self) -> None:
-        args = parse_args([])
+        with patch.dict("os.environ", {"STOCK_WATCH_LOCAL_TELEGRAM_CHAT_IDS": "", "TELEGRAM_CHAT_IDS": ""}, clear=False):
+            args = parse_args([])
         self.assertEqual(args.mode, "full")
-        self.assertEqual(args.local_telegram_chat_ids, "7758949915")
+        self.assertEqual(args.local_telegram_chat_ids, "")
+
+    def test_default_local_telegram_chat_ids_falls_back_to_telegram_secret(self) -> None:
+        with patch.dict("os.environ", {"TELEGRAM_CHAT_IDS": "8496266754,8723698446"}, clear=False):
+            os.environ.pop("STOCK_WATCH_LOCAL_TELEGRAM_CHAT_IDS", None)
+
+            self.assertEqual(default_local_telegram_chat_ids(), "8496266754,8723698446")
+
+    def test_default_local_telegram_chat_ids_uses_safe_single_chat_when_unset(self) -> None:
+        with patch.dict("os.environ", {}, clear=True):
+            self.assertEqual(default_local_telegram_chat_ids(), "7758949915")
 
     def test_parse_local_telegram_chat_ids_supports_commas_and_newlines(self) -> None:
         self.assertEqual(parse_local_telegram_chat_ids("7758949915,123\n-1001"), [7758949915, 123, -1001])

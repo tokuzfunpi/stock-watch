@@ -46,6 +46,7 @@ jobs:
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_IDS: ${{ secrets.TELEGRAM_CHAT_IDS }}
+          STOCK_WATCH_LOCAL_TELEGRAM_CHAT_IDS: ${{ secrets.TELEGRAM_CHAT_IDS }}
           LOG_LEVEL: INFO
           CONFIG_PATH: config.json
           WATCHLIST_CSV: watchlist.csv

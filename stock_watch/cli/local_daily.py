@@ -95,9 +95,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--local-telegram-chat-ids",
-        default=os.getenv("STOCK_WATCH_LOCAL_TELEGRAM_CHAT_IDS", DEFAULT_LOCAL_TELEGRAM_CHAT_IDS),
+        default=default_local_telegram_chat_ids(),
         help=(
-            "Restrict Telegram recipients for this local workflow. Defaults to 7758949915; "
+            "Restrict Telegram recipients for this local workflow. Defaults to "
+            "STOCK_WATCH_LOCAL_TELEGRAM_CHAT_IDS, then TELEGRAM_CHAT_IDS, then 7758949915; "
             "use commas/newlines for multiple ids or an empty string to disable local sends."
         ),
     )
@@ -118,6 +119,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--all-dates", action="store_true")
     parser.add_argument("--no-snapshot", action="store_true")
     return parser.parse_args(argv)
+
+
+def default_local_telegram_chat_ids() -> str:
+    local_value = os.getenv("STOCK_WATCH_LOCAL_TELEGRAM_CHAT_IDS")
+    if local_value is not None:
+        return local_value.strip()
+    telegram_value = os.getenv("TELEGRAM_CHAT_IDS")
+    if telegram_value is not None and telegram_value.strip():
+        return telegram_value.strip()
+    return DEFAULT_LOCAL_TELEGRAM_CHAT_IDS
 
 
 def parse_local_telegram_chat_ids(raw: str | None) -> list[int]:

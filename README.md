@@ -144,7 +144,7 @@ Weekly / maintenance：
 - 優先讀 `TELEGRAM_CHAT_IDS`。
 - 如果 env 沒設，會改讀本機 `chat_ids`。
 - `chat_ids` 可一行一個 id，或用逗號分隔。
-- `python -m stock_watch daily` 這種本機測試流程會預設只送到 `7758949915`，避免測試通知廣播；可用 `STOCK_WATCH_LOCAL_TELEGRAM_CHAT_IDS` 或 `--local-telegram-chat-ids` 覆寫。
+- `python -m stock_watch daily` 會先用 `STOCK_WATCH_LOCAL_TELEGRAM_CHAT_IDS`，再 fallback 到 `TELEGRAM_CHAT_IDS`，最後才預設只送到 `7758949915`；可用 `--local-telegram-chat-ids` 覆寫。
 
 如果要保留 `chat_id` 和使用者對照表：
 
