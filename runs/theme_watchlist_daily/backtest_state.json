@@ -96,6 +96,6 @@
     "5299.TWO": "2026-04-08",
     "3515.TW": "2026-04-08"
   },
-  "last_run_mode": "full_rebuild",
-  "last_run_scanned_cutoffs": 81232
+  "last_run_mode": "incremental_noop",
+  "last_run_scanned_cutoffs": 0
 }

@@ -1,32 +1,32 @@
 {
-  "generated_at": "2026-05-07 14:35:18",
+  "generated_at": "2026-05-07 15:27:49",
   "status": "ok",
   "step_timings": {
-    "market_regime": 0.005073667009128258,
-    "us_market": 0.015330291993450373,
-    "cache_warmup": 1.3639820000098553,
-    "watchlist": 0.1780322080012411,
-    "backtest": 12.715779666992603,
-    "candidate_sets": 0.0651955840003211,
-    "reports": 0.171921208006097,
-    "shadow_observation": 0.00404308398719877,
-    "alert_tracking": 0.02787441699183546,
-    "should_alert": 9.160139597952366e-07,
-    "notifications": 13.177016499976162,
-    "persist_state": 0.0007882500067353249,
-    "persist_success": 0.001305915997363627
+    "market_regime": 3.749999450519681e-06,
+    "us_market": 3.2079988159239292e-06,
+    "cache_warmup": 5.6249991757795215e-05,
+    "watchlist": 4.3330073822289705e-06,
+    "backtest": 3.208988346159458e-06,
+    "candidate_sets": 0.053675167000619695,
+    "reports": 0.0001280000142287463,
+    "shadow_observation": 0.0032912089955061674,
+    "alert_tracking": 0.00010420900071039796,
+    "should_alert": 3.8330035749822855e-06,
+    "notifications": 0.13260291700134985,
+    "persist_state": 0.000104957987787202,
+    "persist_success": 6.00829953327775e-05
   },
   "warnings": [],
-  "total_seconds": 27.726,
-  "wall_seconds": 27.738,
+  "total_seconds": 0.19,
+  "wall_seconds": 0.192,
   "cache_stats": {
     "history_hit": 0,
-    "history_disk_hit": 92,
-    "history_superset_hit": 44,
-    "history_miss": 1,
-    "indicator_hit": 88,
-    "indicator_superset_hit": 88,
-    "indicator_miss": 93
+    "history_disk_hit": 0,
+    "history_superset_hit": 0,
+    "history_miss": 0,
+    "indicator_hit": 0,
+    "indicator_superset_hit": 0,
+    "indicator_miss": 0
   },
   "backtest_meta": {
     "signature": "09e1f25cd2edde18",
@@ -126,7 +126,7 @@
       "5299.TWO": "2026-04-08",
       "3515.TW": "2026-04-08"
     },
-    "last_run_mode": "full_rebuild",
-    "last_run_scanned_cutoffs": 81232
+    "last_run_mode": "incremental_noop",
+    "last_run_scanned_cutoffs": 0
   }
 }

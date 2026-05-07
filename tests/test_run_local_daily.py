@@ -10,6 +10,7 @@ from unittest.mock import patch
 import pandas as pd
 
 from stock_watch.cli.local_daily import build_verification_argv
+from stock_watch.cli.local_daily import build_action_summary_notification
 from stock_watch.cli.local_daily import build_shadow_open_not_chase_tracking_df
 from stock_watch.cli.local_daily import collect_status_metrics
 from stock_watch.cli.local_daily import configure_local_telegram_chat_ids
@@ -17,6 +18,7 @@ from stock_watch.cli.local_daily import main
 from stock_watch.cli.local_daily import parse_local_telegram_chat_ids
 from stock_watch.cli.local_daily import parse_args
 from stock_watch.cli.local_daily import should_run_step
+from stock_watch.cli.local_daily import update_quality_value_tracking
 from stock_watch.cli.local_daily import write_shadow_open_not_chase_tracking_outputs
 from stock_watch.cli.local_daily import write_local_status_dashboard
 
@@ -26,6 +28,9 @@ class RunLocalDailyTests(unittest.TestCase):
         self._quality_value_patch = patch("stock_watch.cli.local_daily.quality_value.main", return_value=0)
         self._quality_value_patch.start()
         self.addCleanup(self._quality_value_patch.stop)
+        self._quality_value_tracking_patch = patch("stock_watch.cli.local_daily.update_quality_value_tracking")
+        self._quality_value_tracking_patch.start()
+        self.addCleanup(self._quality_value_tracking_patch.stop)
         self._quality_value_notification_patch = patch("stock_watch.cli.local_daily.send_quality_value_notification")
         self._quality_value_notification_patch.start()
         self.addCleanup(self._quality_value_notification_patch.stop)
@@ -46,6 +51,21 @@ class RunLocalDailyTests(unittest.TestCase):
 
         self.assertEqual(chat_ids, [7758949915])
         self.assertEqual(FakeDailyModule.TELEGRAM_CHAT_IDS, [7758949915])
+
+    def test_build_action_summary_notification_renders_five_lines(self) -> None:
+        message = build_action_summary_notification(
+            {
+                "action_trial_tickers": ["6161.TWO 捷波"],
+                "action_pullback_tickers": ["3515.TW 華擎"],
+                "action_wait_strength_tickers": ["3005.TW 神基"],
+                "action_cooldown_tickers": ["2376.TW 技嘉"],
+                "portfolio_trim_tickers": ["英業達 (2356)"],
+            }
+        )
+
+        self.assertEqual(len(message.splitlines()), 5)
+        self.assertIn("🟢 可試單：6161.TWO 捷波", message)
+        self.assertIn("💼 持股落袋：英業達 (2356)", message)
 
     def test_should_run_step_uses_mode_defaults_and_skip_overrides(self) -> None:
         preopen_args = parse_args(["--mode", "preopen"])
@@ -166,6 +186,101 @@ class RunLocalDailyTests(unittest.TestCase):
         self.assertEqual(metrics["action_wait_strength_tickers"], ["3005.TW 神基"])
         self.assertEqual(metrics["action_cooldown_tickers"], ["6525.TW 捷敏-KY"])
         self.assertEqual(metrics["portfolio_trim_tickers"], ["英業達 (2356)"])
+
+    def test_update_quality_value_tracking_writes_lifecycle_and_review_outputs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            theme_outdir = Path(tmpdir) / "theme_watchlist_daily"
+            theme_outdir.mkdir(parents=True, exist_ok=True)
+            daily_rank_csv = theme_outdir / "daily_rank.csv"
+            entry_plan_csv = theme_outdir / "quality_value_entry_plan.csv"
+            draft_csv = theme_outdir / "quality_value_watchlist_draft.csv"
+            tracking_csv = theme_outdir / "quality_value_tracking.csv"
+            pruning_md = theme_outdir / "quality_value_pruning_report.md"
+            review_csv = theme_outdir / "quality_value_candidate_review.csv"
+            review_md = theme_outdir / "quality_value_candidate_review.md"
+
+            pd.DataFrame(
+                [
+                    {
+                        "date": "2026-05-07",
+                        "ticker": "6161.TWO",
+                        "name": "捷波",
+                        "layer": "quality_value",
+                        "rank": 1,
+                        "close": 44.0,
+                        "ret5_pct": 6.5,
+                        "ret20_pct": 9.0,
+                        "volume_ratio20": 1.7,
+                        "setup_score": 12,
+                        "risk_score": 0,
+                        "spec_risk_label": "正常",
+                    },
+                    {
+                        "date": "2026-05-07",
+                        "ticker": "6525.TW",
+                        "name": "捷敏-KY",
+                        "layer": "quality_value",
+                        "rank": 2,
+                        "close": 109.5,
+                        "ret5_pct": 20.0,
+                        "ret20_pct": 31.0,
+                        "volume_ratio20": 3.8,
+                        "setup_score": 12,
+                        "risk_score": 9,
+                        "spec_risk_label": "疑似炒作風險高",
+                    },
+                    {
+                        "date": "2026-05-07",
+                        "ticker": "5288.TWO",
+                        "name": "豐祥-KY",
+                        "layer": "quality_value",
+                        "rank": 3,
+                        "close": 120.0,
+                        "ret5_pct": -1.0,
+                        "ret20_pct": 0.5,
+                        "volume_ratio20": 0.8,
+                        "setup_score": 4,
+                        "risk_score": 1,
+                        "spec_risk_label": "正常",
+                    },
+                ]
+            ).to_csv(daily_rank_csv, index=False)
+            pd.DataFrame(
+                [
+                    {"ticker": "6161.TWO", "entry_bias": "分批試單", "decision_priority": 34, "buy_zone_low": 42.9, "buy_zone_high": 44.0, "stop_loss": 40.8},
+                    {"ticker": "6525.TW", "entry_bias": "等待降溫", "decision_priority": -6, "buy_zone_low": 90.0, "buy_zone_high": 95.0, "stop_loss": 85.0},
+                    {"ticker": "5288.TWO", "entry_bias": "暫不急", "decision_priority": 1, "buy_zone_low": 110.0, "buy_zone_high": 115.0, "stop_loss": 105.0},
+                ]
+            ).to_csv(entry_plan_csv, index=False)
+            pd.DataFrame(
+                [
+                    {"ticker": "3213.TWO", "name": "茂訊", "radar_priority": "A加入觀察", "similar_score": 19.54},
+                    {"ticker": "2414.TW", "name": "精技", "radar_priority": "B研究追蹤", "similar_score": 15.10},
+                ]
+            ).to_csv(draft_csv, index=False)
+            pd.DataFrame([{"ticker": "5288.TWO", "first_seen_date": "2026-05-01"}]).to_csv(tracking_csv, index=False)
+
+            tracking = update_quality_value_tracking(
+                daily_rank_csv=daily_rank_csv,
+                entry_plan_csv=entry_plan_csv,
+                draft_csv=draft_csv,
+                tracking_csv=tracking_csv,
+                pruning_md=pruning_md,
+                candidate_review_csv=review_csv,
+                candidate_review_md=review_md,
+            )
+            review = pd.read_csv(review_csv)
+            pruning_exists = pruning_md.exists()
+            review_md_exists = review_md.exists()
+
+            action_by_ticker = dict(zip(tracking["ticker"], tracking["lifecycle_action"]))
+
+        self.assertEqual(action_by_ticker["6161.TWO"], "promote")
+        self.assertEqual(action_by_ticker["6525.TW"], "cooldown")
+        self.assertEqual(action_by_ticker["5288.TWO"], "drop_review")
+        self.assertTrue(pruning_exists)
+        self.assertTrue(review_md_exists)
+        self.assertIn("needs_decision_add_watchlist", review["review_action"].tolist())
 
     def test_collect_status_metrics_reads_midlong_threshold_gate(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -318,6 +433,8 @@ class RunLocalDailyTests(unittest.TestCase):
         self.assertIn("Spec risk high rows", markdown)
         self.assertIn("Watchlist artifact freshness", markdown)
         self.assertIn("3057.TW", markdown)
+        self.assertIn("Quality value lifecycle rows", markdown)
+        self.assertIn("Quality value candidate review", markdown)
         self.assertEqual(payload["mode"], "preopen")
         self.assertEqual(payload["overall_status"], "ok")
         self.assertEqual(payload["steps"][0]["status"], "completed")
@@ -325,6 +442,8 @@ class RunLocalDailyTests(unittest.TestCase):
         self.assertIn("portfolio_runtime", payload["outputs"])
         self.assertIn("verification_runtime", payload["outputs"])
         self.assertIn("shadow_tracking", payload["outputs"])
+        self.assertIn("quality_value_tracking", payload["outputs"])
+        self.assertIn("quality_value_candidate_review", payload["outputs"])
         self.assertEqual(payload["metrics"]["spec_risk_high_rows"], 1)
         self.assertEqual(payload["metrics"]["watchlist_artifact_freshness_status"], "current")
         self.assertEqual(payload["metrics"]["verification_gate_status"], "ok")

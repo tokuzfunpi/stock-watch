@@ -31,8 +31,14 @@ PORTFOLIO_RUNTIME_METRICS_MD = THEME_OUTDIR / "portfolio_runtime_metrics.md"
 REPORT_SYNC_METRICS_JSON = THEME_OUTDIR / "report_sync_metrics.json"
 SHADOW_OPEN_NOT_CHASE_TRACKING_MD = THEME_OUTDIR / "shadow_open_not_chase_tracking.md"
 SHADOW_OPEN_NOT_CHASE_TRACKING_CSV = THEME_OUTDIR / "shadow_open_not_chase_tracking.csv"
+DAILY_RANK_CSV = THEME_OUTDIR / "daily_rank.csv"
 QUALITY_VALUE_ENTRY_PLAN_CSV = THEME_OUTDIR / "quality_value_entry_plan.csv"
 QUALITY_VALUE_SIMILAR_SCOUT_CSV = THEME_OUTDIR / "quality_value_similar_scout.csv"
+QUALITY_VALUE_WATCHLIST_DRAFT_CSV = THEME_OUTDIR / "quality_value_watchlist_draft.csv"
+QUALITY_VALUE_TRACKING_CSV = THEME_OUTDIR / "quality_value_tracking.csv"
+QUALITY_VALUE_PRUNING_MD = THEME_OUTDIR / "quality_value_pruning_report.md"
+QUALITY_VALUE_CANDIDATE_REVIEW_CSV = THEME_OUTDIR / "quality_value_candidate_review.csv"
+QUALITY_VALUE_CANDIDATE_REVIEW_MD = THEME_OUTDIR / "quality_value_candidate_review.md"
 DEFAULT_LOCAL_TELEGRAM_CHAT_IDS = "7758949915"
 
 MODE_STEPS: dict[str, tuple[str, ...]] = {
@@ -183,24 +189,41 @@ def run_portfolio_step() -> int:
 
 def send_quality_value_notification(
     entry_plan_csv: Path = QUALITY_VALUE_ENTRY_PLAN_CSV,
-    scout_csv: Path = QUALITY_VALUE_SIMILAR_SCOUT_CSV,
+    portfolio_report_md: Path = THEME_OUTDIR / "portfolio_report.md",
 ) -> None:
-    if not entry_plan_csv.exists() and not scout_csv.exists():
+    if not entry_plan_csv.exists() and not portfolio_report_md.exists():
         return
-    try:
-        entry_plan = pd.read_csv(entry_plan_csv) if entry_plan_csv.exists() else pd.DataFrame()
-    except Exception:
-        entry_plan = pd.DataFrame()
-    scout = _load_csv_safely(scout_csv)
-    if entry_plan.empty and scout.empty:
+    metrics = {
+        **_collect_quality_value_action_summary(entry_plan_csv),
+        **_collect_portfolio_action_summary(portfolio_report_md),
+    }
+    if not any(metrics.values()):
         return
     try:
         import daily_theme_watchlist
 
-        message = quality_value.build_quality_value_notification(entry_plan, scout)
+        message = build_action_summary_notification(metrics)
         daily_theme_watchlist.send_telegram_message(message)
     except Exception:
         return
+
+
+def build_action_summary_notification(metrics: dict[str, object]) -> str:
+    def _line(label: str, key: str) -> str:
+        values = metrics.get(key, [])
+        if not isinstance(values, list):
+            values = []
+        return f"{label}{', '.join(str(value) for value in values[:5]) or 'n/a'}"
+
+    return "\n".join(
+        [
+            _line("🟢 可試單：", "action_trial_tickers"),
+            _line("🟡 等拉回：", "action_pullback_tickers"),
+            _line("🔵 等轉強：", "action_wait_strength_tickers"),
+            _line("🔴 過熱先等：", "action_cooldown_tickers"),
+            _line("💼 持股落袋：", "portfolio_trim_tickers"),
+        ]
+    )
 
 
 def _count_csv_rows(path: Path) -> int:
@@ -648,6 +671,269 @@ def _collect_portfolio_action_summary(portfolio_report_md: Path) -> dict[str, li
     return {"portfolio_trim_tickers": trim_tickers[:5]}
 
 
+def _quality_value_current_date(daily_rank: pd.DataFrame) -> str:
+    if daily_rank.empty or "date" not in daily_rank.columns:
+        return datetime.now().strftime("%Y-%m-%d")
+    dates = daily_rank["date"].dropna().astype(str).str.strip()
+    dates = dates[dates != ""]
+    if dates.empty:
+        return datetime.now().strftime("%Y-%m-%d")
+    return str(sorted(dates.tolist())[-1])
+
+
+def _days_watched(first_seen_date: object, current_date: str) -> int:
+    try:
+        first = pd.to_datetime(str(first_seen_date)).date()
+        current = pd.to_datetime(str(current_date)).date()
+    except Exception:
+        return 1
+    return max(int((current - first).days) + 1, 1)
+
+
+def _quality_value_lifecycle_action(row: pd.Series) -> tuple[str, str]:
+    entry_bias = str(row.get("entry_bias", "") or "").strip()
+    spec_risk_label = str(row.get("spec_risk_label", "") or "").strip()
+    risk_score = float(pd.to_numeric(pd.Series([row.get("risk_score")]), errors="coerce").fillna(0).iloc[0])
+    setup_score = float(pd.to_numeric(pd.Series([row.get("setup_score")]), errors="coerce").fillna(0).iloc[0])
+    ret5_pct = float(pd.to_numeric(pd.Series([row.get("ret5_pct")]), errors="coerce").fillna(0).iloc[0])
+    days_watched = int(pd.to_numeric(pd.Series([row.get("days_watched")]), errors="coerce").fillna(1).iloc[0])
+
+    if entry_bias == "等待降溫" or spec_risk_label == "疑似炒作風險高" or risk_score >= 6:
+        return "cooldown", "風險分數或投機標籤過高，先降溫觀察"
+    if entry_bias in {"分批試單", "研究試單"}:
+        return "promote", "技術與品質條件同時達標，可進入試單研究"
+    if days_watched >= 5 and (entry_bias == "暫不急" or (setup_score <= 5 and ret5_pct <= 0)):
+        return "drop_review", "追蹤滿 5 天但動能不足，列入移除審核"
+    return "hold", "條件尚未完整，維持觀察"
+
+
+def _render_quality_value_pruning_report(tracking: pd.DataFrame, *, generated_at: str) -> str:
+    lines = [
+        "# Quality Value Pruning Report",
+        f"- Generated: {generated_at}",
+        "- Scope: quality-value lifecycle actions for promote / cooldown / drop-review decisions",
+        "",
+    ]
+    sections = [
+        ("Drop Review", "drop_review"),
+        ("Cooldown", "cooldown"),
+        ("Promote/Trial", "promote"),
+    ]
+    for title, action in sections:
+        rows = tracking[tracking["lifecycle_action"] == action].copy() if not tracking.empty else pd.DataFrame()
+        lines.extend([f"## {title}", ""])
+        if rows.empty:
+            lines.extend(["- None", ""])
+            continue
+        rows = rows.sort_values(by=["decision_priority", "rank"], ascending=[False, True]).head(15)
+        lines.extend(
+            [
+                "| Ticker | Name | Days | Entry Bias | Rank | Setup | Risk | Reason |",
+                "| --- | --- | --- | --- | --- | --- | --- | --- |",
+            ]
+        )
+        for _, row in rows.iterrows():
+            lines.append(
+                f"| {row.get('ticker', '')} | {row.get('name', '')} | {row.get('days_watched', '')} | "
+                f"{row.get('entry_bias', '')} | {row.get('rank', '')} | {row.get('setup_score', '')} | "
+                f"{row.get('risk_score', '')} | {row.get('lifecycle_reason', '')} |"
+            )
+        lines.append("")
+    return "\n".join(lines)
+
+
+def write_quality_value_candidate_review(
+    *,
+    draft_csv: Path = QUALITY_VALUE_WATCHLIST_DRAFT_CSV,
+    review_csv: Path = QUALITY_VALUE_CANDIDATE_REVIEW_CSV,
+    review_md: Path = QUALITY_VALUE_CANDIDATE_REVIEW_MD,
+) -> pd.DataFrame:
+    draft = _load_csv_safely(draft_csv)
+    columns = ["ticker", "name", "radar_priority", "similar_score", "review_action", "review_reason", "watchlist_row"]
+    if draft.empty:
+        review = pd.DataFrame(columns=columns)
+    else:
+        review = draft.copy()
+        priority = review.get("radar_priority", pd.Series(index=review.index, dtype=object)).fillna("").astype(str)
+        review["review_action"] = "wait"
+        review.loc[priority == "A加入觀察", "review_action"] = "needs_decision_add_watchlist"
+        review.loc[priority == "B研究追蹤", "review_action"] = "hold_for_technical_confirmation"
+        review["review_reason"] = "等待更多相似標的或技術確認"
+        review.loc[priority == "A加入觀察", "review_reason"] = "A 級品質價值候選；待你決策是否加入 watchlist"
+        review.loc[priority == "B研究追蹤", "review_reason"] = "B 級研究追蹤；先等技術面或基本面再確認"
+        review["watchlist_row"] = review.apply(
+            lambda row: f"{row.get('ticker', '')},{row.get('name', '')},satellite,quality_value,TRUE",
+            axis=1,
+        )
+        review["_review_sort"] = review["review_action"].map(
+            {"needs_decision_add_watchlist": 0, "hold_for_technical_confirmation": 1, "wait": 2}
+        ).fillna(3)
+        for col in columns:
+            if col not in review.columns:
+                review[col] = ""
+        review = review.sort_values(by=["_review_sort", "similar_score"], ascending=[True, False])[columns].reset_index(drop=True)
+
+    review_csv.parent.mkdir(parents=True, exist_ok=True)
+    review_md.parent.mkdir(parents=True, exist_ok=True)
+    review.to_csv(review_csv, index=False, encoding="utf-8-sig")
+
+    lines = [
+        "# Quality Value Candidate Review",
+        f"- Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+        "- Decision point: choose which A-grade candidates to add to the quality-value watchlist.",
+        "",
+    ]
+    for title, action in [
+        ("Needs Decision", "needs_decision_add_watchlist"),
+        ("Hold For Confirmation", "hold_for_technical_confirmation"),
+    ]:
+        rows = review[review["review_action"] == action].copy() if not review.empty else pd.DataFrame()
+        lines.extend([f"## {title}", ""])
+        if rows.empty:
+            lines.extend(["- None", ""])
+            continue
+        lines.extend(["| Ticker | Name | Priority | Score | Reason |", "| --- | --- | --- | --- | --- |"])
+        for _, row in rows.iterrows():
+            lines.append(
+                f"| {row.get('ticker', '')} | {row.get('name', '')} | {row.get('radar_priority', '')} | "
+                f"{row.get('similar_score', '')} | {row.get('review_reason', '')} |"
+            )
+        lines.append("")
+    review_md.write_text("\n".join(lines), encoding="utf-8")
+    return review
+
+
+def update_quality_value_tracking(
+    *,
+    daily_rank_csv: Path = DAILY_RANK_CSV,
+    entry_plan_csv: Path = QUALITY_VALUE_ENTRY_PLAN_CSV,
+    draft_csv: Path = QUALITY_VALUE_WATCHLIST_DRAFT_CSV,
+    tracking_csv: Path = QUALITY_VALUE_TRACKING_CSV,
+    pruning_md: Path = QUALITY_VALUE_PRUNING_MD,
+    candidate_review_csv: Path = QUALITY_VALUE_CANDIDATE_REVIEW_CSV,
+    candidate_review_md: Path = QUALITY_VALUE_CANDIDATE_REVIEW_MD,
+) -> pd.DataFrame:
+    daily_rank = _load_csv_safely(daily_rank_csv)
+    if daily_rank.empty:
+        tracking = pd.DataFrame(
+            columns=[
+                "ticker",
+                "name",
+                "first_seen_date",
+                "last_seen_date",
+                "days_watched",
+                "radar_grade",
+                "rank",
+                "close",
+                "ret5_pct",
+                "ret20_pct",
+                "volume_ratio20",
+                "setup_score",
+                "risk_score",
+                "spec_risk_label",
+                "entry_bias",
+                "decision_priority",
+                "lifecycle_action",
+                "lifecycle_reason",
+                "buy_zone_low",
+                "buy_zone_high",
+                "stop_loss",
+            ]
+        )
+    else:
+        work = daily_rank.copy()
+        if "layer" in work.columns:
+            work = work[work["layer"].fillna("").astype(str) == "quality_value"].copy()
+        current_date = _quality_value_current_date(work)
+        entry_plan = _load_csv_safely(entry_plan_csv)
+        draft = _load_csv_safely(draft_csv)
+        previous = _load_csv_safely(tracking_csv)
+
+        keep_cols = [
+            "ticker",
+            "name",
+            "rank",
+            "close",
+            "ret5_pct",
+            "ret20_pct",
+            "volume_ratio20",
+            "setup_score",
+            "risk_score",
+            "spec_risk_label",
+        ]
+        for col in keep_cols:
+            if col not in work.columns:
+                work[col] = ""
+        tracking = work[keep_cols].copy()
+        tracking["ticker"] = tracking["ticker"].astype(str).str.strip()
+
+        if not entry_plan.empty:
+            entry_cols = ["ticker", "entry_bias", "decision_priority", "buy_zone_low", "buy_zone_high", "stop_loss"]
+            for col in entry_cols:
+                if col not in entry_plan.columns:
+                    entry_plan[col] = ""
+            tracking = tracking.merge(entry_plan[entry_cols], on="ticker", how="left")
+        else:
+            for col in ["entry_bias", "decision_priority", "buy_zone_low", "buy_zone_high", "stop_loss"]:
+                tracking[col] = ""
+
+        if not previous.empty and {"ticker", "first_seen_date"}.issubset(set(previous.columns)):
+            previous = previous.drop_duplicates(subset=["ticker"], keep="last")
+            tracking = tracking.merge(previous[["ticker", "first_seen_date"]], on="ticker", how="left")
+        else:
+            tracking["first_seen_date"] = ""
+        tracking["first_seen_date"] = tracking["first_seen_date"].fillna("").astype(str)
+        tracking.loc[tracking["first_seen_date"].str.strip() == "", "first_seen_date"] = current_date
+        tracking["last_seen_date"] = current_date
+        tracking["days_watched"] = tracking["first_seen_date"].map(lambda value: _days_watched(value, current_date))
+
+        if not draft.empty and {"ticker", "radar_priority"}.issubset(set(draft.columns)):
+            draft = draft.drop_duplicates(subset=["ticker"], keep="first").copy()
+            draft["radar_grade"] = draft["radar_priority"].fillna("").astype(str).str[:1]
+            tracking = tracking.merge(draft[["ticker", "radar_grade"]], on="ticker", how="left")
+        else:
+            tracking["radar_grade"] = ""
+        tracking["radar_grade"] = tracking["radar_grade"].fillna("")
+
+        actions = tracking.apply(_quality_value_lifecycle_action, axis=1)
+        tracking["lifecycle_action"] = [action for action, _ in actions]
+        tracking["lifecycle_reason"] = [reason for _, reason in actions]
+        ordered_cols = [
+            "ticker",
+            "name",
+            "first_seen_date",
+            "last_seen_date",
+            "days_watched",
+            "radar_grade",
+            "rank",
+            "close",
+            "ret5_pct",
+            "ret20_pct",
+            "volume_ratio20",
+            "setup_score",
+            "risk_score",
+            "spec_risk_label",
+            "entry_bias",
+            "decision_priority",
+            "lifecycle_action",
+            "lifecycle_reason",
+            "buy_zone_low",
+            "buy_zone_high",
+            "stop_loss",
+        ]
+        tracking = tracking[ordered_cols].reset_index(drop=True)
+
+    tracking_csv.parent.mkdir(parents=True, exist_ok=True)
+    pruning_md.parent.mkdir(parents=True, exist_ok=True)
+    tracking.to_csv(tracking_csv, index=False, encoding="utf-8-sig")
+    pruning_md.write_text(
+        _render_quality_value_pruning_report(tracking, generated_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
+        encoding="utf-8",
+    )
+    write_quality_value_candidate_review(draft_csv=draft_csv, review_csv=candidate_review_csv, review_md=candidate_review_md)
+    return tracking
+
+
 def collect_status_metrics(theme_outdir: Path = THEME_OUTDIR, verification_outdir: Path = VERIFICATION_OUTDIR) -> dict[str, object]:
     snapshots_csv = verification_outdir / "reco_snapshots.csv"
     outcomes_csv = verification_outdir / "reco_outcomes.csv"
@@ -730,6 +1016,9 @@ def collect_status_metrics(theme_outdir: Path = THEME_OUTDIR, verification_outdi
         "quality_value_fundamental_rows": int(quality_value_runtime.get("fundamental_rows", 0) or 0),
         "quality_value_scout_rows": int(quality_value_runtime.get("scout_rows", 0) or 0),
         "quality_value_scout_draft_rows": int(quality_value_runtime.get("scout_draft_rows", 0) or 0),
+        "quality_value_tracking_rows": _count_csv_rows(theme_outdir / "quality_value_tracking.csv"),
+        "quality_value_candidate_review_rows": _count_csv_rows(theme_outdir / "quality_value_candidate_review.csv"),
+        "quality_value_pruning_status": "ready" if (theme_outdir / "quality_value_pruning_report.md").exists() else "missing",
         "verification_runtime_seconds": float(verification_runtime.get("wall_seconds", 0.0) or 0.0),
         "verification_runtime_status": str(verification_runtime.get("status", "") or ""),
         "spec_risk_high_rows": int(spec_risk_metrics["spec_risk_high_rows"]),
@@ -793,6 +1082,7 @@ def render_local_status_markdown(
             + (f", generated `{metrics.get('report_sync_generated_at')}`" if metrics.get("report_sync_generated_at") else ""),
             f"- Quality value rows: low-price=`{metrics.get('quality_value_low_price_rows', 0)}`, research=`{metrics.get('quality_value_research_rows', 0)}`, fundamentals=`{metrics.get('quality_value_fundamental_rows', 0)}`",
             f"- Quality value similar scout rows: `{metrics.get('quality_value_scout_rows', 0)}`, draft=`{metrics.get('quality_value_scout_draft_rows', 0)}`",
+            f"- Quality value lifecycle rows: tracking=`{metrics.get('quality_value_tracking_rows', 0)}`, candidate_review=`{metrics.get('quality_value_candidate_review_rows', 0)}`, pruning=`{metrics.get('quality_value_pruning_status') or 'missing'}`",
             f"- Quality value runtime: `{metrics.get('quality_value_runtime_seconds', 0.0):.3f}s` ({metrics.get('quality_value_runtime_status') or 'n/a'})"
             + (f", generated `{metrics.get('quality_value_generated_at')}`" if metrics.get("quality_value_generated_at") else ""),
             f"- Verification runtime: `{metrics.get('verification_runtime_seconds', 0.0):.3f}s` ({metrics.get('verification_runtime_status') or 'n/a'})",
@@ -818,6 +1108,9 @@ def render_local_status_markdown(
             f"- Quality value entry plan: `{theme_outdir_str('quality_value_entry_plan.csv')}`",
             f"- Quality value similar scout: `{theme_outdir_str('quality_value_similar_scout.csv')}`",
             f"- Quality value watchlist draft: `{theme_outdir_str('quality_value_watchlist_draft.csv')}`",
+            f"- Quality value tracking: `{theme_outdir_str('quality_value_tracking.csv')}`",
+            f"- Quality value pruning: `{theme_outdir_str('quality_value_pruning_report.md')}`",
+            f"- Quality value candidate review: `{theme_outdir_str('quality_value_candidate_review.md')}`",
             f"- Verification report: `{verification_outdir_str('verification_report.md')}`",
             f"- Verification runtime: `{verification_outdir_str('runtime_metrics.md')}`",
             f"- Outcomes summary: `{verification_outdir_str('outcomes_summary.md')}`",
@@ -872,6 +1165,10 @@ def write_local_status_dashboard(
             "quality_value_entry_plan": str(theme_outdir / "quality_value_entry_plan.csv"),
             "quality_value_similar_scout": str(theme_outdir / "quality_value_similar_scout.csv"),
             "quality_value_watchlist_draft": str(theme_outdir / "quality_value_watchlist_draft.csv"),
+            "quality_value_tracking": str(theme_outdir / "quality_value_tracking.csv"),
+            "quality_value_pruning": str(theme_outdir / "quality_value_pruning_report.md"),
+            "quality_value_candidate_review": str(theme_outdir / "quality_value_candidate_review.md"),
+            "quality_value_candidate_review_csv": str(theme_outdir / "quality_value_candidate_review.csv"),
             "verification_report": str(verification_outdir / "verification_report.md"),
             "verification_runtime": str(verification_outdir / "runtime_metrics.md"),
             "outcomes_summary": str(verification_outdir / "outcomes_summary.md"),
@@ -950,6 +1247,7 @@ def main(argv: list[str] | None = None) -> int:
             steps.append({"name": "quality_value", "label": STEP_LABELS["quality_value"], "status": "failed", "detail": f"Exit code {quality_code}"})
             write_local_status_dashboard(args=args, steps=steps, overall_status=overall_status)
             return quality_code
+        update_quality_value_tracking()
         if args.quality_value_notification:
             send_quality_value_notification()
         steps.append({"name": "quality_value", "label": STEP_LABELS["quality_value"], "status": "completed", "detail": "Updated research report"})
