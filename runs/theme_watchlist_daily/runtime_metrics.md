@@ -1,32 +1,32 @@
 # Runtime Metrics
-- Generated: 2026-05-07 17:47:11
+- Generated: 2026-05-07 17:50:27
 - Status: `ok`
 
 ## Steps
 
 | Step | Seconds |
 | --- | --- |
-| market_regime | 0.2121 |
-| us_market | 0.6293 |
-| cache_warmup | 20.0931 |
-| watchlist | 0.4363 |
-| backtest | 45.7789 |
-| candidate_sets | 0.1923 |
-| reports | 0.5386 |
-| shadow_observation | 0.0121 |
-| alert_tracking | 0.0814 |
+| market_regime | 0.0000 |
+| us_market | 0.0000 |
+| cache_warmup | 0.0001 |
+| watchlist | 0.0000 |
+| backtest | 0.0000 |
+| candidate_sets | 0.1303 |
+| reports | 0.0002 |
+| shadow_observation | 0.0103 |
+| alert_tracking | 0.0002 |
 | should_alert | 0.0000 |
-| notifications | 2.1207 |
-| persist_state | 0.0003 |
+| notifications | 0.4145 |
+| persist_state | 0.0002 |
 | persist_success | 0.0002 |
 
-- Total tracked seconds: `70.095`
-- Wall-clock seconds: `70.127`
+- Total tracked seconds: `0.556`
+- Wall-clock seconds: `0.562`
 
 ## Cache
 
-- History cache: `0` exact hit / `0` disk hit / `44` superset hit / `98` miss
-- Indicator cache: `93` exact hit / `93` superset hit / `98` miss
+- History cache: `0` exact hit / `0` disk hit / `0` superset hit / `0` miss
+- Indicator cache: `0` exact hit / `0` superset hit / `0` miss
 
 ## Backtest
 
