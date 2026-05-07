@@ -101,6 +101,6 @@
     "3556.TWO": "2026-04-08",
     "6292.TWO": "2026-04-08"
   },
-  "last_run_mode": "full_rebuild",
-  "last_run_scanned_cutoffs": 85309
+  "last_run_mode": "incremental_noop",
+  "last_run_scanned_cutoffs": 0
 }
