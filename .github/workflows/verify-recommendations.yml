@@ -36,7 +36,7 @@ jobs:
 
       - name: Run tests
         run: |
-          python -m unittest discover -s tests
+          python scripts/run_unittest_quiet.py
 
       - name: Refresh daily watchlist artifacts (best effort)
         if: ${{ inputs.run_watchlist_first == 'true' }}

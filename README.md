@@ -26,6 +26,7 @@
 - 如需 activate：`source /Users/tokuzfunpi/codes/nvidia/311env/bin/activate`
 - 安裝依賴：`$VENV_PY -m pip install -r requirements.txt`
 - 跑測試：`PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 $VENV_PY -m pytest`
+- CI 安靜版 unittest：`$VENV_PY scripts/run_unittest_quiet.py`
 
 ## 單一 CLI 入口
 
