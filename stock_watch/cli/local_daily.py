@@ -223,14 +223,14 @@ def send_quality_value_notification(
     try:
         import daily_theme_watchlist
 
+        full_chat_ids = list(getattr(daily_theme_watchlist, "TELEGRAM_CHAT_IDS", []) or [])
         simple_chat_ids = list(getattr(daily_theme_watchlist, "TELEGRAM_SIMPLE_CHAT_IDS", []) or [])
+        if full_chat_ids:
+            message = build_action_summary_notification(metrics)
+            daily_theme_watchlist.send_telegram_message(message, chat_ids=full_chat_ids)
         if simple_chat_ids:
             message = build_simple_action_summary_notification(metrics)
             daily_theme_watchlist.send_telegram_message(message, chat_ids=simple_chat_ids)
-            return
-
-        message = build_action_summary_notification(metrics)
-        daily_theme_watchlist.send_telegram_message(message)
     except Exception:
         return
 
@@ -688,7 +688,7 @@ def _format_ticker_names(df: pd.DataFrame, *, limit: int = 5) -> list[str]:
         name = str(row.get("name", "") or "").strip()
         if not ticker and not name:
             continue
-        names.append(_format_stock_display(ticker, name))
+        names.append(_format_stock_price_display(row, ticker=ticker, name=name))
     return names
 
 
@@ -700,9 +700,45 @@ def _format_stock_display(ticker: str, name: str) -> str:
     return name or ticker
 
 
+def _format_price(value: object) -> str:
+    try:
+        price = float(value)
+    except Exception:
+        return ""
+    if pd.isna(price) or price <= 0:
+        return ""
+    if price >= 1000:
+        return f"{price:.0f}"
+    if price == int(price):
+        return str(int(price))
+    return f"{price:.2f}".rstrip("0").rstrip(".")
+
+
+def _price_range_text(row: pd.Series, *, low_key: str = "buy_zone_low", high_key: str = "buy_zone_high") -> str:
+    low = _format_price(row.get(low_key))
+    high = _format_price(row.get(high_key))
+    if low and high:
+        return f"{low}–{high}"
+    return high or low
+
+
+def _format_stock_price_display(row: pd.Series, *, ticker: str, name: str) -> str:
+    parts = [_format_stock_display(ticker, name)]
+    current = _format_price(row.get("close"))
+    zone = _price_range_text(row)
+    stop = _format_price(row.get("stop_loss"))
+    if current:
+        parts.append(f"現價 {current}")
+    if zone:
+        parts.append(f"買區 {zone}")
+    if stop:
+        parts.append(f"停損 {stop}")
+    return "｜".join(parts)
+
+
 def _format_action_summary_item(value: str) -> str:
     text = str(value or "").strip()
-    match = re.match(r"^([0-9A-Z]{2,8}\.(?:TW|TWO))\s+(\S+)(.*)$", text)
+    match = re.match(r"^([0-9A-Z]{2,8}\.(?:TW|TWO))\s+([^｜\s]+)(.*)$", text)
     if not match:
         return text
     ticker, name, rest = match.groups()
@@ -749,9 +785,21 @@ def _collect_portfolio_action_summary(portfolio_report_md: Path) -> dict[str, li
     for line in lines:
         if not line.startswith("- ") or "建議 分批落袋" not in line:
             continue
-        left = line.removeprefix("- ").split("|", 1)[0].strip()
+        parts = [part.strip() for part in line.removeprefix("- ").split("|")]
+        left = parts[0] if parts else ""
         if left:
-            trim_tickers.append(left)
+            current = next((part for part in parts if part.startswith("現價 ")), "")
+            sell = ""
+            price_band = next((part for part in parts if part.startswith("價格帶 ")), "")
+            sell_match = re.search(r"賣出≥([0-9.]+)", price_band)
+            if sell_match:
+                sell = f"賣出≥{_format_price(sell_match.group(1))}"
+            price_parts = [left]
+            if current:
+                price_parts.append(current)
+            if sell:
+                price_parts.append(sell)
+            trim_tickers.append("｜".join(price_parts))
     return {"portfolio_trim_tickers": trim_tickers[:5]}
 
 
@@ -771,7 +819,10 @@ def _collect_new_additions_action_summary(new_additions_tracking_csv: Path) -> d
         name = str(row.get("name", "") or "").strip()
         action = str(row.get("next_action", "") or "").strip()
         if ticker:
-            items.append(f"{_format_stock_display(ticker, name)} {action}".strip())
+            parts = [_format_stock_price_display(row, ticker=ticker, name=name)]
+            if action:
+                parts.append(action)
+            items.append("｜".join(parts))
     return {"new_addition_action_tickers": items}
 
 
@@ -790,7 +841,15 @@ def _collect_trial_ledger_action_summary(trial_ledger_csv: Path) -> dict[str, li
         action = str(row.get("next_action", "") or "").strip()
         if ticker:
             status_label = f"{status}/{decision_state}" if decision_state else status
-            items.append(f"{_format_stock_display(ticker, name)} {status_label} {action}".strip())
+            parts = [_format_stock_price_display(
+                row.rename({"entry_zone_low": "buy_zone_low", "entry_zone_high": "buy_zone_high"}),
+                ticker=ticker,
+                name=name,
+            )]
+            details = " ".join(part for part in [status_label, action] if part)
+            if details:
+                parts.append(details)
+            items.append("｜".join(parts))
     return {"trial_ledger_action_tickers": items}
 
 

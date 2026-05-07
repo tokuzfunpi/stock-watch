@@ -90,8 +90,13 @@ class RunLocalDailyTests(unittest.TestCase):
     def test_build_simple_action_summary_notification_keeps_only_actionable_sections(self) -> None:
         message = build_simple_action_summary_notification(
             {
-                "action_trial_tickers": ["6161.TWO 捷波", "4995.TWO 晶達", "8261.TW 富鼎", "3213.TWO 茂訊"],
-                "action_pullback_tickers": ["3515.TW 華擎"],
+                "action_trial_tickers": [
+                    "6161.TWO 捷波｜買區 42.92–44｜停損 40.85",
+                    "4995.TWO 晶達｜買區 44.41–45.5｜停損 42.26",
+                    "8261.TW 富鼎｜買區 120.72–128｜停損 110.21",
+                    "3213.TWO 茂訊｜買區 111.92–114.5｜停損 106.42",
+                ],
+                "action_pullback_tickers": ["3515.TW 華擎｜買區 300–315｜停損 286"],
                 "action_wait_strength_tickers": ["3005.TW 神基"],
                 "action_cooldown_tickers": ["2376.TW 技嘉"],
                 "new_addition_action_tickers": ["3213.TWO 茂訊 可試單"],
@@ -101,10 +106,10 @@ class RunLocalDailyTests(unittest.TestCase):
         )
 
         self.assertIn("📌 今日可行動名單", message)
-        self.assertIn("🟢 今天可小買：(小部位研究單，先驗證不重壓)\n• 捷波 (6161.TWO)", message)
-        self.assertIn("• 富鼎 (8261.TW)", message)
+        self.assertIn("🟢 今天可小買：(小部位研究單，先驗證不重壓)\n• 捷波 (6161.TWO)｜買區 42.92–44｜停損 40.85", message)
+        self.assertIn("• 富鼎 (8261.TW)｜買區 120.72–128｜停損 110.21", message)
         self.assertNotIn("茂訊 (3213.TWO)", message)
-        self.assertIn("🟡 想買但等便宜：(等價格回到買區，不追高)\n• 華擎 (3515.TW)", message)
+        self.assertIn("🟡 想買但等便宜：(等價格回到買區，不追高)\n• 華擎 (3515.TW)｜買區 300–315｜停損 286", message)
         self.assertIn("💼 持股落袋：(持股達收成條件，考慮分批)\n• 英業達 (2356)", message)
         self.assertNotIn("等轉強", message)
         self.assertNotIn("過熱先等", message)
@@ -190,10 +195,10 @@ class RunLocalDailyTests(unittest.TestCase):
             )
             pd.DataFrame(
                 [
-                    {"ticker": "6161.TWO", "name": "捷波", "decision_priority": 34, "entry_bias": "分批試單"},
-                    {"ticker": "4966.TWO", "name": "譜瑞-KY", "decision_priority": 25, "entry_bias": "等拉回"},
-                    {"ticker": "3005.TW", "name": "神基", "decision_priority": 23, "entry_bias": "等轉強"},
-                    {"ticker": "6525.TW", "name": "捷敏-KY", "decision_priority": -6, "entry_bias": "等待降溫"},
+                    {"ticker": "6161.TWO", "name": "捷波", "decision_priority": 34, "entry_bias": "分批試單", "buy_zone_low": 42.92, "buy_zone_high": 44.0, "stop_loss": 40.85},
+                    {"ticker": "4966.TWO", "name": "譜瑞-KY", "decision_priority": 25, "entry_bias": "等拉回", "buy_zone_low": 453.0, "buy_zone_high": 468.5, "stop_loss": 431.0},
+                    {"ticker": "3005.TW", "name": "神基", "decision_priority": 23, "entry_bias": "等轉強", "buy_zone_low": 121.5, "buy_zone_high": 126.0, "stop_loss": 115.0},
+                    {"ticker": "6525.TW", "name": "捷敏-KY", "decision_priority": -6, "entry_bias": "等待降溫", "buy_zone_low": 101.0, "buy_zone_high": 105.0, "stop_loss": 96.0},
                 ]
             ).to_csv(theme_outdir / "quality_value_entry_plan.csv", index=False)
             (verification_outdir / "runtime_metrics.json").write_text(
@@ -225,10 +230,10 @@ class RunLocalDailyTests(unittest.TestCase):
         self.assertEqual(metrics["spec_risk_watch_rows"], 1)
         self.assertEqual(metrics["spec_risk_top_tickers"], ["3057.TW", "6669.TW"])
         self.assertEqual(metrics["watchlist_artifact_freshness_status"], "current")
-        self.assertEqual(metrics["action_trial_tickers"], ["捷波 (6161.TWO)"])
-        self.assertEqual(metrics["action_pullback_tickers"], ["譜瑞-KY (4966.TWO)"])
-        self.assertEqual(metrics["action_wait_strength_tickers"], ["神基 (3005.TW)"])
-        self.assertEqual(metrics["action_cooldown_tickers"], ["捷敏-KY (6525.TW)"])
+        self.assertEqual(metrics["action_trial_tickers"], ["捷波 (6161.TWO)｜買區 42.92–44｜停損 40.85"])
+        self.assertEqual(metrics["action_pullback_tickers"], ["譜瑞-KY (4966.TWO)｜買區 453–468.5｜停損 431"])
+        self.assertEqual(metrics["action_wait_strength_tickers"], ["神基 (3005.TW)｜買區 121.5–126｜停損 115"])
+        self.assertEqual(metrics["action_cooldown_tickers"], ["捷敏-KY (6525.TW)｜買區 101–105｜停損 96"])
         self.assertEqual(metrics["portfolio_trim_tickers"], ["英業達 (2356)"])
 
     def test_update_quality_value_tracking_writes_lifecycle_and_review_outputs(self) -> None:
