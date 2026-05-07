@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-05-07 17:38:17",
+  "generated_at": "2026-05-07 09:47:11",
   "status": "ok",
   "rows": 45,
   "low_price_rows": 4,
@@ -7,5 +7,5 @@
   "fundamental_rows": 40,
   "scout_rows": 10,
   "scout_draft_rows": 8,
-  "wall_seconds": 41.216
+  "wall_seconds": 27.467
 }

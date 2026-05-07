@@ -1,6 +1,6 @@
 # 冷門高品質 / 低價健康 Research
-- Generated: 2026-05-07 17:38:17
-- Source: `/Users/tokuzfunpi/codes/joe-notes/stock-watch/runs/theme_watchlist_daily/daily_rank.csv`
+- Generated: 2026-05-07 09:47:11
+- Source: `/home/runner/work/stock-watch/stock-watch/runs/theme_watchlist_daily/daily_rank.csv`
 - Low-price rules: `close <= 120`, `setup >= 8`, `ret20 >= 5%`, `volume_ratio20 <= 1.2`, exclude `SURGE` and high spec risk.
 
 ## 低價健康候選

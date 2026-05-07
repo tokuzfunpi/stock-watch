@@ -1,35 +1,35 @@
 {
-  "generated_at": "2026-05-07 17:44:35",
+  "generated_at": "2026-05-07 17:47:11",
   "status": "ok",
   "step_timings": {
-    "market_regime": 3.4999975468963385e-06,
-    "us_market": 3.1249946914613247e-06,
-    "cache_warmup": 4.9583002692088485e-05,
-    "watchlist": 3.958004526793957e-06,
-    "backtest": 3.1249946914613247e-06,
-    "candidate_sets": 0.037524916988331825,
-    "reports": 8.774999878369272e-05,
-    "shadow_observation": 0.0029832910222467035,
-    "alert_tracking": 8.641701424494386e-05,
-    "should_alert": 3.915978595614433e-06,
-    "notifications": 0.1277890000201296,
-    "persist_state": 0.00011158300912939012,
-    "persist_success": 6.35419855825603e-05
+    "market_regime": 0.21214521500000671,
+    "us_market": 0.6293343989999869,
+    "cache_warmup": 20.093066117000006,
+    "watchlist": 0.43633910600000547,
+    "backtest": 45.77890502699999,
+    "candidate_sets": 0.1923488749999933,
+    "reports": 0.5385900469999854,
+    "shadow_observation": 0.012054505999998355,
+    "alert_tracking": 0.0813801349999892,
+    "should_alert": 2.8750000069521775e-06,
+    "notifications": 2.1207297930000095,
+    "persist_state": 0.00027766700000597666,
+    "persist_success": 0.00023353500000666827
   },
   "warnings": [],
-  "total_seconds": 0.169,
-  "wall_seconds": 0.17,
+  "total_seconds": 70.095,
+  "wall_seconds": 70.127,
   "cache_stats": {
     "history_hit": 0,
     "history_disk_hit": 0,
-    "history_superset_hit": 0,
-    "history_miss": 0,
-    "indicator_hit": 0,
-    "indicator_superset_hit": 0,
-    "indicator_miss": 0
+    "history_superset_hit": 44,
+    "history_miss": 98,
+    "indicator_hit": 93,
+    "indicator_superset_hit": 93,
+    "indicator_miss": 98
   },
   "backtest_meta": {
-    "signature": "c8afaac5cd5a7f15",
+    "signature": "2837e38ed5d90d37",
     "backtest_period": "5y",
     "lookahead_days": [
       1,
@@ -131,7 +131,7 @@
       "3556.TWO": "2026-04-08",
       "6292.TWO": "2026-04-08"
     },
-    "last_run_mode": "incremental_noop",
-    "last_run_scanned_cutoffs": 0
+    "last_run_mode": "full_rebuild",
+    "last_run_scanned_cutoffs": 85309
   }
 }

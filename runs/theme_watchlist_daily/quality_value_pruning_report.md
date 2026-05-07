@@ -1,5 +1,5 @@
 # Quality Value Pruning Report
-- Generated: 2026-05-07 17:38:58
+- Generated: 2026-05-07 09:47:39
 - Scope: quality-value lifecycle actions for promote / cooldown / drop-review decisions
 
 ## Drop Review

@@ -1,5 +1,5 @@
 {
-  "signature": "c8afaac5cd5a7f15",
+  "signature": "2837e38ed5d90d37",
   "backtest_period": "5y",
   "lookahead_days": [
     1,
@@ -101,6 +101,6 @@
     "3556.TWO": "2026-04-08",
     "6292.TWO": "2026-04-08"
   },
-  "last_run_mode": "incremental_noop",
-  "last_run_scanned_cutoffs": 0
+  "last_run_mode": "full_rebuild",
+  "last_run_scanned_cutoffs": 85309
 }
