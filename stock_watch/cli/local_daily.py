@@ -42,6 +42,9 @@ QUALITY_VALUE_CANDIDATE_REVIEW_MD = THEME_OUTDIR / "quality_value_candidate_revi
 QUALITY_VALUE_NEW_ADDITIONS_TRACKING_CSV = THEME_OUTDIR / "quality_value_new_additions_tracking.csv"
 QUALITY_VALUE_NEW_ADDITIONS_TRACKING_MD = THEME_OUTDIR / "quality_value_new_additions_tracking.md"
 QUALITY_VALUE_NEW_ADDITION_TICKERS = ("3213.TWO", "3158.TWO", "6996.TWO", "3556.TWO", "6292.TWO")
+QUALITY_VALUE_TRIAL_LEDGER_CSV = THEME_OUTDIR / "quality_value_trial_ledger.csv"
+QUALITY_VALUE_TRIAL_LEDGER_MD = THEME_OUTDIR / "quality_value_trial_ledger.md"
+QUALITY_VALUE_TRIAL_TICKERS = ("3213.TWO",)
 DEFAULT_LOCAL_TELEGRAM_CHAT_IDS = "7758949915"
 
 MODE_STEPS: dict[str, tuple[str, ...]] = {
@@ -194,13 +197,15 @@ def send_quality_value_notification(
     entry_plan_csv: Path = QUALITY_VALUE_ENTRY_PLAN_CSV,
     portfolio_report_md: Path = THEME_OUTDIR / "portfolio_report.md",
     new_additions_tracking_csv: Path = QUALITY_VALUE_NEW_ADDITIONS_TRACKING_CSV,
+    trial_ledger_csv: Path = QUALITY_VALUE_TRIAL_LEDGER_CSV,
 ) -> None:
-    if not entry_plan_csv.exists() and not portfolio_report_md.exists() and not new_additions_tracking_csv.exists():
+    if not entry_plan_csv.exists() and not portfolio_report_md.exists() and not new_additions_tracking_csv.exists() and not trial_ledger_csv.exists():
         return
     metrics = {
         **_collect_quality_value_action_summary(entry_plan_csv),
         **_collect_portfolio_action_summary(portfolio_report_md),
         **_collect_new_additions_action_summary(new_additions_tracking_csv),
+        **_collect_trial_ledger_action_summary(trial_ledger_csv),
     }
     if not any(metrics.values()):
         return
@@ -227,6 +232,7 @@ def build_action_summary_notification(metrics: dict[str, object]) -> str:
             _line("🔵 等轉強：", "action_wait_strength_tickers"),
             _line("🔴 過熱先等：", "action_cooldown_tickers"),
             _line("🆕 新A追蹤：", "new_addition_action_tickers"),
+            _line("🧪 試單追蹤：", "trial_ledger_action_tickers"),
             _line("💼 持股落袋：", "portfolio_trim_tickers"),
         ]
     )
@@ -697,6 +703,23 @@ def _collect_new_additions_action_summary(new_additions_tracking_csv: Path) -> d
     return {"new_addition_action_tickers": items}
 
 
+def _collect_trial_ledger_action_summary(trial_ledger_csv: Path) -> dict[str, list[str]]:
+    if not trial_ledger_csv.exists():
+        return {"trial_ledger_action_tickers": []}
+    ledger = _load_csv_safely(trial_ledger_csv)
+    if ledger.empty or "next_action" not in ledger.columns:
+        return {"trial_ledger_action_tickers": []}
+    items: list[str] = []
+    for _, row in ledger.head(5).iterrows():
+        ticker = str(row.get("ticker", "") or "").strip()
+        name = str(row.get("name", "") or "").strip()
+        status = str(row.get("trial_status", "") or "").strip()
+        action = str(row.get("next_action", "") or "").strip()
+        if ticker:
+            items.append(f"{ticker} {name} {status} {action}".strip())
+    return {"trial_ledger_action_tickers": items}
+
+
 def _quality_value_current_date(daily_rank: pd.DataFrame) -> str:
     if daily_rank.empty or "date" not in daily_rank.columns:
         return datetime.now().strftime("%Y-%m-%d")
@@ -985,6 +1008,131 @@ def write_quality_value_new_additions_tracking(
     return result
 
 
+def _quality_value_trial_action(row: pd.Series) -> tuple[str, str, str]:
+    zone_status = str(row.get("zone_status", "") or "").strip()
+    heat_status = str(row.get("heat_status", "") or "").strip()
+    entry_bias = str(row.get("entry_bias", "") or "").strip()
+    if zone_status == "跌破停損":
+        return "invalidated", "移除試單", "跌破停損線，試單假設失效"
+    if heat_status == "過熱":
+        return "paused", "暫停試單", "投機風險過高，先不建立新部位"
+    if entry_bias == "分批試單" and zone_status == "買區內":
+        return "active_trial", "第一筆 1/3 可研究", "位於買區且尚未過熱；只作追蹤，不代表已下單"
+    return "watch_wait", "等待條件", "尚未同時滿足買區與試單條件"
+
+
+def _render_quality_value_trial_ledger_markdown(ledger: pd.DataFrame, *, generated_at: str) -> str:
+    lines = [
+        "# Quality Value Trial Ledger",
+        f"- Generated: {generated_at}",
+        "- Scope: simulated/research-only trial tracking. This file does not represent an executed order.",
+        "",
+        "## Summary",
+        "",
+    ]
+    if ledger.empty:
+        lines.extend(["- No active trial names.", ""])
+        return "\n".join(lines)
+    status_counts = ledger["trial_status"].fillna("").astype(str).value_counts().to_dict()
+    lines.append("- Status: " + ", ".join(f"`{key}`={value}" for key, value in status_counts.items()))
+    lines.append("")
+    lines.extend(
+        [
+            "## Trial Rows",
+            "",
+            "| Ticker | Name | Status | Days | Close | Sim Entry | Sim Ret | Zone | Heat | Stop | Stop Gap | Next Action | Rule |",
+            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+        ]
+    )
+    for _, row in ledger.iterrows():
+        lines.append(
+            f"| {row.get('ticker', '')} | {row.get('name', '')} | {row.get('trial_status', '')} | {row.get('days_tracked', '')} | "
+            f"{row.get('close', '')} | {row.get('simulated_entry_price', '')} | {row.get('simulated_ret_pct', '')}% | "
+            f"{row.get('zone_status', '')} | {row.get('heat_status', '')} | {row.get('stop_loss', '')} | "
+            f"{row.get('stop_distance_pct', '')}% | {row.get('next_action', '')} | {row.get('rule_note', '')} |"
+        )
+    lines.append("")
+    return "\n".join(lines)
+
+
+def write_quality_value_trial_ledger(
+    new_additions_tracking: pd.DataFrame,
+    *,
+    ledger_csv: Path = QUALITY_VALUE_TRIAL_LEDGER_CSV,
+    ledger_md: Path = QUALITY_VALUE_TRIAL_LEDGER_MD,
+    trial_tickers: tuple[str, ...] = QUALITY_VALUE_TRIAL_TICKERS,
+) -> pd.DataFrame:
+    columns = [
+        "ticker",
+        "name",
+        "trial_start_date",
+        "days_tracked",
+        "trial_status",
+        "close",
+        "simulated_entry_price",
+        "simulated_ret_pct",
+        "planned_unit",
+        "entry_zone_low",
+        "entry_zone_high",
+        "stop_loss",
+        "stop_distance_pct",
+        "zone_status",
+        "heat_status",
+        "next_action",
+        "rule_note",
+    ]
+    if new_additions_tracking.empty:
+        ledger = pd.DataFrame(columns=columns)
+    else:
+        work = new_additions_tracking[new_additions_tracking["ticker"].astype(str).isin(trial_tickers)].copy()
+        if work.empty:
+            ledger = pd.DataFrame(columns=columns)
+        else:
+            previous = _load_csv_safely(ledger_csv)
+            current_date_values = work.get("added_date", pd.Series(dtype=object)).dropna().astype(str).str.strip()
+            current_date_values = current_date_values[current_date_values != ""]
+            current_date = str(current_date_values.max()) if not current_date_values.empty else datetime.now().strftime("%Y-%m-%d")
+            if not previous.empty and {"ticker", "trial_start_date", "simulated_entry_price"}.issubset(set(previous.columns)):
+                previous = previous.drop_duplicates(subset=["ticker"], keep="last")
+                work = work.merge(previous[["ticker", "trial_start_date", "simulated_entry_price"]], on="ticker", how="left")
+            else:
+                work["trial_start_date"] = ""
+                work["simulated_entry_price"] = ""
+            work["trial_start_date"] = work["trial_start_date"].fillna("").astype(str)
+            work.loc[work["trial_start_date"].str.strip() == "", "trial_start_date"] = current_date
+            work["close"] = pd.to_numeric(work["close"], errors="coerce")
+            work["stop_loss"] = pd.to_numeric(work["stop_loss"], errors="coerce")
+            work["simulated_entry_price"] = pd.to_numeric(work["simulated_entry_price"], errors="coerce")
+            actions = work.apply(_quality_value_trial_action, axis=1)
+            work["trial_status"] = [status for status, _, _ in actions]
+            work["next_action"] = [action for _, action, _ in actions]
+            work["rule_note"] = [rule for _, _, rule in actions]
+            active_mask = work["trial_status"] == "active_trial"
+            work.loc[active_mask, "simulated_entry_price"] = work.loc[active_mask, "simulated_entry_price"].fillna(work.loc[active_mask, "close"])
+            simulated_ret_pct = ((work["close"] / work["simulated_entry_price"] - 1) * 100).round(2)
+            work["simulated_ret_pct"] = simulated_ret_pct.where(work["simulated_entry_price"].notna(), "")
+            work["days_tracked"] = work["trial_start_date"].map(lambda value: _days_watched(value, current_date))
+            work["planned_unit"] = "1/3"
+            work["entry_zone_low"] = work.get("buy_zone_low", "")
+            work["entry_zone_high"] = work.get("buy_zone_high", "")
+            stop_distance_pct = ((work["close"] / work["stop_loss"] - 1) * 100).round(2)
+            work["stop_distance_pct"] = stop_distance_pct.where(work["stop_loss"].notna() & (work["stop_loss"] != 0), "")
+            for col in columns:
+                if col not in work.columns:
+                    work[col] = ""
+            work["_ticker_order"] = work["ticker"].map({ticker: index for index, ticker in enumerate(trial_tickers)}).fillna(999)
+            ledger = work.sort_values(by=["_ticker_order"])[columns].reset_index(drop=True)
+
+    ledger_csv.parent.mkdir(parents=True, exist_ok=True)
+    ledger_md.parent.mkdir(parents=True, exist_ok=True)
+    ledger.to_csv(ledger_csv, index=False, encoding="utf-8-sig")
+    ledger_md.write_text(
+        _render_quality_value_trial_ledger_markdown(ledger, generated_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
+        encoding="utf-8",
+    )
+    return ledger
+
+
 def update_quality_value_tracking(
     *,
     daily_rank_csv: Path = DAILY_RANK_CSV,
@@ -996,11 +1144,17 @@ def update_quality_value_tracking(
     candidate_review_md: Path = QUALITY_VALUE_CANDIDATE_REVIEW_MD,
     new_additions_tracking_csv: Path | None = None,
     new_additions_tracking_md: Path | None = None,
+    trial_ledger_csv: Path | None = None,
+    trial_ledger_md: Path | None = None,
 ) -> pd.DataFrame:
     if new_additions_tracking_csv is None:
         new_additions_tracking_csv = tracking_csv.parent / "quality_value_new_additions_tracking.csv"
     if new_additions_tracking_md is None:
         new_additions_tracking_md = tracking_csv.parent / "quality_value_new_additions_tracking.md"
+    if trial_ledger_csv is None:
+        trial_ledger_csv = tracking_csv.parent / "quality_value_trial_ledger.csv"
+    if trial_ledger_md is None:
+        trial_ledger_md = tracking_csv.parent / "quality_value_trial_ledger.md"
     daily_rank = _load_csv_safely(daily_rank_csv)
     if daily_rank.empty:
         tracking = pd.DataFrame(
@@ -1122,10 +1276,15 @@ def update_quality_value_tracking(
         encoding="utf-8",
     )
     write_quality_value_candidate_review(draft_csv=draft_csv, review_csv=candidate_review_csv, review_md=candidate_review_md)
-    write_quality_value_new_additions_tracking(
+    new_additions_tracking = write_quality_value_new_additions_tracking(
         tracking,
         tracking_csv=new_additions_tracking_csv,
         tracking_md=new_additions_tracking_md,
+    )
+    write_quality_value_trial_ledger(
+        new_additions_tracking,
+        ledger_csv=trial_ledger_csv,
+        ledger_md=trial_ledger_md,
     )
     return tracking
 
@@ -1144,6 +1303,7 @@ def collect_status_metrics(theme_outdir: Path = THEME_OUTDIR, verification_outdi
     action_summary = _collect_quality_value_action_summary(theme_outdir / "quality_value_entry_plan.csv")
     portfolio_summary = _collect_portfolio_action_summary(theme_outdir / "portfolio_report.md")
     new_additions_summary = _collect_new_additions_action_summary(theme_outdir / "quality_value_new_additions_tracking.csv")
+    trial_ledger_summary = _collect_trial_ledger_action_summary(theme_outdir / "quality_value_trial_ledger.csv")
     snapshots_df = _load_csv_safely(snapshots_csv)
     outcomes_df = _load_csv_safely(outcomes_csv)
     verification_gate = build_data_quality_gate(outcomes_df, snapshots_df)
@@ -1215,6 +1375,7 @@ def collect_status_metrics(theme_outdir: Path = THEME_OUTDIR, verification_outdi
         "quality_value_scout_draft_rows": int(quality_value_runtime.get("scout_draft_rows", 0) or 0),
         "quality_value_tracking_rows": _count_csv_rows(theme_outdir / "quality_value_tracking.csv"),
         "quality_value_new_additions_tracking_rows": _count_csv_rows(theme_outdir / "quality_value_new_additions_tracking.csv"),
+        "quality_value_trial_ledger_rows": _count_csv_rows(theme_outdir / "quality_value_trial_ledger.csv"),
         "quality_value_candidate_review_rows": _count_csv_rows(theme_outdir / "quality_value_candidate_review.csv"),
         "quality_value_pruning_status": "ready" if (theme_outdir / "quality_value_pruning_report.md").exists() else "missing",
         "verification_runtime_seconds": float(verification_runtime.get("wall_seconds", 0.0) or 0.0),
@@ -1225,6 +1386,7 @@ def collect_status_metrics(theme_outdir: Path = THEME_OUTDIR, verification_outdi
         **action_summary,
         **portfolio_summary,
         **new_additions_summary,
+        **trial_ledger_summary,
     }
 
 
@@ -1283,6 +1445,7 @@ def render_local_status_markdown(
             f"- Quality value similar scout rows: `{metrics.get('quality_value_scout_rows', 0)}`, draft=`{metrics.get('quality_value_scout_draft_rows', 0)}`",
             f"- Quality value lifecycle rows: tracking=`{metrics.get('quality_value_tracking_rows', 0)}`, candidate_review=`{metrics.get('quality_value_candidate_review_rows', 0)}`, pruning=`{metrics.get('quality_value_pruning_status') or 'missing'}`",
             f"- Quality value new-addition rows: `{metrics.get('quality_value_new_additions_tracking_rows', 0)}`",
+            f"- Quality value trial ledger rows: `{metrics.get('quality_value_trial_ledger_rows', 0)}`",
             f"- Quality value runtime: `{metrics.get('quality_value_runtime_seconds', 0.0):.3f}s` ({metrics.get('quality_value_runtime_status') or 'n/a'})"
             + (f", generated `{metrics.get('quality_value_generated_at')}`" if metrics.get("quality_value_generated_at") else ""),
             f"- Verification runtime: `{metrics.get('verification_runtime_seconds', 0.0):.3f}s` ({metrics.get('verification_runtime_status') or 'n/a'})",
@@ -1294,6 +1457,7 @@ def render_local_status_markdown(
             f"- 等轉強: `{', '.join(metrics.get('action_wait_strength_tickers', [])) or 'n/a'}`",
             f"- 過熱先等: `{', '.join(metrics.get('action_cooldown_tickers', [])) or 'n/a'}`",
             f"- 新A追蹤: `{', '.join(metrics.get('new_addition_action_tickers', [])) or 'n/a'}`",
+            f"- 試單追蹤: `{', '.join(metrics.get('trial_ledger_action_tickers', [])) or 'n/a'}`",
             f"- 持股分批落袋: `{', '.join(metrics.get('portfolio_trim_tickers', [])) or 'n/a'}`",
             "",
             "## Key Outputs",
@@ -1311,6 +1475,7 @@ def render_local_status_markdown(
             f"- Quality value watchlist draft: `{theme_outdir_str('quality_value_watchlist_draft.csv')}`",
             f"- Quality value tracking: `{theme_outdir_str('quality_value_tracking.csv')}`",
             f"- Quality value new additions tracking: `{theme_outdir_str('quality_value_new_additions_tracking.md')}`",
+            f"- Quality value trial ledger: `{theme_outdir_str('quality_value_trial_ledger.md')}`",
             f"- Quality value pruning: `{theme_outdir_str('quality_value_pruning_report.md')}`",
             f"- Quality value candidate review: `{theme_outdir_str('quality_value_candidate_review.md')}`",
             f"- Verification report: `{verification_outdir_str('verification_report.md')}`",
@@ -1370,6 +1535,8 @@ def write_local_status_dashboard(
             "quality_value_tracking": str(theme_outdir / "quality_value_tracking.csv"),
             "quality_value_new_additions_tracking": str(theme_outdir / "quality_value_new_additions_tracking.md"),
             "quality_value_new_additions_tracking_csv": str(theme_outdir / "quality_value_new_additions_tracking.csv"),
+            "quality_value_trial_ledger": str(theme_outdir / "quality_value_trial_ledger.md"),
+            "quality_value_trial_ledger_csv": str(theme_outdir / "quality_value_trial_ledger.csv"),
             "quality_value_pruning": str(theme_outdir / "quality_value_pruning_report.md"),
             "quality_value_candidate_review": str(theme_outdir / "quality_value_candidate_review.md"),
             "quality_value_candidate_review_csv": str(theme_outdir / "quality_value_candidate_review.csv"),

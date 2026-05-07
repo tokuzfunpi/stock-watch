@@ -20,6 +20,7 @@ from stock_watch.cli.local_daily import parse_args
 from stock_watch.cli.local_daily import should_run_step
 from stock_watch.cli.local_daily import update_quality_value_tracking
 from stock_watch.cli.local_daily import write_quality_value_new_additions_tracking
+from stock_watch.cli.local_daily import write_quality_value_trial_ledger
 from stock_watch.cli.local_daily import write_shadow_open_not_chase_tracking_outputs
 from stock_watch.cli.local_daily import write_local_status_dashboard
 
@@ -61,13 +62,15 @@ class RunLocalDailyTests(unittest.TestCase):
                 "action_wait_strength_tickers": ["3005.TW 神基"],
                 "action_cooldown_tickers": ["2376.TW 技嘉"],
                 "new_addition_action_tickers": ["3213.TWO 茂訊 可試單"],
+                "trial_ledger_action_tickers": ["3213.TWO 茂訊 active_trial 第一筆 1/3 可研究"],
                 "portfolio_trim_tickers": ["英業達 (2356)"],
             }
         )
 
-        self.assertEqual(len(message.splitlines()), 6)
+        self.assertEqual(len(message.splitlines()), 7)
         self.assertIn("🟢 可試單：6161.TWO 捷波", message)
         self.assertIn("🆕 新A追蹤：3213.TWO 茂訊 可試單", message)
+        self.assertIn("🧪 試單追蹤：3213.TWO 茂訊 active_trial 第一筆 1/3 可研究", message)
         self.assertIn("💼 持股落袋：英業達 (2356)", message)
 
     def test_should_run_step_uses_mode_defaults_and_skip_overrides(self) -> None:
@@ -346,6 +349,44 @@ class RunLocalDailyTests(unittest.TestCase):
         self.assertTrue(tracking_csv_exists)
         self.assertTrue(tracking_md_exists)
 
+    def test_write_quality_value_trial_ledger_tracks_active_simulated_entry(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            ledger_csv = Path(tmpdir) / "quality_value_trial_ledger.csv"
+            ledger_md = Path(tmpdir) / "quality_value_trial_ledger.md"
+            tracking = pd.DataFrame(
+                [
+                    {
+                        "ticker": "3213.TWO",
+                        "name": "茂訊",
+                        "added_date": "2026-05-07",
+                        "days_tracked": 1,
+                        "close": 114.5,
+                        "entry_bias": "分批試單",
+                        "buy_zone_low": 111.92,
+                        "buy_zone_high": 114.50,
+                        "stop_loss": 106.42,
+                        "zone_status": "買區內",
+                        "heat_status": "偏熱",
+                    }
+                ]
+            )
+
+            result = write_quality_value_trial_ledger(
+                tracking,
+                ledger_csv=ledger_csv,
+                ledger_md=ledger_md,
+                trial_tickers=("3213.TWO",),
+            )
+            row = result.iloc[0].to_dict()
+            ledger_csv_exists = ledger_csv.exists()
+            ledger_md_exists = ledger_md.exists()
+
+        self.assertEqual(row["trial_status"], "active_trial")
+        self.assertEqual(row["next_action"], "第一筆 1/3 可研究")
+        self.assertEqual(row["simulated_entry_price"], 114.5)
+        self.assertTrue(ledger_csv_exists)
+        self.assertTrue(ledger_md_exists)
+
     def test_collect_status_metrics_reads_midlong_threshold_gate(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             theme_outdir = Path(tmpdir) / "theme_watchlist_daily"
@@ -499,6 +540,7 @@ class RunLocalDailyTests(unittest.TestCase):
         self.assertIn("3057.TW", markdown)
         self.assertIn("Quality value lifecycle rows", markdown)
         self.assertIn("Quality value new-addition rows", markdown)
+        self.assertIn("Quality value trial ledger rows", markdown)
         self.assertIn("Quality value candidate review", markdown)
         self.assertEqual(payload["mode"], "preopen")
         self.assertEqual(payload["overall_status"], "ok")
@@ -509,6 +551,7 @@ class RunLocalDailyTests(unittest.TestCase):
         self.assertIn("shadow_tracking", payload["outputs"])
         self.assertIn("quality_value_tracking", payload["outputs"])
         self.assertIn("quality_value_new_additions_tracking", payload["outputs"])
+        self.assertIn("quality_value_trial_ledger", payload["outputs"])
         self.assertIn("quality_value_candidate_review", payload["outputs"])
         self.assertEqual(payload["metrics"]["spec_risk_high_rows"], 1)
         self.assertEqual(payload["metrics"]["watchlist_artifact_freshness_status"], "current")

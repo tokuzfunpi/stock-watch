@@ -1,5 +1,5 @@
 # Daily 20D v2.2 Attack Report
-- Generated: 2026-05-07 16:00:03
+- Generated: 2026-05-07 16:07:45
 - Market Regime: 加權指數目前偏多，收在 41933.78，20日漲幅 20.63%，量比 1.0。 量比資料異常，這輪先按中性處理。
 
 ## Top Ranking
