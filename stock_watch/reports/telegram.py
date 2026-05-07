@@ -143,6 +143,30 @@ def build_early_gem_message(
     return "\n".join(lines).strip()
 
 
+def build_simple_early_gem_message(
+    df_rank: pd.DataFrame,
+    *,
+    select_early_gem_candidates: Callable[[pd.DataFrame], pd.DataFrame],
+    watch_price_plan_text: Callable[[pd.Series, str], str],
+) -> str:
+    gem_candidates = select_early_gem_candidates(df_rank).head(3)
+    lines = ["🆕 早期轉強精簡版"]
+    if gem_candidates.empty:
+        lines.append("今天沒有特別適合新手先看的早期轉強標的。")
+        return "\n".join(lines).strip()
+
+    lines.append("定位：剛轉強候選，先研究買點，不追熱。")
+    lines.append("")
+    for _, row in gem_candidates.iterrows():
+        plan = watch_price_plan_text(row, "short")
+        lines.append(
+            f"• {messages.format_ticker_name(row)}\n"
+            f"  5日 {row['ret5_pct']}%｜{messages.volatility_badge_text(row)}｜{row['regime']}\n"
+            f"  買點：{plan}"
+        )
+    return "\n".join(lines).strip()
+
+
 def build_special_etf_message(
     df_rank: pd.DataFrame,
     *,
@@ -168,6 +192,29 @@ def build_special_etf_message(
             f"  5日 {row['ret5_pct']}%｜20日 {row['ret20_pct']}%｜{messages.layer_label(row['layer'])}"
         )
     return "\n".join(lines).strip()
+
+
+def _simple_candidate_lines(
+    candidates: pd.DataFrame,
+    *,
+    watch_type: str,
+    short_term_action_label: Callable[[pd.Series], str],
+    midlong_action_label: Callable[[pd.Series], str],
+    watch_price_plan_text: Callable[[pd.Series, str], str],
+    limit: int = 3,
+) -> list[str]:
+    lines: list[str] = []
+    for _, row in candidates.head(limit).iterrows():
+        lines.append(
+            messages.candidate_card(
+                row,
+                watch_type=watch_type,
+                short_term_action_label=short_term_action_label,
+                midlong_action_label=midlong_action_label,
+                watch_price_plan_text=watch_price_plan_text,
+            )
+        )
+    return lines
 
 
 def build_short_term_message(
@@ -239,6 +286,42 @@ def build_short_term_message(
     return "\n".join(lines).strip()
 
 
+def build_simple_short_term_message(
+    df_rank: pd.DataFrame,
+    market_regime: dict,
+    us_market: dict,
+    *,
+    build_candidate_sets: CandidateSetsBuilder,
+    build_market_scenario: Callable[[dict, dict, pd.DataFrame], dict],
+    effective_short_top_n: Callable[[pd.DataFrame, dict, dict], int],
+    short_term_action_label: Callable[[pd.Series], str],
+    midlong_action_label: Callable[[pd.Series], str],
+    watch_price_plan_text: Callable[[pd.Series, str], str],
+) -> str:
+    short_candidates, _, _, _ = build_candidate_sets(df_rank, market_regime, us_market)
+    scenario = build_market_scenario(market_regime, us_market, df_rank)
+    short_top_n = effective_short_top_n(df_rank, market_regime, us_market)
+    lines = [
+        "⚡ 短線精簡版",
+        f"策略：{subscriber_watchlist_lines(scenario, 'short', short_top_n)[0]}",
+    ]
+    if short_candidates.empty:
+        lines.append("今天沒有夠清楚的短線可小買標的。")
+        return "\n".join(lines).strip()
+
+    lines.append("")
+    lines.extend(
+        _simple_candidate_lines(
+            short_candidates,
+            watch_type="short",
+            short_term_action_label=short_term_action_label,
+            midlong_action_label=midlong_action_label,
+            watch_price_plan_text=watch_price_plan_text,
+        )
+    )
+    return "\n".join(lines).strip()
+
+
 def build_midlong_message(
     df_rank: pd.DataFrame,
     market_regime: dict,
@@ -301,6 +384,42 @@ def build_midlong_message(
                     watch_price_plan_text=watch_price_plan_text,
                 )
             )
+    return "\n".join(lines).strip()
+
+
+def build_simple_midlong_message(
+    df_rank: pd.DataFrame,
+    market_regime: dict,
+    us_market: dict,
+    *,
+    build_candidate_sets: CandidateSetsBuilder,
+    build_market_scenario: Callable[[dict, dict, pd.DataFrame], dict],
+    effective_midlong_top_n: Callable[[pd.DataFrame, dict, dict], int],
+    short_term_action_label: Callable[[pd.Series], str],
+    midlong_action_label: Callable[[pd.Series], str],
+    watch_price_plan_text: Callable[[pd.Series, str], str],
+) -> str:
+    _, _, midlong_candidates, _ = build_candidate_sets(df_rank, market_regime, us_market)
+    scenario = build_market_scenario(market_regime, us_market, df_rank)
+    midlong_top_n = effective_midlong_top_n(df_rank, market_regime, us_market)
+    lines = [
+        "🧱 中長線精簡版",
+        f"策略：{subscriber_watchlist_lines(scenario, 'midlong', midlong_top_n)[0]}",
+    ]
+    if midlong_candidates.empty:
+        lines.append("今天沒有夠穩、適合新手先看的中長線標的。")
+        return "\n".join(lines).strip()
+
+    lines.append("")
+    lines.extend(
+        _simple_candidate_lines(
+            midlong_candidates,
+            watch_type="midlong",
+            short_term_action_label=short_term_action_label,
+            midlong_action_label=midlong_action_label,
+            watch_price_plan_text=watch_price_plan_text,
+        )
+    )
     return "\n".join(lines).strip()
 
 
@@ -398,6 +517,27 @@ def build_macro_message(
             midlong_action_label=midlong_action_label,
         )
     )
+    return "\n".join(lines).strip()
+
+
+def build_simple_macro_message(
+    market_regime: dict,
+    us_market: dict,
+    df_rank: pd.DataFrame | None = None,
+    *,
+    build_market_scenario: Callable[[dict, dict, pd.DataFrame | None], dict],
+) -> str:
+    scenario = build_market_scenario(market_regime, us_market, df_rank)
+    scenario_lines = subscriber_scenario_lines(scenario)
+    lines = [
+        "📌 今日盤勢精簡版",
+        scenario_lines[0],
+        scenario_lines[1],
+        "",
+        f"台股：{_compact_text(market_regime.get('comment', ''), limit=64)}",
+        f"美股：{_compact_text(us_market.get('summary', ''), limit=64)}",
+        f"重點：{scenario['focus']}",
+    ]
     return "\n".join(lines).strip()
 
 

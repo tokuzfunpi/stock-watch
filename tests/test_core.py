@@ -2620,6 +2620,69 @@ class PushMessageTests(unittest.TestCase):
         sent_messages = [call.args[0] for call in send_mock.call_args_list]
         self.assertTrue(all("ETF / 債券觀察" not in msg for msg in sent_messages))
 
+    def test_main_sends_four_simple_watchlist_messages_to_simple_audience(self) -> None:
+        df = pd.DataFrame(
+            [
+                {
+                    "rank": 1,
+                    "ticker": "TEST1.TW",
+                    "name": "Test One",
+                    "group": "theme",
+                    "layer": "short_attack",
+                    "grade": "A",
+                    "setup_score": 8,
+                    "risk_score": 2,
+                    "ret5_pct": 9.0,
+                    "ret10_pct": 12.0,
+                    "ret20_pct": 15.0,
+                    "volume_ratio20": 1.6,
+                    "signals": "ACCEL,TREND",
+                    "rank_change": 1,
+                    "setup_change": 1,
+                    "status_change": "UP",
+                    "regime": "轉強速度有出來",
+                    "date": "2026-04-22",
+                    "close": 100.0,
+                    "spec_risk_label": "正常",
+                    "atr_pct": 4.8,
+                    "volatility_tag": "活潑",
+                }
+            ]
+        )
+        market_regime = {"comment": "加權指數目前偏多", "ret20_pct": 12.0, "volume_ratio20": 1.2, "is_bullish": True}
+        us_market = {"summary": "美股偏強"}
+
+        with patch("stock_watch.workflows.daily_watchlist.run_state.load_last_success_date", return_value=""), patch(
+            "stock_watch.workflows.daily_watchlist.run_state.current_run_signature", return_value="sig"
+        ), patch("daily_theme_watchlist.get_market_regime", return_value=market_regime), patch(
+            "daily_theme_watchlist.get_us_market_reference", return_value=us_market
+        ), patch(
+            "daily_theme_watchlist.prewarm_watchlist_indicator_cache"
+        ), patch("daily_theme_watchlist.run_watchlist", return_value=df), patch(
+            "daily_theme_watchlist.run_backtest_dual", return_value=(None, None)
+        ), patch("daily_theme_watchlist.upsert_alert_tracking"), patch(
+            "stock_watch.workflows.daily_watchlist._save_reports"
+        ), patch("stock_watch.workflows.daily_watchlist.run_state.build_rank_state", return_value="state"), patch(
+            "stock_watch.workflows.daily_watchlist.run_state.load_last_state", return_value=""
+        ), patch("daily_theme_watchlist.should_alert", return_value=True), patch(
+            "stock_watch.workflows.daily_watchlist.run_state.save_last_state"
+        ), patch("stock_watch.workflows.daily_watchlist.run_state.save_last_success_date"), patch(
+            "daily_theme_watchlist.TELEGRAM_SIMPLE_CHAT_IDS",
+            [775],
+        ), patch("daily_theme_watchlist.send_telegram_message") as send_mock, patch("daily_theme_watchlist.logger"):
+            result = watchlist_main()
+
+        self.assertEqual(result, 0)
+        self.assertEqual(send_mock.call_count, 8)
+        simple_calls = send_mock.call_args_list[4:]
+        self.assertTrue(all(call.kwargs.get("chat_ids") == [775] for call in simple_calls))
+        simple_messages = [call.args[0] for call in simple_calls]
+        self.assertIn("今日盤勢精簡版", simple_messages[0])
+        self.assertIn("短線精簡版", simple_messages[1])
+        self.assertIn("早期轉強精簡版", simple_messages[2])
+        self.assertIn("中長線精簡版", simple_messages[3])
+        self.assertTrue(all("ETF / 債券觀察" not in msg for msg in simple_messages))
+
 
 class SplitMessageTests(unittest.TestCase):
     def test_split_message_respects_limit(self) -> None:
