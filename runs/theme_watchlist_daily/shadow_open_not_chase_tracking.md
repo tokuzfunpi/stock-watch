@@ -1,5 +1,5 @@
 # 開高不追 Daily Tracking
-- Generated: 2026-05-08 09:11:40
+- Generated: 2026-05-08 09:19:48
 - Scope: `開高不追` / `1D short` / shadow-only daily tracking
 - Recent signal window: `2026-05-05 -> 2026-05-07` (`3` dates)
 
