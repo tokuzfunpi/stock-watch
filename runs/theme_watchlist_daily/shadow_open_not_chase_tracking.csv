@@ -1,1 +1,5 @@
 ﻿signal_date,ticker,name,rank,scenario_label,market_heat,spec_risk_bucket,shadow_status,shadow_eligible,action_label,outcome_status_1d,realized_ret_pct_1d,matured_1d,win_1d
+2026-05-05,2374.TW,佳能,4,高檔震盪盤,hot,watch,observe_only,False,開高不追,ok,-2.2222259898244556,True,False
+2026-05-05,5386.TWO,青雲,5,高檔震盪盤,hot,watch,observe_only,False,開高不追,,,False,False
+2026-05-04,2374.TW,佳能,4,高檔震盪盤,hot,watch,observe_only,False,開高不追,ok,-1.2195121951219523,True,False
+2026-05-04,5386.TWO,青雲,5,高檔震盪盤,hot,watch,observe_only,False,開高不追,ok,9.92462311557789,True,True

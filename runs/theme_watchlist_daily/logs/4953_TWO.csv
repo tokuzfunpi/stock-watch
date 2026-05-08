@@ -1,4 +1,4 @@
 ﻿date,ticker,name,group,layer,close,ret1_pct,ret5_pct,ret10_pct,ret20_pct,volume,avg_vol20,volume_ratio20,ma20,ma60,ma120,drawdown120_pct,bias20_pct,setup_score,risk_score,signals,score_band,regime,spec_risk_score,spec_risk_label,spec_risk_subtype,spec_risk_note,spec_risk_flags,spec_price_action_score,spec_crowding_score,spec_extension_score,spec_structure_score,atr_pct,volatility_tag
 2026-05-06,4953.TWO,緯軟,satellite,quality_value,123.5,1.23,2.07,0.41,7.39,952046,415519,2.29,120.25,116.93,122.07,-9.85,2.7,8,1,NONE,進攻優勢區,還在觀察,1,正常,正常,爆量、走勢與訊號不匹配,"爆量,走勢與訊號不匹配",0,1,0,1,2.81,標準
-2026-05-07,4953.TWO,緯軟,satellite,quality_value,122.5,-0.81,3.38,-1.61,2.08,412353,394158,1.05,120.38,116.84,122.04,-10.58,1.77,6,0,NONE,偏強可追蹤,還在觀察,0,正常,正常,結構相對正常,,0,0,0,0,2.83,標準
 2026-05-08,4953.TWO,緯軟,satellite,quality_value,122.5,0.0,2.94,0.41,5.15,9000,373984,0.02,120.67,116.81,122.04,-10.58,1.51,7,0,NONE,偏強可追蹤,還在觀察,0,正常,正常,結構相對正常,,0,0,0,0,2.54,標準
+2026-05-07,4953.TWO,緯軟,satellite,quality_value,122.5,-0.81,3.38,-1.61,2.08,412353,394158,1.05,120.38,116.84,122.04,-10.58,1.77,6,0,NONE,偏強可追蹤,還在觀察,0,正常,正常,結構相對正常,,0,0,0,0,2.83,標準

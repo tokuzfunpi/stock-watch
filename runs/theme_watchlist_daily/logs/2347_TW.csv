@@ -1,4 +1,4 @@
 ﻿date,ticker,name,group,layer,close,ret1_pct,ret5_pct,ret10_pct,ret20_pct,volume,avg_vol20,volume_ratio20,ma20,ma60,ma120,drawdown120_pct,bias20_pct,setup_score,risk_score,signals,score_band,regime,spec_risk_score,spec_risk_label,spec_risk_subtype,spec_risk_note,spec_risk_flags,spec_price_action_score,spec_crowding_score,spec_extension_score,spec_structure_score,atr_pct,volatility_tag
 2026-05-06,2347.TW,聯強,satellite,quality_value,84.5,2.8,2.42,-0.35,7.23,4931584,5276647,0.93,82.42,75.5,68.17,-0.35,2.52,6,1,NONE,偏強可追蹤,還在觀察,1,正常,正常,高檔無回檔,高檔無回檔,0,0,1,0,2.7,標準
-2026-05-07,2347.TW,聯強,satellite,quality_value,83.9,-0.71,0.72,-0.12,3.45,5021339,5070676,0.99,82.56,75.79,68.39,-1.06,1.62,6,1,NONE,偏強可追蹤,還在觀察,1,正常,正常,高檔無回檔,高檔無回檔,0,0,1,0,2.75,標準
 2026-05-08,2347.TW,聯強,satellite,quality_value,83.9,0.0,1.7,1.94,3.45,244000,4883219,0.05,82.7,76.07,68.63,-1.06,1.44,6,1,NONE,偏強可追蹤,還在觀察,1,正常,正常,高檔無回檔,高檔無回檔,0,0,1,0,2.71,標準
+2026-05-07,2347.TW,聯強,satellite,quality_value,83.9,-0.71,0.72,-0.12,3.45,5021339,5070676,0.99,82.56,75.79,68.39,-1.06,1.62,6,1,NONE,偏強可追蹤,還在觀察,1,正常,正常,高檔無回檔,高檔無回檔,0,0,1,0,2.75,標準

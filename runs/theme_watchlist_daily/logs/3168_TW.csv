@@ -1,4 +1,4 @@
 ﻿date,ticker,name,group,layer,close,ret1_pct,ret5_pct,ret10_pct,ret20_pct,volume,avg_vol20,volume_ratio20,ma20,ma60,ma120,drawdown120_pct,bias20_pct,setup_score,risk_score,signals,score_band,regime,spec_risk_score,spec_risk_label,spec_risk_subtype,spec_risk_note,spec_risk_flags,spec_price_action_score,spec_crowding_score,spec_extension_score,spec_structure_score,atr_pct,volatility_tag
 2026-05-06,3168.TW,眾福科,satellite,quality_value,45.8,0.0,4.45,4.21,10.9,145970,83152,1.76,44.62,41.98,42.38,-5.57,2.65,11,0,TREND,進攻優勢區,中段延續中,0,正常,正常,結構相對正常,,0,0,0,0,2.95,標準
-2026-05-07,3168.TW,眾福科,satellite,quality_value,44.6,-2.62,2.41,-0.45,5.81,46338,83622,0.55,44.74,42.05,42.39,-8.04,-0.31,5,0,NONE,開始轉強,還在觀察,0,正常,正常,結構相對正常,,0,0,0,0,2.98,標準
 2026-05-08,3168.TW,眾福科,satellite,quality_value,44.6,0.0,1.83,1.36,5.19,1000,82207,0.01,44.85,42.12,42.4,-8.04,-0.56,5,0,NONE,開始轉強,還在觀察,0,正常,正常,結構相對正常,,0,0,0,0,2.66,標準
+2026-05-07,3168.TW,眾福科,satellite,quality_value,44.6,-2.62,2.41,-0.45,5.81,46338,83622,0.55,44.74,42.05,42.39,-8.04,-0.31,5,0,NONE,開始轉強,還在觀察,0,正常,正常,結構相對正常,,0,0,0,0,2.98,標準
