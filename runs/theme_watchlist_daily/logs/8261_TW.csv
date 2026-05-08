@@ -1,4 +1,4 @@
 ﻿date,ticker,name,group,layer,close,ret1_pct,ret5_pct,ret10_pct,ret20_pct,volume,avg_vol20,volume_ratio20,ma20,ma60,ma120,drawdown120_pct,bias20_pct,setup_score,risk_score,signals,score_band,regime,spec_risk_score,spec_risk_label,spec_risk_subtype,spec_risk_note,spec_risk_flags,spec_price_action_score,spec_crowding_score,spec_extension_score,spec_structure_score,atr_pct,volatility_tag
 2026-05-06,8261.TW,富鼎,satellite,quality_value,122.0,-2.01,2.95,-4.69,17.31,3314365,4395523,0.75,117.72,105.36,98.7,-4.69,3.63,6,1,TREND,偏強可追蹤,中段延續中,2,正常,正常,波動劇烈、震幅過大、高檔無回檔,"波動劇烈,震幅過大,高檔無回檔",0,2,1,0,6.32,活潑
 2026-05-07,8261.TW,富鼎,satellite,quality_value,127.5,4.51,7.14,-0.39,17.51,6608601,4525131,1.46,118.67,105.89,98.92,-0.39,7.44,8,1,TREND,進攻優勢區,中段延續中,0,正常,正常,震幅過大、高檔無回檔,"震幅過大,高檔無回檔",0,1,1,0,5.71,活潑
-2026-05-08,8261.TW,富鼎,satellite,quality_value,124.0,-3.12,4.64,5.98,14.81,3006369,4640462,0.65,119.5,106.37,99.15,-3.12,3.77,7,1,TREND,偏強可追蹤,中段延續中,1,正常,正常,震幅過大、高檔無回檔,"震幅過大,高檔無回檔",0,1,1,0,5.56,活潑
+2026-05-08,8261.TW,富鼎,satellite,quality_value,126.0,-1.56,6.33,7.69,16.67,4685897,4724438,0.99,119.6,106.4,99.17,-1.56,5.35,8,1,TREND,進攻優勢區,中段延續中,0,正常,正常,震幅過大、高檔無回檔,"震幅過大,高檔無回檔",0,1,1,0,5.47,活潑

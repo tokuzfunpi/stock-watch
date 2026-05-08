@@ -1,34 +1,34 @@
 # Runtime Metrics
-- Generated: 2026-05-08 11:25:34
+- Generated: 2026-05-08 14:46:10
 - Status: `ok`
 
 ## Steps
 
 | Step | Seconds |
 | --- | --- |
-| market_regime | 0.1896 |
-| us_market | 0.5487 |
-| cache_warmup | 17.1304 |
-| watchlist | 0.4072 |
-| backtest | 31.2431 |
-| candidate_sets | 0.1615 |
-| reports | 0.4597 |
-| shadow_observation | 0.0148 |
-| alert_tracking | 0.0685 |
+| market_regime | 0.7907 |
+| us_market | 0.0154 |
+| cache_warmup | 34.9155 |
+| watchlist | 0.1586 |
+| backtest | 12.8451 |
+| candidate_sets | 0.0633 |
+| reports | 0.1780 |
+| shadow_observation | 0.0073 |
+| alert_tracking | 0.0273 |
 | should_alert | 0.0000 |
-| notifications | 11.3584 |
-| persist_state | 0.0002 |
-| persist_success | 0.0002 |
+| notifications | 13.0944 |
+| persist_state | 0.0006 |
+| persist_success | 0.0005 |
 
-- Total tracked seconds: `61.582`
-- Wall-clock seconds: `61.612`
+- Total tracked seconds: `62.096`
+- Wall-clock seconds: `62.109`
 
 ## Cache
 
-- History cache: `0` exact hit / `0` disk hit / `44` superset hit / `98` miss
+- History cache: `0` exact hit / `4` disk hit / `44` superset hit / `94` miss
 - Indicator cache: `93` exact hit / `93` superset hit / `98` miss
 
 ## Backtest
 
 - Mode: `full_rebuild`
-- Scanned cutoffs: `85310`
+- Scanned cutoffs: `85313`
