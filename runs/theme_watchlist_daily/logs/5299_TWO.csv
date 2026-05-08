@@ -1,4 +1,4 @@
 ﻿date,ticker,name,group,layer,close,ret1_pct,ret5_pct,ret10_pct,ret20_pct,volume,avg_vol20,volume_ratio20,ma20,ma60,ma120,drawdown120_pct,bias20_pct,setup_score,risk_score,signals,score_band,regime,spec_risk_score,spec_risk_label,spec_risk_subtype,spec_risk_note,spec_risk_flags,spec_price_action_score,spec_crowding_score,spec_extension_score,spec_structure_score,atr_pct,volatility_tag
 2026-05-06,5299.TWO,杰力,satellite,quality_value,92.3,-0.97,5.13,9.75,17.13,335581,335959,1.0,85.07,78.85,75.85,-0.97,8.5,8,2,TREND,進攻優勢區,中段延續中,0,正常,正常,高檔無回檔,高檔無回檔,0,0,1,0,4.17,活潑
-2026-05-08,5299.TWO,杰力,satellite,quality_value,91.0,-1.73,2.36,7.44,13.47,22000,334072,0.07,86.28,79.38,76.08,-2.36,5.47,7,1,TREND,偏強可追蹤,中段延續中,0,正常,正常,高檔無回檔,高檔無回檔,0,0,1,0,4.06,活潑
 2026-05-07,5299.TWO,杰力,satellite,quality_value,92.9,0.65,5.69,5.45,17.3,204685,336277,0.61,85.75,79.12,75.97,-0.32,8.33,7,2,TREND,偏強可追蹤,中段延續中,0,正常,正常,高檔無回檔,高檔無回檔,0,0,1,0,4.13,活潑
+2026-05-08,5299.TWO,杰力,satellite,quality_value,91.7,-0.97,3.15,8.26,14.34,185250,342234,0.54,86.31,79.39,76.09,-1.61,6.24,7,1,TREND,偏強可追蹤,中段延續中,0,正常,正常,高檔無回檔,高檔無回檔,0,0,1,0,4.07,活潑

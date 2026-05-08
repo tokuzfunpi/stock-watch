@@ -1,4 +1,4 @@
 ﻿date,ticker,name,group,layer,close,ret1_pct,ret5_pct,ret10_pct,ret20_pct,volume,avg_vol20,volume_ratio20,ma20,ma60,ma120,drawdown120_pct,bias20_pct,setup_score,risk_score,signals,score_band,regime,spec_risk_score,spec_risk_label,spec_risk_subtype,spec_risk_note,spec_risk_flags,spec_price_action_score,spec_crowding_score,spec_extension_score,spec_structure_score,atr_pct,volatility_tag
 2026-05-06,5490.TWO,同亨,satellite,quality_value,28.05,1.81,4.47,4.47,6.05,980070,522159,1.88,26.75,26.6,27.05,-7.27,4.84,10,1,NONE,進攻優勢區,還在觀察,1,正常,正常,爆量、走勢與訊號不匹配,"爆量,走勢與訊號不匹配",0,1,0,1,2.83,標準
-2026-05-08,5490.TWO,同亨,satellite,quality_value,28.6,0.35,4.57,7.52,7.72,10000,540016,0.02,26.94,26.69,27.03,-3.87,6.17,7,1,NONE,偏強可追蹤,還在觀察,1,正常,正常,高檔無回檔,高檔無回檔,0,0,1,0,2.97,標準
 2026-05-07,5490.TWO,同亨,satellite,quality_value,28.7,2.32,6.3,3.24,6.69,987581,552785,1.79,26.84,26.64,27.04,-4.01,6.91,10,1,NONE,進攻優勢區,還在觀察,0,正常,正常,高檔無回檔,高檔無回檔,0,0,1,0,2.97,標準
+2026-05-08,5490.TWO,同亨,satellite,quality_value,28.1,-1.4,2.74,5.64,5.84,254936,552263,0.46,26.91,26.68,27.02,-5.55,4.41,7,0,BASE,偏強可追蹤,低檔慢慢墊高,0,正常,正常,結構相對正常,,0,0,0,0,3.18,標準

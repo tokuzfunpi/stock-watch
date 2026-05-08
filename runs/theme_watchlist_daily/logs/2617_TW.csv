@@ -1,4 +1,4 @@
 ﻿date,ticker,name,group,layer,close,ret1_pct,ret5_pct,ret10_pct,ret20_pct,volume,avg_vol20,volume_ratio20,ma20,ma60,ma120,drawdown120_pct,bias20_pct,setup_score,risk_score,signals,score_band,regime,spec_risk_score,spec_risk_label,spec_risk_subtype,spec_risk_note,spec_risk_flags,spec_price_action_score,spec_crowding_score,spec_extension_score,spec_structure_score,atr_pct,volatility_tag
 2026-05-06,2617.TW,台航,satellite,quality_value,29.5,0.68,-0.51,-2.16,-3.28,609139,719946,0.85,30.03,30.73,30.66,-11.68,-1.76,5,0,BASE,開始轉強,低檔慢慢墊高,0,正常,正常,結構相對正常,,0,0,0,0,1.71,穩健
-2026-05-08,2617.TW,台航,satellite,quality_value,29.65,-0.5,1.02,0.17,-2.31,70000,728589,0.1,29.95,30.66,30.67,-11.23,-1.01,5,0,BASE,開始轉強,低檔慢慢墊高,0,正常,正常,結構相對正常,,0,0,0,0,1.57,穩健
 2026-05-07,2617.TW,台航,satellite,quality_value,29.7,0.68,-0.34,-1.0,-2.94,811862,733122,1.11,29.98,30.69,30.67,-11.08,-0.94,4,0,NONE,開始轉強,還在觀察,0,正常,正常,結構相對正常,,0,0,0,0,1.62,穩健
+2026-05-08,2617.TW,台航,satellite,quality_value,29.4,-1.34,0.17,-0.68,-3.13,826240,766401,1.08,29.94,30.66,30.67,-11.98,-1.8,4,0,NONE,開始轉強,還在觀察,0,正常,正常,結構相對正常,,0,0,0,0,1.65,穩健

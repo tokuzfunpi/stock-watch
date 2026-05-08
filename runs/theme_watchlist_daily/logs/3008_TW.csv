@@ -1,4 +1,4 @@
 ﻿date,ticker,name,group,layer,close,ret1_pct,ret5_pct,ret10_pct,ret20_pct,volume,avg_vol20,volume_ratio20,ma20,ma60,ma120,drawdown120_pct,bias20_pct,setup_score,risk_score,signals,score_band,regime,spec_risk_score,spec_risk_label,spec_risk_subtype,spec_risk_note,spec_risk_flags,spec_price_action_score,spec_crowding_score,spec_extension_score,spec_structure_score,atr_pct,volatility_tag
 2026-05-06,3008.TW,大立光,satellite,quality_value,2520.0,-0.98,-2.33,-4.73,16.13,1399823,1764748,0.79,2555.25,2378.5,2299.94,-10.64,-1.38,5,0,NONE,開始轉強,還在觀察,1,正常,正常,震幅過大,震幅過大,0,1,0,0,4.85,活潑
-2026-05-08,3008.TW,大立光,satellite,quality_value,2585.0,0.39,2.78,4.02,13.38,69000,1734924,0.04,2585.25,2385.15,2306.57,-8.33,-0.01,5,0,NONE,開始轉強,還在觀察,0,正常,正常,結構相對正常,,0,0,0,0,3.87,標準
 2026-05-07,3008.TW,大立光,satellite,quality_value,2545.0,0.99,-1.93,-1.55,11.62,755971,1749462,0.43,2568.5,2381.12,2302.84,-9.75,-0.91,4,0,NONE,開始轉強,還在觀察,1,正常,正常,震幅過大,震幅過大,0,1,0,0,4.6,活潑
+2026-05-08,3008.TW,大立光,satellite,quality_value,2555.0,-0.78,1.59,2.82,12.06,932666,1778107,0.52,2583.75,2384.65,2306.32,-9.4,-1.11,5,0,NONE,開始轉強,還在觀察,1,正常,正常,震幅過大,震幅過大,0,1,0,0,4.1,活潑

@@ -1,4 +1,4 @@
 ﻿date,ticker,name,group,layer,close,ret1_pct,ret5_pct,ret10_pct,ret20_pct,volume,avg_vol20,volume_ratio20,ma20,ma60,ma120,drawdown120_pct,bias20_pct,setup_score,risk_score,signals,score_band,regime,spec_risk_score,spec_risk_label,spec_risk_subtype,spec_risk_note,spec_risk_flags,spec_price_action_score,spec_crowding_score,spec_extension_score,spec_structure_score,atr_pct,volatility_tag
 2026-05-06,5225.TW,東科-KY,satellite,quality_value,76.9,-1.03,2.53,-1.28,-3.15,247849,310268,0.8,77.54,83.54,89.23,-25.69,-0.83,5,0,"BASE,PULLBACK",開始轉強,低檔慢慢墊高,0,正常,正常,結構相對正常,,0,0,0,0,1.98,穩健
-2026-05-08,5225.TW,東科-KY,satellite,quality_value,76.0,-1.17,-0.78,-1.81,-4.4,63000,302787,0.21,77.21,82.98,88.82,-26.56,-1.57,5,0,"BASE,PULLBACK",開始轉強,低檔慢慢墊高,0,正常,正常,結構相對正常,,0,0,0,0,1.88,穩健
 2026-05-07,5225.TW,東科-KY,satellite,quality_value,76.8,-0.13,0.0,-1.66,-4.12,186297,307391,0.61,77.38,83.26,89.03,-25.79,-0.75,5,0,"BASE,PULLBACK",開始轉強,低檔慢慢墊高,0,正常,正常,結構相對正常,,0,0,0,0,1.87,穩健
+2026-05-08,5225.TW,東科-KY,satellite,quality_value,74.7,-2.86,-2.48,-3.49,-6.04,422945,320784,1.32,77.14,82.96,88.81,-27.82,-3.17,5,0,PULLBACK,開始轉強,高檔拉回整理,0,正常,正常,結構相對正常,,0,0,0,0,2.09,標準

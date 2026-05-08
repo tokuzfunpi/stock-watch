@@ -1,4 +1,4 @@
 ﻿date,ticker,name,group,layer,close,ret1_pct,ret5_pct,ret10_pct,ret20_pct,volume,avg_vol20,volume_ratio20,ma20,ma60,ma120,drawdown120_pct,bias20_pct,setup_score,risk_score,signals,score_band,regime,spec_risk_score,spec_risk_label,spec_risk_subtype,spec_risk_note,spec_risk_flags,spec_price_action_score,spec_crowding_score,spec_extension_score,spec_structure_score,atr_pct,volatility_tag
 2026-05-06,5288.TW,豐祥-KY,satellite,quality_value,156.0,-8.77,-8.24,-9.57,11.43,904768,411597,2.2,163.4,148.58,143.38,-11.36,-4.53,5,1,NONE,開始轉強,還在觀察,3,投機偏高,資金擁擠型,爆量、震幅過大、走勢與訊號不匹配,"爆量,震幅過大,走勢與訊號不匹配",0,2,0,1,5.2,活潑
-2026-05-08,5288.TW,豐祥-KY,satellite,quality_value,152.5,-0.65,-8.13,-11.34,6.27,2000,410112,0.0,164.45,148.85,143.85,-13.35,-7.27,3,0,NONE,一般觀察,還在觀察,1,正常,正常,震幅過大,震幅過大,0,1,0,0,4.94,活潑
 2026-05-07,5288.TW,豐祥-KY,satellite,quality_value,155.0,-0.64,-9.09,-11.93,9.54,136741,414398,0.33,164.07,148.75,143.62,-11.93,-5.53,3,0,NONE,一般觀察,還在觀察,1,正常,正常,震幅過大,震幅過大,0,1,0,0,5.02,活潑
+2026-05-08,5288.TW,豐祥-KY,satellite,quality_value,153.0,-0.33,-7.83,-11.05,6.62,70114,413517,0.17,164.47,148.86,143.85,-13.07,-6.98,3,0,NONE,一般觀察,還在觀察,1,正常,正常,震幅過大,震幅過大,0,1,0,0,5.0,活潑

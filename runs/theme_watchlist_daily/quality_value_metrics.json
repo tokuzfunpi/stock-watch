@@ -1,11 +1,11 @@
 {
-  "generated_at": "2026-05-08 10:21:22",
+  "generated_at": "2026-05-08 03:25:34",
   "status": "ok",
   "rows": 49,
-  "low_price_rows": 10,
-  "quality_value_rows": 39,
+  "low_price_rows": 9,
+  "quality_value_rows": 40,
   "fundamental_rows": 40,
   "scout_rows": 14,
   "scout_draft_rows": 13,
-  "wall_seconds": 32.552
+  "wall_seconds": 22.509
 }

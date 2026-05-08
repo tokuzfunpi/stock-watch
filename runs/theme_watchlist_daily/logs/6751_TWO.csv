@@ -1,4 +1,4 @@
 ﻿date,ticker,name,group,layer,close,ret1_pct,ret5_pct,ret10_pct,ret20_pct,volume,avg_vol20,volume_ratio20,ma20,ma60,ma120,drawdown120_pct,bias20_pct,setup_score,risk_score,signals,score_band,regime,spec_risk_score,spec_risk_label,spec_risk_subtype,spec_risk_note,spec_risk_flags,spec_price_action_score,spec_crowding_score,spec_extension_score,spec_structure_score,atr_pct,volatility_tag
 2026-05-06,6751.TWO,智聯服務,satellite,quality_value,51.3,-3.02,-1.54,1.38,1.79,36816,45759,0.8,51.67,53.9,54.91,-26.29,-0.72,3,0,PULLBACK,一般觀察,高檔拉回整理,0,正常,正常,結構相對正常,,0,0,0,0,2.47,標準
-2026-05-08,6751.TWO,智聯服務,satellite,quality_value,50.5,-0.98,-2.51,-2.88,-2.7,6000,42120,0.14,51.62,53.35,55.04,-27.44,-2.17,3,0,PULLBACK,一般觀察,高檔拉回整理,0,正常,正常,結構相對正常,,0,0,0,0,2.33,標準
 2026-05-07,6751.TWO,智聯服務,satellite,quality_value,51.0,-0.58,-1.73,-2.49,0.79,24081,44923,0.54,51.69,53.62,54.97,-26.72,-1.33,3,0,PULLBACK,一般觀察,高檔拉回整理,0,正常,正常,結構相對正常,,0,0,0,0,2.37,標準
+2026-05-08,6751.TWO,智聯服務,satellite,quality_value,50.6,-0.78,-2.32,-2.69,-2.5,40215,43830,0.92,51.62,53.36,55.04,-27.3,-1.99,3,0,PULLBACK,一般觀察,高檔拉回整理,0,正常,正常,結構相對正常,,0,0,0,0,2.38,標準

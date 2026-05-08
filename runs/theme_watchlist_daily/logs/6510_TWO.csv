@@ -1,4 +1,4 @@
 ﻿date,ticker,name,group,layer,close,ret1_pct,ret5_pct,ret10_pct,ret20_pct,volume,avg_vol20,volume_ratio20,ma20,ma60,ma120,drawdown120_pct,bias20_pct,setup_score,risk_score,signals,score_band,regime,spec_risk_score,spec_risk_label,spec_risk_subtype,spec_risk_note,spec_risk_flags,spec_price_action_score,spec_crowding_score,spec_extension_score,spec_structure_score,atr_pct,volatility_tag
 2026-05-06,6510.TWO,精測,satellite,quality_value,3810.0,4.1,2.83,-7.19,14.59,1160555,965796,1.2,3665.0,3598.83,2840.92,-9.29,3.96,6,0,TREND,偏強可追蹤,中段延續中,1,正常,正常,波動劇烈、震幅過大,"波動劇烈,震幅過大",0,2,0,0,8.47,劇烈
-2026-05-08,6510.TWO,精測,satellite,quality_value,3685.0,-1.21,7.12,-4.29,8.22,28000,952344,0.03,3693.25,3617.17,2875.46,-12.26,-0.22,5,0,NONE,開始轉強,還在觀察,2,正常,正常,波動劇烈、震幅過大,"波動劇烈,震幅過大",0,2,0,0,8.05,劇烈
 2026-05-07,6510.TWO,精測,satellite,quality_value,3690.0,-2.89,1.65,-12.14,7.42,645638,967867,0.67,3677.25,3607.58,2857.88,-12.14,0.35,4,0,NONE,開始轉強,還在觀察,2,正常,正常,波動劇烈、震幅過大,"波動劇烈,震幅過大",0,2,0,0,8.35,劇烈
+2026-05-08,6510.TWO,精測,satellite,quality_value,3720.0,-0.27,8.14,-3.38,9.25,527836,977336,0.54,3695.0,3617.75,2875.75,-11.43,0.68,8,0,TREND,進攻優勢區,中段延續中,0,正常,正常,波動劇烈、震幅過大,"波動劇烈,震幅過大",0,2,0,0,8.3,劇烈
