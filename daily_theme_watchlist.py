@@ -138,13 +138,22 @@ _CACHE_STATS = {
 
 
 def parse_chat_ids(raw: str) -> list[int]:
-    tokens = re.split(r"[\s,]+", str(raw or "").strip())
+    cleaned_lines: list[str] = []
+    for line in str(raw or "").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        cleaned_lines.append(stripped.split("#", 1)[0].strip())
+    tokens = re.split(r"[\s,]+", "\n".join(cleaned_lines).strip())
     chat_ids: list[int] = []
     seen: set[int] = set()
     for token in tokens:
         if not token:
             continue
-        chat_id = int(token)
+        try:
+            chat_id = int(token)
+        except Exception:
+            continue
         if chat_id in seen:
             continue
         seen.add(chat_id)

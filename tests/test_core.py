@@ -1074,6 +1074,9 @@ class TelegramChatIdTests(unittest.TestCase):
     def test_parse_chat_ids_deduplicates_recipients(self) -> None:
         self.assertEqual(parse_chat_ids("123,123\n-1001 123 -1001"), [123, -1001])
 
+    def test_parse_chat_ids_ignores_comments_and_invalid_tokens(self) -> None:
+        self.assertEqual(parse_chat_ids("# comment only\n123 # ok\n# 456\n-1001, # trailing comma\nbad\n"), [123, -1001])
+
     def test_load_telegram_chat_ids_prefers_env(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             chat_ids_path = Path(tmpdir) / "chat_ids"
