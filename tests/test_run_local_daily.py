@@ -273,9 +273,13 @@ class RunLocalDailyTests(unittest.TestCase):
             theme_outdir.mkdir(parents=True, exist_ok=True)
             verification_outdir.mkdir(parents=True, exist_ok=True)
 
-            pd.DataFrame([{"ticker": "2330.TW", "spec_risk_score": 0, "spec_risk_label": "正常", "rank": 1}]).to_csv(
-                theme_outdir / "daily_rank.csv", index=False
-            )
+            pd.DataFrame(
+                [
+                    {"ticker": "2330.TW", "spec_risk_score": 0, "spec_risk_label": "正常", "rank": 1, "close": 100.0, "avg_vol20": 10_000_000},
+                    {"ticker": "3005.TW", "spec_risk_score": 0, "spec_risk_label": "正常", "rank": 2, "close": 100.0, "avg_vol20": 100_000},
+                    {"ticker": "6161.TWO", "spec_risk_score": 0, "spec_risk_label": "正常", "rank": 3, "close": 100.0, "avg_vol20": 10_000_000},
+                ]
+            ).to_csv(theme_outdir / "daily_rank.csv", index=False)
             (theme_outdir / "daily_report.md").write_text("# report\n", encoding="utf-8")
             (theme_outdir / "runtime_metrics.json").write_text(
                 json.dumps({"status": "ok", "wall_seconds": 1.234}),
@@ -336,6 +340,7 @@ class RunLocalDailyTests(unittest.TestCase):
         self.assertEqual(metrics["action_wait_strength_tickers"], [])
         self.assertTrue(metrics["action_low_liquidity_tickers"])
         self.assertIn("神基 (3005.TW)", metrics["action_low_liquidity_tickers"][0])
+        self.assertIn("流動性低", metrics["action_low_liquidity_tickers"][0])
         self.assertIn("量縮", metrics["action_low_liquidity_tickers"][0])
 
     def test_update_quality_value_tracking_writes_lifecycle_and_review_outputs(self) -> None:

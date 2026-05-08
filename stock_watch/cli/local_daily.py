@@ -792,6 +792,7 @@ def _apply_action_price_label(text: str, price_label: str) -> str:
 
 def _collect_quality_value_action_summary(entry_plan_csv: Path) -> dict[str, list[str]]:
     volume_ratio_threshold = 0.9
+    turnover_threshold_m = 30.0
     if not entry_plan_csv.exists():
         return {
             "action_trial_tickers": [],
@@ -827,6 +828,20 @@ def _collect_quality_value_action_summary(entry_plan_csv: Path) -> dict[str, lis
             if not work_candidates.empty:
                 volume_ratio_by_ticker = work_candidates.set_index("ticker")["_volume_ratio20"].astype(float).to_dict()
 
+    daily_rank_csv = entry_plan_csv.parent / "daily_rank.csv"
+    turnover_by_ticker_m: dict[str, float] = {}
+    if daily_rank_csv.exists():
+        daily_rank = _load_csv_safely(daily_rank_csv)
+        if not daily_rank.empty and "ticker" in daily_rank.columns and "avg_vol20" in daily_rank.columns and "close" in daily_rank.columns:
+            work_rank = daily_rank.copy()
+            work_rank["ticker"] = work_rank["ticker"].astype(str).str.strip()
+            work_rank["_avg_vol20"] = pd.to_numeric(work_rank["avg_vol20"], errors="coerce")
+            work_rank["_close"] = pd.to_numeric(work_rank["close"], errors="coerce")
+            work_rank["_avg_turnover20_m"] = (work_rank["_avg_vol20"] * work_rank["_close"]) / 1e6
+            work_rank = work_rank.dropna(subset=["_avg_turnover20_m"])
+            if not work_rank.empty:
+                turnover_by_ticker_m = work_rank.set_index("ticker")["_avg_turnover20_m"].astype(float).to_dict()
+
     def _is_low_liquidity(df: pd.DataFrame) -> pd.Series:
         if df.empty or not volume_ratio_by_ticker:
             return pd.Series([False] * len(df), index=df.index)
@@ -835,12 +850,24 @@ def _collect_quality_value_action_summary(entry_plan_csv: Path) -> dict[str, lis
         ratios = pd.to_numeric(ratios, errors="coerce")
         return ratios.notna() & (ratios < volume_ratio_threshold)
 
+    def _is_low_turnover(df: pd.DataFrame) -> pd.Series:
+        if df.empty or not turnover_by_ticker_m:
+            return pd.Series([False] * len(df), index=df.index)
+        tickers = df.get("ticker", pd.Series([""] * len(df), index=df.index)).astype(str).str.strip()
+        turnovers = tickers.map(turnover_by_ticker_m)
+        turnovers = pd.to_numeric(turnovers, errors="coerce")
+        return turnovers.notna() & (turnovers < turnover_threshold_m)
+
     def _low_liquidity_note(row: pd.Series) -> str:
         ticker = str(row.get("ticker", "") or "").strip()
+        notes: list[str] = []
+        turnover = turnover_by_ticker_m.get(ticker)
+        if turnover is not None and turnover < turnover_threshold_m:
+            notes.append(f"流動性低 to20={turnover:.1f}M".rstrip("0").rstrip("."))
         ratio = volume_ratio_by_ticker.get(ticker)
-        if ratio is None:
-            return "量縮"
-        return f"量縮 vr20={ratio:.2f}".rstrip("0").rstrip(".")
+        if ratio is not None and ratio < volume_ratio_threshold:
+            notes.append(f"量縮 vr20={ratio:.2f}".rstrip("0").rstrip("."))
+        return "、".join(notes) or "流動性偏低"
 
     def _format_low_liquidity_items(df: pd.DataFrame, *, price_label: str) -> list[str]:
         if df.empty:
@@ -862,7 +889,7 @@ def _collect_quality_value_action_summary(entry_plan_csv: Path) -> dict[str, lis
 
     low_liquidity_frames: list[pd.DataFrame] = []
     for label_df in [trial_df, pullback_df, wait_strength_df, cooldown_df]:
-        mask = _is_low_liquidity(label_df)
+        mask = _is_low_liquidity(label_df) | _is_low_turnover(label_df)
         if mask.any():
             low_liquidity_frames.append(label_df[mask].copy())
             label_df.drop(index=label_df[mask].index, inplace=True)
