@@ -1,4 +1,4 @@
 ﻿date,ticker,name,group,layer,close,ret1_pct,ret5_pct,ret10_pct,ret20_pct,volume,avg_vol20,volume_ratio20,ma20,ma60,ma120,drawdown120_pct,bias20_pct,setup_score,risk_score,signals,score_band,regime,spec_risk_score,spec_risk_label,spec_risk_subtype,spec_risk_note,spec_risk_flags,spec_price_action_score,spec_crowding_score,spec_extension_score,spec_structure_score,atr_pct,volatility_tag
 2026-05-06,3034.TW,聯詠,satellite,quality_value,439.5,4.64,6.55,5.78,14.3,7279925,4145164,1.76,410.93,390.48,387.55,0.0,6.95,13,1,TREND,進攻優勢區,中段延續中,0,正常,正常,高檔無回檔,高檔無回檔,0,0,1,0,3.04,標準
 2026-05-08,3034.TW,聯詠,satellite,quality_value,477.0,5.3,16.63,17.49,19.4,2098000,4356439,0.48,417.98,393.06,388.73,0.0,14.12,10,2,TREND,進攻優勢區,中段延續中,1,正常,正常,短線急漲、乖離偏大、高檔無回檔,"短線急漲,乖離偏大,高檔無回檔",1,0,2,0,3.14,標準
-2026-05-07,3034.TW,聯詠,satellite,quality_value,453.0,2.6,10.89,4.74,15.71,6485356,4402178,1.47,414.1,391.52,388.05,0.0,9.39,10,2,"TREND,ACCEL",進攻優勢區,轉強速度有出來,0,正常,正常,高檔無回檔,高檔無回檔,0,0,1,0,3.04,標準
+2026-05-07,3034.TW,聯詠,satellite,quality_value,448.5,1.59,9.79,3.7,14.56,4752095,4315515,1.1,413.88,391.44,388.02,0.0,8.37,11,2,TREND,進攻優勢區,中段延續中,0,正常,正常,高檔無回檔,高檔無回檔,0,0,1,0,3.03,標準
