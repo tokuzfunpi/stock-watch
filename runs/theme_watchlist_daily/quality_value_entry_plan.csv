@@ -1,13 +1,13 @@
 ﻿ticker,name,bucket,decision_priority,entry_bias,buy_zone_low,buy_zone_high,stop_loss,add_rule,trim_rule,decision_reason
 6161.TWO,捷波,quality_value_research,34.0,分批試單,42.92,44.0,40.85,第一筆 1/3；突破前高且未爆量再加 1/3,跌破停損或出現 SURGE+爆量失衡先減,technical=優先研究、fundamental=品質價值優先、Q/V=5/4
-4995.TWO,晶達,quality_value_research,31.0,分批試單,44.41,45.5,42.26,第一筆 1/3；突破前高且未爆量再加 1/3,跌破停損或出現 SURGE+爆量失衡先減,technical=優先研究、fundamental=品質價值優先、Q/V=5/4
+4995.TWO,晶達,quality_value_research,29.0,分批試單,44.41,45.5,42.26,第一筆 1/3；突破前高且未爆量再加 1/3,跌破停損或出現 SURGE+爆量失衡先減,technical=優先研究、fundamental=品質價值優先、Q/V=4/4
 8261.TW,富鼎,quality_value_research,26.5,分批試單,120.72,128.0,110.21,第一筆 1/3；突破前高且未爆量再加 1/3,跌破停損或出現 SURGE+爆量失衡先減,technical=優先研究、fundamental=品質價值優先、Q/V=4/3
 3515.TW,華擎,quality_value_research,26.0,等拉回,236.04,243.01,220.72,回到買區後若守住 MA20，第二天轉強再加,跌破買區下緣或放量轉弱先撤,technical=等拉回確認、fundamental=品質價值優先、Q/V=5/4、PULLBACK
+3034.TW,聯詠,quality_value_research,25.0,分批試單,439.23,453.0,418.99,第一筆 1/3；突破前高且未爆量再加 1/3,跌破停損或出現 SURGE+爆量失衡先減,technical=優先研究、fundamental=品質價值優先、Q/V=5/2
 3213.TWO,茂訊,quality_value_research,25.0,分批試單,111.92,114.5,106.42,第一筆 1/3；突破前高且未爆量再加 1/3,跌破停損或出現 SURGE+爆量失衡先減,technical=優先研究、fundamental=品質價值優先、Q/V=4/4
 3008.TW,大立光,quality_value_research,24.0,等轉強,2570.0,2628.71,2381.62,收盤站回 MA20 且量能回到 0.8–1.4 倍，再開第一筆,未站回 MA20 前不加碼；跌破停損直接退出觀察單,technical=觀察轉強、fundamental=品質價值優先、Q/V=4/4
 3158.TWO,嘉實,quality_value_research,24.0,等轉強,90.21,90.89,87.25,收盤站回 MA20 且量能回到 0.8–1.4 倍，再開第一筆,未站回 MA20 前不加碼；跌破停損直接退出觀察單,technical=觀察轉強、fundamental=品質價值優先、Q/V=4/4、PULLBACK
 3005.TW,神基,quality_value_research,23.0,等轉強,98.67,99.73,95.5,收盤站回 MA20 且量能回到 0.8–1.4 倍，再開第一筆,未站回 MA20 前不加碼；跌破停損直接退出觀察單,technical=觀察轉強、fundamental=品質價值優先、Q/V=4/4、PULLBACK
-3034.TW,聯詠,quality_value_research,23.0,分批試單,439.23,453.0,418.99,第一筆 1/3；突破前高且未爆量再加 1/3,跌破停損或出現 SURGE+爆量失衡先減,technical=優先研究、fundamental=品質價值優先、Q/V=4/2
 3592.TW,瑞鼎,quality_value_research,23.0,等拉回,236.38,237.47,221.28,回到買區後若守住 MA20，第二天轉強再加,跌破買區下緣或放量轉弱先撤,technical=等拉回確認、fundamental=品質價值優先、Q/V=4/4
 4953.TWO,緯軟,quality_value_research,23.0,等轉強,120.38,122.11,115.18,收盤站回 MA20 且量能回到 0.8–1.4 倍，再開第一筆,未站回 MA20 前不加碼；跌破停損直接退出觀察單,technical=觀察轉強、fundamental=品質價值優先、Q/V=4/4
 2617.TW,台航,quality_value_research,22.0,等轉強,29.99,30.23,29.27,收盤站回 MA20 且量能回到 0.8–1.4 倍，再開第一筆,未站回 MA20 前不加碼；跌破停損直接退出觀察單,technical=觀察轉強、fundamental=品質價值優先、Q/V=4/4
@@ -21,7 +21,6 @@
 5288.TW,豐祥-KY,quality_value_research,21.0,暫不急,164.0,153.5,152.21,只追蹤，不主動建立部位,訊號改善前不處理,technical=暫不急、fundamental=品質價值優先、Q/V=5/4
 2450.TW,神腦,quality_value_research,20.5,等轉強,29.91,30.12,29.29,收盤站回 MA20 且量能回到 0.8–1.4 倍，再開第一筆,未站回 MA20 前不加碼；跌破停損直接退出觀察單,technical=觀察轉強、fundamental=品質價值優先、Q/V=4/3
 2347.TW,聯強,quality_value_research,20.0,等轉強,82.56,83.71,75.79,收盤站回 MA20 且量能回到 0.8–1.4 倍，再開第一筆,未站回 MA20 前不加碼；跌破停損直接退出觀察單,technical=觀察轉強、fundamental=品質價值優先、Q/V=4/4
-6751.TWO,智聯服務,quality_value_research,20.0,暫不急,51.69,51.0,49.88,只追蹤，不主動建立部位,訊號改善前不處理,technical=暫不急、fundamental=品質價值優先、Q/V=4/4、PULLBACK
 6292.TWO,迅德,quality_value_research,19.5,等拉回,47.9,49.83,44.27,回到買區後若守住 MA20，第二天轉強再加,跌破買區下緣或放量轉弱先撤,technical=等拉回確認、fundamental=品質價值優先、Q/V=4/3
 2374.TW,佳能,low_price_health,19.0,研究試單,76.19,79.7,71.09,第一筆 1/3；突破前高且未爆量再加 1/3,跌破停損或出現 SURGE+爆量失衡先減,technical=優先研究、fundamental=品質觀察、Q/V=3/0
 4966.TWO,譜瑞-KY,quality_value_research,17.0,等拉回,564.9,593.14,518.68,回到買區後若守住 MA20，第二天轉強再加,跌破買區下緣或放量轉弱先撤,technical=等拉回確認、fundamental=可研究但需確認、Q/V=3/2
@@ -29,6 +28,7 @@
 1560.TW,中砂,quality_value_research,16.0,等拉回,535.3,562.34,481.84,回到買區後若守住 MA20，第二天轉強再加,跌破買區下緣或放量轉弱先撤,technical=等拉回確認、fundamental=品質佳但估值要等、Q/V=5/0
 3679.TW,新至陞,quality_value_research,16.0,等轉強,120.42,121.51,117.16,收盤站回 MA20 且量能回到 0.8–1.4 倍，再開第一筆,未站回 MA20 前不加碼；跌破停損直接退出觀察單,technical=觀察轉強、fundamental=可研究但需確認、Q/V=3/4
 5490.TWO,同亨,quality_value_research,15.0,等拉回,27.22,28.07,25.99,回到買區後若守住 MA20，第二天轉強再加,跌破買區下緣或放量轉弱先撤,technical=等拉回確認、fundamental=可研究但需確認、Q/V=3/4
+6751.TWO,智聯服務,quality_value_research,15.0,暫不急,51.69,51.0,49.88,只追蹤，不主動建立部位,訊號改善前不處理,technical=暫不急、fundamental=可研究但需確認、Q/V=3/4、PULLBACK
 6776.TW,展碁國際,quality_value_research,15.0,暫不急,59.04,57.8,56.4,只追蹤，不主動建立部位,訊號改善前不處理,technical=暫不急、fundamental=可研究但需確認、Q/V=3/4、PULLBACK
 5203.TW,訊連,quality_value_research,14.0,等轉強,64.17,65.11,61.35,收盤站回 MA20 且量能回到 0.8–1.4 倍，再開第一筆,未站回 MA20 前不加碼；跌破停損直接退出觀察單,technical=觀察轉強、fundamental=資料/品質不足、Q/V=2/4、PULLBACK
 5299.TWO,杰力,quality_value_research,13.5,等轉強,85.74,87.68,79.12,收盤站回 MA20 且量能回到 0.8–1.4 倍，再開第一筆,未站回 MA20 前不加碼；跌破停損直接退出觀察單,technical=觀察轉強、fundamental=可研究但需確認、Q/V=3/3

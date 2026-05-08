@@ -1,1 +1,1 @@
-{"date": "2026-05-08", "signature": "031d079c0ed8ba91", "scopes": {"postclose": {"date": "2026-05-07", "signature": "c8afaac5cd5a7f15"}, "preopen": {"date": "2026-05-08", "signature": "031d079c0ed8ba91"}, "full": {"date": "2026-05-07", "signature": "20cc948a19168f77"}}}
+{"date": "2026-05-08", "signature": "20cc948a19168f77", "scopes": {"postclose": {"date": "2026-05-07", "signature": "c8afaac5cd5a7f15"}, "preopen": {"date": "2026-05-08", "signature": "20cc948a19168f77"}, "full": {"date": "2026-05-07", "signature": "20cc948a19168f77"}}}

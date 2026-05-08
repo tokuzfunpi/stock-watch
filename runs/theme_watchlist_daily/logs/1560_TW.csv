@@ -1,3 +1,3 @@
 ﻿date,ticker,name,group,layer,close,ret1_pct,ret5_pct,ret10_pct,ret20_pct,volume,avg_vol20,volume_ratio20,ma20,ma60,ma120,drawdown120_pct,bias20_pct,setup_score,risk_score,signals,score_band,regime,spec_risk_score,spec_risk_label,spec_risk_subtype,spec_risk_note,spec_risk_flags,spec_price_action_score,spec_crowding_score,spec_extension_score,spec_structure_score,atr_pct,volatility_tag
 2026-05-06,1560.TW,中砂,satellite,quality_value,574.0,0.35,8.3,8.3,21.1,3524321,2765459,1.27,531.4,479.32,420.62,0.0,8.02,9,2,TREND,進攻優勢區,中段延續中,0,正常,正常,高檔無回檔,高檔無回檔,0,0,1,0,4.99,活潑
-2026-05-07,1560.TW,中砂,satellite,quality_value,577.0,0.17,10.75,7.65,15.17,2818522,2730485,1.03,535.3,481.84,422.82,0.0,7.79,8,1,TREND,進攻優勢區,中段延續中,0,正常,正常,高檔無回檔,高檔無回檔,0,0,1,0,5.08,活潑
+2026-05-07,1560.TW,中砂,satellite,quality_value,577.0,0.17,10.75,7.65,15.17,2904545,2734786,1.06,535.3,481.84,422.82,0.0,7.79,8,1,TREND,進攻優勢區,中段延續中,0,正常,正常,高檔無回檔,高檔無回檔,0,0,1,0,5.08,活潑
