@@ -261,9 +261,82 @@ class RunLocalDailyTests(unittest.TestCase):
         self.assertEqual(metrics["watchlist_artifact_freshness_status"], "current")
         self.assertEqual(metrics["action_trial_tickers"], ["捷波 (6161.TWO)｜買 42.92–44｜逃 40.85"])
         self.assertEqual(metrics["action_pullback_tickers"], ["譜瑞-KY (4966.TWO)｜等買 453–468.5｜逃 431"])
+        self.assertEqual(metrics["action_low_liquidity_tickers"], [])
         self.assertEqual(metrics["action_wait_strength_tickers"], ["神基 (3005.TW)｜等強再買 121.5–126｜逃 115"])
         self.assertEqual(metrics["action_cooldown_tickers"], ["捷敏-KY (6525.TW)｜別追，等 101–105｜逃 96"])
         self.assertEqual(metrics["portfolio_trim_tickers"], ["英業達 (2356)"])
+
+    def test_collect_status_metrics_moves_low_liquidity_items_to_hold_bucket(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            theme_outdir = Path(tmpdir) / "theme_watchlist_daily"
+            verification_outdir = Path(tmpdir) / "verification" / "watchlist_daily"
+            theme_outdir.mkdir(parents=True, exist_ok=True)
+            verification_outdir.mkdir(parents=True, exist_ok=True)
+
+            pd.DataFrame([{"ticker": "2330.TW", "spec_risk_score": 0, "spec_risk_label": "正常", "rank": 1}]).to_csv(
+                theme_outdir / "daily_rank.csv", index=False
+            )
+            (theme_outdir / "daily_report.md").write_text("# report\n", encoding="utf-8")
+            (theme_outdir / "runtime_metrics.json").write_text(
+                json.dumps({"status": "ok", "wall_seconds": 1.234}),
+                encoding="utf-8",
+            )
+
+            pd.DataFrame([{"signal_date": "2026-04-23", "watch_type": "short", "ticker": "2330.TW"}]).to_csv(
+                verification_outdir / "reco_snapshots.csv", index=False
+            )
+            pd.DataFrame(
+                [
+                    {
+                        "signal_date": "2026-04-23",
+                        "horizon_days": 1,
+                        "watch_type": "short",
+                        "ticker": "2330.TW",
+                        "status": "ok",
+                    }
+                ]
+            ).to_csv(verification_outdir / "reco_outcomes.csv", index=False)
+            (verification_outdir / "runtime_metrics.json").write_text(
+                json.dumps({"status": "ok", "wall_seconds": 2.5}),
+                encoding="utf-8",
+            )
+
+            pd.DataFrame(
+                [
+                    {
+                        "ticker": "3005.TW",
+                        "name": "神基",
+                        "decision_priority": 23,
+                        "entry_bias": "等轉強",
+                        "buy_zone_low": 121.5,
+                        "buy_zone_high": 126.0,
+                        "stop_loss": 115.0,
+                    },
+                    {
+                        "ticker": "6161.TWO",
+                        "name": "捷波",
+                        "decision_priority": 30,
+                        "entry_bias": "研究試單",
+                        "buy_zone_low": 42.92,
+                        "buy_zone_high": 44.0,
+                        "stop_loss": 40.85,
+                    },
+                ]
+            ).to_csv(theme_outdir / "quality_value_entry_plan.csv", index=False)
+            pd.DataFrame(
+                [
+                    {"ticker": "3005.TW", "name": "神基", "volume_ratio20": 0.8},
+                    {"ticker": "6161.TWO", "name": "捷波", "volume_ratio20": 1.2},
+                ]
+            ).to_csv(theme_outdir / "quality_value_candidates.csv", index=False)
+
+            metrics = collect_status_metrics(theme_outdir, verification_outdir)
+
+        self.assertEqual(metrics["action_trial_tickers"], ["捷波 (6161.TWO)｜買 42.92–44｜逃 40.85"])
+        self.assertEqual(metrics["action_wait_strength_tickers"], [])
+        self.assertTrue(metrics["action_low_liquidity_tickers"])
+        self.assertIn("神基 (3005.TW)", metrics["action_low_liquidity_tickers"][0])
+        self.assertIn("量縮", metrics["action_low_liquidity_tickers"][0])
 
     def test_update_quality_value_tracking_writes_lifecycle_and_review_outputs(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

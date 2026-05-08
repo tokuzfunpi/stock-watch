@@ -252,6 +252,7 @@ def build_simple_action_summary_notification(metrics: dict[str, object]) -> str:
     sections = [
         _section("🟢 今天可小買：(小買試水溫，不重壓)", "action_trial_tickers", price_label="買"),
         _section("🟡 等便宜再買：(等回到買的位置，不追高)", "action_pullback_tickers", price_label="等買"),
+        _section("⚪ 量縮先等：(已從可行動名單排除)", "action_low_liquidity_tickers", price_label="等量再說"),
     ]
     visible_sections: list[str] = []
     for section in sections:
@@ -278,6 +279,7 @@ def build_action_summary_notification(metrics: dict[str, object]) -> str:
     sections = [
         _section("🟢 今天可小買：(小買試水溫，不重壓)", "action_trial_tickers", price_label="買"),
         _section("🟡 等便宜再買：(等回到買的位置，不追高)", "action_pullback_tickers", price_label="等買"),
+        _section("⚪ 量縮先等：(交易量太低，先不動)", "action_low_liquidity_tickers", price_label="等量再說"),
         _section("🔵 等變強再買：(訊號還沒完整，等量價確認)", "action_wait_strength_tickers", price_label="等強再買"),
         _section("🔴 太熱別追：(漲幅或風險偏高，先等降溫)", "action_cooldown_tickers", price_label="別追，等"),
         _section("🆕 新加入觀察：(剛進名單，先看能不能買)", "new_addition_action_tickers"),
@@ -789,12 +791,14 @@ def _apply_action_price_label(text: str, price_label: str) -> str:
 
 
 def _collect_quality_value_action_summary(entry_plan_csv: Path) -> dict[str, list[str]]:
+    volume_ratio_threshold = 0.9
     if not entry_plan_csv.exists():
         return {
             "action_trial_tickers": [],
             "action_pullback_tickers": [],
             "action_wait_strength_tickers": [],
             "action_cooldown_tickers": [],
+            "action_low_liquidity_tickers": [],
         }
     entry_plan = _load_csv_safely(entry_plan_csv)
     if entry_plan.empty or "entry_bias" not in entry_plan.columns:
@@ -803,17 +807,80 @@ def _collect_quality_value_action_summary(entry_plan_csv: Path) -> dict[str, lis
             "action_pullback_tickers": [],
             "action_wait_strength_tickers": [],
             "action_cooldown_tickers": [],
+            "action_low_liquidity_tickers": [],
         }
     work = entry_plan.copy()
     if "decision_priority" in work.columns:
         work["_decision_priority"] = pd.to_numeric(work["decision_priority"], errors="coerce").fillna(0)
         work = work.sort_values(by=["_decision_priority"], ascending=[False])
     bias = work["entry_bias"].fillna("").astype(str).str.strip()
+
+    candidates_csv = entry_plan_csv.parent / "quality_value_candidates.csv"
+    volume_ratio_by_ticker: dict[str, float] = {}
+    if candidates_csv.exists():
+        candidates = _load_csv_safely(candidates_csv)
+        if not candidates.empty and "ticker" in candidates.columns and "volume_ratio20" in candidates.columns:
+            work_candidates = candidates.copy()
+            work_candidates["ticker"] = work_candidates["ticker"].astype(str).str.strip()
+            work_candidates["_volume_ratio20"] = pd.to_numeric(work_candidates["volume_ratio20"], errors="coerce")
+            work_candidates = work_candidates.dropna(subset=["_volume_ratio20"])
+            if not work_candidates.empty:
+                volume_ratio_by_ticker = work_candidates.set_index("ticker")["_volume_ratio20"].astype(float).to_dict()
+
+    def _is_low_liquidity(df: pd.DataFrame) -> pd.Series:
+        if df.empty or not volume_ratio_by_ticker:
+            return pd.Series([False] * len(df), index=df.index)
+        tickers = df.get("ticker", pd.Series([""] * len(df), index=df.index)).astype(str).str.strip()
+        ratios = tickers.map(volume_ratio_by_ticker)
+        ratios = pd.to_numeric(ratios, errors="coerce")
+        return ratios.notna() & (ratios < volume_ratio_threshold)
+
+    def _low_liquidity_note(row: pd.Series) -> str:
+        ticker = str(row.get("ticker", "") or "").strip()
+        ratio = volume_ratio_by_ticker.get(ticker)
+        if ratio is None:
+            return "量縮"
+        return f"量縮 vr20={ratio:.2f}".rstrip("0").rstrip(".")
+
+    def _format_low_liquidity_items(df: pd.DataFrame, *, price_label: str) -> list[str]:
+        if df.empty:
+            return []
+        items: list[str] = []
+        for _, row in df.head(5).iterrows():
+            ticker = str(row.get("ticker", "") or "").strip()
+            name = str(row.get("name", "") or "").strip()
+            if not ticker and not name:
+                continue
+            base = _format_stock_price_display(row, ticker=ticker, name=name, price_label=price_label)
+            items.append(f"{base}｜{_low_liquidity_note(row)}")
+        return items
+
+    trial_df = work[bias.isin(["分批試單", "研究試單"])].copy()
+    pullback_df = work[bias == "等拉回"].copy()
+    wait_strength_df = work[bias == "等轉強"].copy()
+    cooldown_df = work[bias == "等待降溫"].copy()
+
+    low_liquidity_frames: list[pd.DataFrame] = []
+    for label_df in [trial_df, pullback_df, wait_strength_df, cooldown_df]:
+        mask = _is_low_liquidity(label_df)
+        if mask.any():
+            low_liquidity_frames.append(label_df[mask].copy())
+            label_df.drop(index=label_df[mask].index, inplace=True)
+
+    low_liquidity_items: list[str] = []
+    if low_liquidity_frames:
+        combined = pd.concat(low_liquidity_frames, ignore_index=True)
+        if "decision_priority" in combined.columns:
+            combined["_decision_priority"] = pd.to_numeric(combined["decision_priority"], errors="coerce").fillna(0)
+            combined = combined.sort_values(by=["_decision_priority"], ascending=[False])
+        low_liquidity_items = _format_low_liquidity_items(combined, price_label="等量再說")
+
     return {
-        "action_trial_tickers": _format_ticker_names(work[bias.isin(["分批試單", "研究試單"])], price_label="買"),
-        "action_pullback_tickers": _format_ticker_names(work[bias == "等拉回"], price_label="等買"),
-        "action_wait_strength_tickers": _format_ticker_names(work[bias == "等轉強"], price_label="等強再買"),
-        "action_cooldown_tickers": _format_ticker_names(work[bias == "等待降溫"], price_label="別追，等"),
+        "action_trial_tickers": _format_ticker_names(trial_df, price_label="買"),
+        "action_pullback_tickers": _format_ticker_names(pullback_df, price_label="等買"),
+        "action_wait_strength_tickers": _format_ticker_names(wait_strength_df, price_label="等強再買"),
+        "action_cooldown_tickers": _format_ticker_names(cooldown_df, price_label="別追，等"),
+        "action_low_liquidity_tickers": low_liquidity_items,
     }
 
 
@@ -1701,6 +1768,7 @@ def render_local_status_markdown(
             "",
             f"- 可試單: `{', '.join(metrics.get('action_trial_tickers', [])) or 'n/a'}`",
             f"- 等拉回: `{', '.join(metrics.get('action_pullback_tickers', [])) or 'n/a'}`",
+            f"- 量縮先等: `{', '.join(metrics.get('action_low_liquidity_tickers', [])) or 'n/a'}`",
             f"- 等轉強: `{', '.join(metrics.get('action_wait_strength_tickers', [])) or 'n/a'}`",
             f"- 過熱先等: `{', '.join(metrics.get('action_cooldown_tickers', [])) or 'n/a'}`",
             f"- 新A追蹤: `{', '.join(metrics.get('new_addition_action_tickers', [])) or 'n/a'}`",
