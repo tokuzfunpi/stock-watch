@@ -1,3 +1,3 @@
 ﻿date,ticker,name,group,layer,close,ret1_pct,ret5_pct,ret10_pct,ret20_pct,volume,avg_vol20,volume_ratio20,ma20,ma60,ma120,drawdown120_pct,bias20_pct,setup_score,risk_score,signals,score_band,regime,spec_risk_score,spec_risk_label,spec_risk_subtype,spec_risk_note,spec_risk_flags,spec_price_action_score,spec_crowding_score,spec_extension_score,spec_structure_score,atr_pct,volatility_tag
 2026-05-06,2450.TW,神腦,satellite,quality_value,29.6,0.0,-0.5,-1.82,1.37,231849,199115,1.16,29.89,29.52,29.23,-2.63,-0.97,6,1,NONE,偏強可追蹤,還在觀察,1,正常,正常,高檔無回檔,高檔無回檔,0,0,1,0,1.38,穩健
-2026-05-07,2450.TW,神腦,satellite,quality_value,29.7,0.34,-1.16,-1.33,1.19,127447,200046,0.64,29.91,29.53,29.23,-2.3,-0.69,7,1,BASE,偏強可追蹤,低檔慢慢墊高,0,正常,正常,高檔無回檔,高檔無回檔,0,0,1,0,1.39,穩健
+2026-05-07,2450.TW,神腦,satellite,quality_value,29.7,0.34,-1.16,-1.33,1.19,122106,199779,0.61,29.91,29.53,29.23,-2.3,-0.69,7,1,BASE,偏強可追蹤,低檔慢慢墊高,0,正常,正常,高檔無回檔,高檔無回檔,0,0,1,0,1.39,穩健

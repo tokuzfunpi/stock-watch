@@ -1,2 +1,2 @@
 ﻿date,ticker,name,group,layer,close,ret1_pct,ret5_pct,ret10_pct,ret20_pct,volume,avg_vol20,volume_ratio20,ma20,ma60,ma120,drawdown120_pct,bias20_pct,setup_score,risk_score,signals,score_band,regime,spec_risk_score,spec_risk_label,spec_risk_subtype,spec_risk_note,spec_risk_flags,spec_price_action_score,spec_crowding_score,spec_extension_score,spec_structure_score,atr_pct,volatility_tag
-2026-05-07,3158.TWO,嘉實,satellite,quality_value,89.0,-0.11,-1.11,-1.22,-2.09,26723,19335,1.38,90.21,87.25,89.23,-21.95,-1.34,7,0,PULLBACK,偏強可追蹤,高檔拉回整理,0,正常,正常,結構相對正常,,0,0,0,0,1.52,穩健
+2026-05-07,3158.TWO,嘉實,satellite,quality_value,89.0,-0.11,-1.11,-1.22,-2.09,26071,19302,1.35,90.21,87.25,89.23,-21.95,-1.34,7,0,PULLBACK,偏強可追蹤,高檔拉回整理,0,正常,正常,結構相對正常,,0,0,0,0,1.52,穩健
