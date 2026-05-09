@@ -9,6 +9,7 @@ import pandas as pd
 
 from stock_watch.cli.weekly_review import build_decisions
 from stock_watch.cli.weekly_review import build_atr_exit_verification
+from stock_watch.cli.weekly_review import build_atr_exit_policy_simulation
 from stock_watch.cli.weekly_review import build_candidate_expansion_plan
 from stock_watch.cli.weekly_review import build_candidate_fill_directions
 from stock_watch.cli.weekly_review import build_candidate_source_plan
@@ -545,8 +546,24 @@ class RunWeeklyReviewTests(unittest.TestCase):
                 }
             ]
         )
+        atr_policy = pd.DataFrame(
+            [
+                {
+                    "horizon_days": 5,
+                    "watch_type": "short",
+                    "policy": "touched_stop_exit",
+                    "status": "research_candidate",
+                    "n": 20,
+                    "avg_ret": 5.0,
+                    "worst_ret": -5.0,
+                    "delta_avg_vs_baseline": 0.1,
+                    "delta_worst_vs_baseline": 7.0,
+                    "read": "值得進一步拆樣本。",
+                }
+            ]
+        )
 
-        panel = build_weekly_decision_panel(decisions, trade_simulation, pullback_rules, atr_exit)
+        panel = build_weekly_decision_panel(decisions, trade_simulation, pullback_rules, atr_exit, atr_policy)
 
         buckets = set(panel["bucket"].astype(str))
         self.assertIn("Need Human Decision", buckets)
@@ -603,6 +620,48 @@ class RunWeeklyReviewTests(unittest.TestCase):
         self.assertEqual(short_row["status"], "review_close_stop_bias")
         self.assertIn("盤中碰 stop", short_row["exit_read"])
         self.assertEqual(thin_row["status"], "need_more_samples")
+
+    def test_build_atr_exit_policy_simulation_compares_exit_policies(self) -> None:
+        rows = []
+        for idx in range(10):
+            ret = 4.0
+            stop_day = 0
+            trim_day = 0
+            trim_before = 0
+            stop_before = 0
+            if idx == 0:
+                ret = -12.0
+                stop_day = 1
+                stop_before = 1
+            elif idx in {1, 2, 3}:
+                ret = 8.0
+                trim_day = 2
+                trim_before = 1
+            rows.append(
+                {
+                    "watch_type": "short",
+                    "alert_close": 100.0,
+                    "trim_price": 110.0,
+                    "stop_price": 95.0,
+                    "ret5_future_pct": ret,
+                    "trim5_touch_day": trim_day,
+                    "stop5_touch_day": stop_day,
+                    "trim5_before_stop": trim_before,
+                    "stop5_before_trim": stop_before,
+                }
+            )
+
+        table = build_atr_exit_policy_simulation(pd.DataFrame(rows))
+
+        baseline = table[table["policy"] == "baseline_close"].iloc[0]
+        touched_stop = table[table["policy"] == "touched_stop_exit"].iloc[0]
+        trim_half = table[table["policy"] == "trim_touch_half"].iloc[0]
+        self.assertEqual(int(baseline["n"]), 10)
+        self.assertEqual(float(baseline["worst_ret"]), -12.0)
+        self.assertEqual(float(touched_stop["worst_ret"]), -5.0)
+        self.assertGreater(float(touched_stop["delta_worst_vs_baseline"]), 0)
+        self.assertEqual(int(trim_half["trim_exit_count"]), 3)
+        self.assertIn(touched_stop["status"], {"research_candidate", "tail_hedge_costly"})
 
     def test_build_pullback_rule_recommendations_blocks_tail_risk_upgrades(self) -> None:
         confirmation = pd.DataFrame(
@@ -1040,6 +1099,8 @@ class RunWeeklyReviewTests(unittest.TestCase):
         self.assertIn("atr_band_checkpoints", payload["tables"])
         self.assertIn("## ATR Exit Verification", markdown)
         self.assertIn("atr_exit_verification", payload["tables"])
+        self.assertIn("## ATR Exit Policy Simulation", markdown)
+        self.assertIn("atr_exit_policy_simulation", payload["tables"])
         self.assertIn("## Path Risk Sequencing", markdown)
         self.assertIn("path_risk_sequencing", payload["tables"])
         self.assertIn("prioritize groups like", markdown)
