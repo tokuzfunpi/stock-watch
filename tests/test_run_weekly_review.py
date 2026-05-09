@@ -26,6 +26,7 @@ from stock_watch.cli.weekly_review import build_pullback_exit_guard_recommendati
 from stock_watch.cli.weekly_review import build_pullback_quality_diagnostics
 from stock_watch.cli.weekly_review import build_pullback_rule_recommendations
 from stock_watch.cli.weekly_review import build_short_pullback_trade_simulation_shadow
+from stock_watch.cli.weekly_review import build_hold_continuation_diagnostics
 from stock_watch.cli.weekly_review import build_spec_risk_overview
 from stock_watch.cli.weekly_review import build_weekly_decision_panel
 from stock_watch.cli.weekly_review import build_weekly_review_payload
@@ -485,6 +486,87 @@ class RunWeeklyReviewTests(unittest.TestCase):
         self.assertEqual(high_risk_confirmed["avg_position_ret_5d"], 0.94)
         self.assertEqual(confirm_pullback["status"], "blocked_no_entry")
         self.assertEqual(high_risk_unconfirmed["position_size"], "0 倉")
+
+    def test_build_hold_continuation_diagnostics_pairs_1d_and_5d(self) -> None:
+        rows = []
+        for idx in range(6):
+            ticker = f"HOLD{idx}.TW"
+            rows.append(
+                {
+                    "signal_date": f"2026-04-{idx + 1:02d}",
+                    "ticker": ticker,
+                    "name": f"Hold {idx}",
+                    "watch_type": "midlong",
+                    "action": "續抱",
+                    "scenario_label": "強勢延伸盤",
+                    "market_heat": "warm",
+                    "reco_status": "ok",
+                    "horizon_days": 1,
+                    "realized_ret_pct": 1.0,
+                    "status": "ok",
+                }
+            )
+            rows.append(
+                {
+                    "signal_date": f"2026-04-{idx + 1:02d}",
+                    "ticker": ticker,
+                    "name": f"Hold {idx}",
+                    "watch_type": "midlong",
+                    "action": "續抱",
+                    "scenario_label": "強勢延伸盤",
+                    "market_heat": "warm",
+                    "reco_status": "ok",
+                    "horizon_days": 5,
+                    "realized_ret_pct": 6.0,
+                    "status": "ok",
+                }
+            )
+            fade_ticker = f"FADE{idx}.TW"
+            rows.append(
+                {
+                    "signal_date": f"2026-04-{idx + 1:02d}",
+                    "ticker": fade_ticker,
+                    "watch_type": "short",
+                    "action": "等拉回",
+                    "scenario_label": "高檔震盪盤",
+                    "market_heat": "hot",
+                    "reco_status": "ok",
+                    "horizon_days": 1,
+                    "realized_ret_pct": 3.0,
+                    "status": "ok",
+                }
+            )
+            rows.append(
+                {
+                    "signal_date": f"2026-04-{idx + 1:02d}",
+                    "ticker": fade_ticker,
+                    "watch_type": "short",
+                    "action": "等拉回",
+                    "scenario_label": "高檔震盪盤",
+                    "market_heat": "hot",
+                    "reco_status": "ok",
+                    "horizon_days": 5,
+                    "realized_ret_pct": 1.0,
+                    "status": "ok",
+                }
+            )
+
+        table = build_hold_continuation_diagnostics(pd.DataFrame(rows))
+
+        hold_action = table[
+            (table["segment_type"] == "action")
+            & (table["segment_value"] == "續抱")
+            & (table["watch_type"] == "midlong")
+        ].iloc[0]
+        fade_action = table[
+            (table["segment_type"] == "action")
+            & (table["segment_value"] == "等拉回")
+            & (table["watch_type"] == "short")
+        ].iloc[0]
+        self.assertEqual(hold_action["status"], "hold_candidate")
+        self.assertEqual(hold_action["avg_continuation_1d_to_5d"], 4.95)
+        self.assertEqual(hold_action["hold_edge_5d_vs_1d"], 5.0)
+        self.assertEqual(fade_action["status"], "fade_after_1d")
 
     def test_build_weekly_decision_panel_buckets_shadow_and_tail_risk(self) -> None:
         decisions = {
@@ -1131,6 +1213,10 @@ class RunWeeklyReviewTests(unittest.TestCase):
         self.assertIn("recent_short_pullback_trade_simulation_shadow", payload["tables"])
         self.assertIn("## Full Short Pullback Trade Simulation Shadow", markdown)
         self.assertIn("full_short_pullback_trade_simulation_shadow", payload["tables"])
+        self.assertIn("## Recent Hold Continuation Diagnostics", markdown)
+        self.assertIn("recent_hold_continuation_diagnostics", payload["tables"])
+        self.assertIn("## Full Hold Continuation Diagnostics", markdown)
+        self.assertIn("full_hold_continuation_diagnostics", payload["tables"])
         self.assertIn("## Short Pullback Rule Recommendations", markdown)
         self.assertIn("short_pullback_rule_recommendations", payload["tables"])
         self.assertIn("## Short Pullback Exit Guard Recommendations", markdown)

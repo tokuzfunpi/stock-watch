@@ -1207,6 +1207,159 @@ def build_trade_simulation_shadow_decision(trade_simulation: pd.DataFrame) -> di
     }
 
 
+def _weekly_segment_label(series: pd.Series) -> pd.Series:
+    values = series.fillna("").astype(str).str.strip()
+    return values.mask(values.isin(["", "b''", "nan", "None"]), "unknown")
+
+
+def build_hold_continuation_diagnostics(outcomes: pd.DataFrame, *, min_n: int = 5) -> pd.DataFrame:
+    columns = [
+        "segment_type",
+        "segment_value",
+        "watch_type",
+        "n",
+        "signal_dates",
+        "win_rate_5d",
+        "continuation_win_rate",
+        "avg_1d",
+        "avg_5d",
+        "avg_continuation_1d_to_5d",
+        "hold_edge_5d_vs_1d",
+        "tail25_5d",
+        "worst_5d",
+        "best_5d",
+        "status",
+        "hold_read",
+        "examples",
+    ]
+    if outcomes.empty:
+        return pd.DataFrame(columns=columns)
+    required = {"signal_date", "ticker", "watch_type", "horizon_days", "realized_ret_pct", "status"}
+    if not required.issubset(set(outcomes.columns)):
+        return pd.DataFrame(columns=columns)
+
+    work = outcomes.copy()
+    work = work[
+        (work["status"].astype(str) == "ok")
+        & (work["watch_type"].astype(str).isin(["short", "midlong"]))
+    ].copy()
+    if work.empty:
+        return pd.DataFrame(columns=columns)
+
+    work["_horizon"] = pd.to_numeric(work["horizon_days"], errors="coerce")
+    work["_ret"] = pd.to_numeric(work["realized_ret_pct"], errors="coerce")
+    work = work[work["_horizon"].isin([1, 5])].dropna(subset=["_ret"]).copy()
+    if work.empty:
+        return pd.DataFrame(columns=columns)
+
+    for segment_col in ["action", "scenario_label", "market_heat", "reco_status"]:
+        if segment_col not in work.columns:
+            work[segment_col] = "unknown"
+        work[segment_col] = _weekly_segment_label(work[segment_col])
+
+    keys = ["signal_date", "ticker", "watch_type"]
+    base = work.sort_values(by=keys + ["_horizon"]).drop_duplicates(subset=keys, keep="first").copy()
+    paired_columns = keys + ["action", "scenario_label", "market_heat", "reco_status"]
+    if "name" in base.columns:
+        paired_columns.insert(2, "name")
+
+    ret1 = (
+        work[work["_horizon"] == 1]
+        .groupby(keys, dropna=False)["_ret"]
+        .first()
+        .rename("ret1_pct")
+        .reset_index()
+    )
+    ret5 = (
+        work[work["_horizon"] == 5]
+        .groupby(keys, dropna=False)["_ret"]
+        .first()
+        .rename("ret5_pct")
+        .reset_index()
+    )
+    paired = base[paired_columns].merge(ret1, on=keys, how="inner").merge(ret5, on=keys, how="inner")
+    if paired.empty:
+        return pd.DataFrame(columns=columns)
+
+    valid_base = 1 + (paired["ret1_pct"] / 100)
+    paired = paired[valid_base > 0].copy()
+    if paired.empty:
+        return pd.DataFrame(columns=columns)
+    paired["continuation_ret_1d_to_5d"] = (((1 + (paired["ret5_pct"] / 100)) / (1 + (paired["ret1_pct"] / 100))) - 1) * 100
+    paired["hold_edge_5d_vs_1d"] = paired["ret5_pct"] - paired["ret1_pct"]
+    paired["_win5"] = paired["ret5_pct"] > 0
+    paired["_continuation_win"] = paired["continuation_ret_1d_to_5d"] > 0
+    paired["_example"] = paired["name"] if "name" in paired.columns else paired["ticker"]
+
+    frames = [paired.assign(segment_type="overall", segment_value="all")]
+    for segment_col in ["action", "scenario_label", "market_heat", "reco_status"]:
+        frames.append(paired.assign(segment_type=segment_col, segment_value=paired[segment_col]))
+    frames.append(paired.assign(segment_type="action+scenario", segment_value=paired["action"] + " / " + paired["scenario_label"]))
+    long = pd.concat(frames, ignore_index=True)
+
+    grouped = (
+        long.groupby(["segment_type", "segment_value", "watch_type"], dropna=False)
+        .agg(
+            n=("ret5_pct", "size"),
+            signal_dates=("signal_date", lambda series: int(series.astype(str).nunique())),
+            win_rate_5d=("_win5", lambda series: round(float(series.mean()) * 100, 1) if len(series) else 0.0),
+            continuation_win_rate=("_continuation_win", lambda series: round(float(series.mean()) * 100, 1) if len(series) else 0.0),
+            avg_1d=("ret1_pct", lambda series: round(float(series.mean()), 2)),
+            avg_5d=("ret5_pct", lambda series: round(float(series.mean()), 2)),
+            avg_continuation_1d_to_5d=("continuation_ret_1d_to_5d", lambda series: round(float(series.mean()), 2)),
+            hold_edge_5d_vs_1d=("hold_edge_5d_vs_1d", lambda series: round(float(series.mean()), 2)),
+            tail25_5d=("ret5_pct", lambda series: round(float(series.quantile(0.25)), 2)),
+            worst_5d=("ret5_pct", lambda series: round(float(series.min()), 2)),
+            best_5d=("ret5_pct", lambda series: round(float(series.max()), 2)),
+            examples=("_example", lambda series: "、".join(series.dropna().astype(str).head(3).tolist())),
+        )
+        .reset_index()
+    )
+
+    def _status(row: pd.Series) -> str:
+        n = int(row.get("n", 0) or 0)
+        avg_continuation = float(row.get("avg_continuation_1d_to_5d", 0.0) or 0.0)
+        win_rate = float(row.get("win_rate_5d", 0.0) or 0.0)
+        worst = float(row.get("worst_5d", 0.0) or 0.0)
+        if n < min_n:
+            return "need_more_samples"
+        if avg_continuation >= 0.5 and win_rate >= 55.0 and worst > -8.0:
+            return "hold_candidate"
+        if avg_continuation >= 0.0 and worst <= -8.0:
+            return "hold_with_tail_risk"
+        if avg_continuation <= -0.5:
+            return "fade_after_1d"
+        return "keep_shadow"
+
+    def _read(row: pd.Series) -> str:
+        status = str(row.get("status", ""))
+        if status == "hold_candidate":
+            return "1D 後續抱到 5D 仍有正延伸，先列研究候選；不是自動加倉。"
+        if status == "hold_with_tail_risk":
+            return "續抱有機會，但尾端虧損仍大；若操作只能小倉且用硬風控。"
+        if status == "fade_after_1d":
+            return "第 1 天後延伸轉弱，偏向有利就收或等重新站穩。"
+        if status == "need_more_samples":
+            return "樣本太少，先累積，不進規則。"
+        return "訊號不夠乾淨，維持 shadow 觀察。"
+
+    grouped["status"] = grouped.apply(_status, axis=1)
+    grouped["hold_read"] = grouped.apply(_read, axis=1)
+    status_order = {
+        "hold_candidate": 0,
+        "hold_with_tail_risk": 1,
+        "fade_after_1d": 2,
+        "keep_shadow": 3,
+        "need_more_samples": 4,
+    }
+    grouped["_status_order"] = grouped["status"].map(status_order).fillna(9)
+    grouped = grouped.sort_values(
+        by=["_status_order", "watch_type", "n", "avg_continuation_1d_to_5d"],
+        ascending=[True, True, False, False],
+    ).drop(columns=["_status_order"])
+    return grouped[columns]
+
+
 def build_atr_exit_verification(band_checkpoints: pd.DataFrame) -> pd.DataFrame:
     columns = [
         "horizon_days",
@@ -2379,6 +2532,8 @@ def build_weekly_review_payload(
     full_pullback_confirmation = build_pullback_confirmation_diagnostics(outcomes)
     recent_trade_simulation_shadow = build_short_pullback_trade_simulation_shadow(recent_outcomes)
     full_trade_simulation_shadow = build_short_pullback_trade_simulation_shadow(outcomes)
+    recent_hold_continuation = build_hold_continuation_diagnostics(recent_outcomes)
+    full_hold_continuation = build_hold_continuation_diagnostics(outcomes)
     decisions["trade_simulation"] = build_trade_simulation_shadow_decision(full_trade_simulation_shadow)
     pullback_rule_recommendations = build_pullback_rule_recommendations(full_pullback_confirmation)
     pullback_exit_guard_recommendations = build_pullback_exit_guard_recommendations(full_pullback_confirmation)
@@ -2452,6 +2607,8 @@ def build_weekly_review_payload(
             "full_short_pullback_confirmation": full_pullback_confirmation.to_dict(orient="records"),
             "recent_short_pullback_trade_simulation_shadow": recent_trade_simulation_shadow.to_dict(orient="records"),
             "full_short_pullback_trade_simulation_shadow": full_trade_simulation_shadow.to_dict(orient="records"),
+            "recent_hold_continuation_diagnostics": recent_hold_continuation.to_dict(orient="records"),
+            "full_hold_continuation_diagnostics": full_hold_continuation.to_dict(orient="records"),
             "short_pullback_rule_recommendations": pullback_rule_recommendations.to_dict(orient="records"),
             "short_pullback_exit_guard_recommendations": pullback_exit_guard_recommendations.to_dict(orient="records"),
             "current_rank_spec_risk_by_group": rank_spec_coverage["by_group"],
@@ -2632,6 +2789,8 @@ def render_weekly_review_markdown(payload: dict[str, object]) -> str:
     lines.extend(["## Full Short Pullback Confirmation", _table_markdown(pd.DataFrame(tables.get("full_short_pullback_confirmation", []))).rstrip(), ""])
     lines.extend(["## Recent Short Pullback Trade Simulation Shadow", _table_markdown(pd.DataFrame(tables.get("recent_short_pullback_trade_simulation_shadow", []))).rstrip(), ""])
     lines.extend(["## Full Short Pullback Trade Simulation Shadow", _table_markdown(pd.DataFrame(tables.get("full_short_pullback_trade_simulation_shadow", []))).rstrip(), ""])
+    lines.extend(["## Recent Hold Continuation Diagnostics", _table_markdown(pd.DataFrame(tables.get("recent_hold_continuation_diagnostics", [])).head(80)).rstrip(), ""])
+    lines.extend(["## Full Hold Continuation Diagnostics", _table_markdown(pd.DataFrame(tables.get("full_hold_continuation_diagnostics", [])).head(80)).rstrip(), ""])
     lines.extend(["## Short Pullback Rule Recommendations", _table_markdown(pd.DataFrame(tables.get("short_pullback_rule_recommendations", []))).rstrip(), ""])
     lines.extend(["## Short Pullback Exit Guard Recommendations", _table_markdown(pd.DataFrame(tables.get("short_pullback_exit_guard_recommendations", []))).rstrip(), ""])
     if isinstance(data_quality_gate, dict):
