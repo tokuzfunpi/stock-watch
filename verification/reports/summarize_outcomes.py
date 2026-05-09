@@ -747,17 +747,32 @@ def summarize_atr_band_checkpoints(alert_tracking: pd.DataFrame) -> dict[str, pd
             if matured.empty:
                 continue
             future_close = matured["alert_close"] * (1 + matured[ret_col] / 100.0)
-            checkpoint_rows.append(
-                {
-                    "horizon_days": horizon,
-                    "watch_type": watch_type,
-                    "n": int(len(matured)),
-                    "closed_below_add": int((future_close <= matured["add_price"]).sum()),
-                    "closed_above_trim": int((future_close >= matured["trim_price"]).sum()),
-                    "closed_below_stop": int((future_close <= matured["stop_price"]).sum()),
-                    "avg_ret_pct": round(float(matured[ret_col].mean()), 2),
-                }
-            )
+            low_col = f"low{horizon}_future_pct"
+            high_col = f"high{horizon}_future_pct"
+            path_matured = pd.DataFrame()
+            if low_col in matured.columns and high_col in matured.columns:
+                matured[low_col] = pd.to_numeric(matured[low_col], errors="coerce")
+                matured[high_col] = pd.to_numeric(matured[high_col], errors="coerce")
+                path_matured = matured.dropna(subset=[low_col, high_col]).copy()
+
+            row = {
+                "horizon_days": horizon,
+                "watch_type": watch_type,
+                "n": int(len(matured)),
+                "closed_below_add": int((future_close <= matured["add_price"]).sum()),
+                "closed_above_trim": int((future_close >= matured["trim_price"]).sum()),
+                "closed_below_stop": int((future_close <= matured["stop_price"]).sum()),
+                "path_n": int(len(path_matured)),
+                "touched_above_trim": 0,
+                "touched_below_stop": 0,
+                "avg_ret_pct": round(float(matured[ret_col].mean()), 2),
+            }
+            if not path_matured.empty:
+                future_low = path_matured["alert_close"] * (1 + path_matured[low_col] / 100.0)
+                future_high = path_matured["alert_close"] * (1 + path_matured[high_col] / 100.0)
+                row["touched_above_trim"] = int((future_high >= path_matured["trim_price"]).sum())
+                row["touched_below_stop"] = int((future_low <= path_matured["stop_price"]).sum())
+            checkpoint_rows.append(row)
 
     band_coverage = pd.DataFrame(coverage_rows)
     band_checkpoints = pd.DataFrame(checkpoint_rows)
@@ -769,6 +784,11 @@ def summarize_atr_band_checkpoints(alert_tracking: pd.DataFrame) -> dict[str, pd
             band_checkpoints[f"{col}_rate_pct"] = (
                 (band_checkpoints[col] / band_checkpoints["n"]) * 100
             ).round(1)
+        for col in ["touched_above_trim", "touched_below_stop"]:
+            denom = pd.to_numeric(band_checkpoints.get("path_n"), errors="coerce")
+            numerator = pd.to_numeric(band_checkpoints[col], errors="coerce")
+            rate = ((numerator / denom.where(denom != 0)) * 100).round(1)
+            band_checkpoints[f"{col}_rate_pct"] = rate.where(denom > 0, 0.0)
     return {"band_coverage": band_coverage, "band_checkpoints": band_checkpoints}
 
 

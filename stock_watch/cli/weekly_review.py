@@ -1609,6 +1609,7 @@ def build_weekly_review_payload(
             "current_rank_spec_risk_by_source": candidate_source_summary["by_source"],
             "current_rank_spec_risk_top_candidates": rank_spec_coverage["top_candidates"],
             "atr_band_coverage": band_parts.get("band_coverage", pd.DataFrame()).to_dict(orient="records"),
+            "atr_band_checkpoints": band_parts.get("band_checkpoints", pd.DataFrame()).to_dict(orient="records"),
         },
     }
 
@@ -1788,6 +1789,7 @@ def render_weekly_review_markdown(payload: dict[str, object]) -> str:
     lines.extend(["## Current Rank Spec Risk By Source", _table_markdown(pd.DataFrame(tables.get("current_rank_spec_risk_by_source", []))).rstrip(), ""])
     lines.extend(["## Current Suspicious Candidates", _table_markdown(pd.DataFrame(tables.get("current_rank_spec_risk_top_candidates", []))).rstrip(), ""])
     lines.extend(["## ATR Band Coverage", _table_markdown(pd.DataFrame(tables.get("atr_band_coverage", []))).rstrip(), ""])
+    lines.extend(["## ATR Band Checkpoints", _table_markdown(pd.DataFrame(tables.get("atr_band_checkpoints", []))).rstrip(), ""])
     return "\n".join(lines)
 
 

@@ -869,7 +869,7 @@ class FeedbackTests(unittest.TestCase):
         self.assertEqual(result, 0)
         mock_save_reports.assert_called_once()
 
-    def test_upsert_alert_tracking_persists_scenario_label(self) -> None:
+    def test_upsert_alert_tracking_persists_scenario_label_and_forward_path(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             alert_csv = Path(tmpdir) / "alert_tracking.csv"
             short_candidates = pd.DataFrame(
@@ -901,8 +901,17 @@ class FeedbackTests(unittest.TestCase):
                 ]
             )
 
+            price_history = pd.DataFrame(
+                {
+                    "Close": [52.0, 53.04, 54.6, 51.0, 57.2, 55.12],
+                    "Low": [51.5, 51.2, 52.5, 49.4, 54.1, 53.5],
+                    "High": [52.5, 54.1, 55.5, 53.0, 58.3, 56.0],
+                },
+                index=pd.to_datetime(["2026-04-22", "2026-04-23", "2026-04-24", "2026-04-25", "2026-04-26", "2026-04-27"]),
+            )
+
             with patch("daily_theme_watchlist.ALERT_TRACK_CSV", alert_csv), patch(
-                "daily_theme_watchlist.yf_download_one", return_value=pd.DataFrame()
+                "daily_theme_watchlist.yf_download_one", return_value=price_history
             ):
                 upsert_alert_tracking(
                     short_candidates,
@@ -912,6 +921,9 @@ class FeedbackTests(unittest.TestCase):
 
             saved = pd.read_csv(alert_csv)
             self.assertEqual(saved.iloc[0]["scenario_label"], "高檔震盪盤")
+            self.assertAlmostEqual(float(saved.iloc[0]["ret1_future_pct"]), 2.0)
+            self.assertAlmostEqual(float(saved.iloc[0]["low1_future_pct"]), -1.54)
+            self.assertAlmostEqual(float(saved.iloc[0]["high5_future_pct"]), 12.12)
 
     def test_feedback_adjustment_uses_pl_ratio_as_tiebreaker(self) -> None:
         candidates = pd.DataFrame(

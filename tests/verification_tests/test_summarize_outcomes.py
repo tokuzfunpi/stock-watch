@@ -660,6 +660,8 @@ class SummarizeOutcomesTests(unittest.TestCase):
                     "stop_price": 92.0,
                     "watch_type": "short",
                     "ret1_future_pct": 8.0,
+                    "low1_future_pct": -2.0,
+                    "high1_future_pct": 9.0,
                     "ret5_future_pct": None,
                     "ret20_future_pct": None,
                 },
@@ -670,6 +672,8 @@ class SummarizeOutcomesTests(unittest.TestCase):
                     "stop_price": 92.0,
                     "watch_type": "short",
                     "ret1_future_pct": -9.0,
+                    "low1_future_pct": -10.0,
+                    "high1_future_pct": 1.0,
                     "ret5_future_pct": None,
                     "ret20_future_pct": None,
                 },
@@ -694,6 +698,9 @@ class SummarizeOutcomesTests(unittest.TestCase):
         ].iloc[0]
         self.assertEqual(int(short_1d["closed_above_trim"]), 1)
         self.assertEqual(int(short_1d["closed_below_stop"]), 1)
+        self.assertEqual(int(short_1d["path_n"]), 2)
+        self.assertEqual(int(short_1d["touched_above_trim"]), 1)
+        self.assertEqual(int(short_1d["touched_below_stop"]), 1)
 
     def test_build_atr_band_findings_reports_insufficient_maturity(self) -> None:
         alert_tracking = pd.DataFrame(

@@ -28,8 +28,14 @@ ALERT_TRACK_COLUMNS = [
     "stop_price",
     "alert_close",
     "ret1_future_pct",
+    "low1_future_pct",
+    "high1_future_pct",
     "ret5_future_pct",
+    "low5_future_pct",
+    "high5_future_pct",
     "ret20_future_pct",
+    "low20_future_pct",
+    "high20_future_pct",
     "status",
 ]
 
@@ -92,8 +98,14 @@ def upsert_alert_tracking(
                 "stop_price": price_plan.get("stop_price"),
                 "alert_close": float(row["close"]),
                 "ret1_future_pct": None,
+                "low1_future_pct": None,
+                "high1_future_pct": None,
                 "ret5_future_pct": None,
+                "low5_future_pct": None,
+                "high5_future_pct": None,
                 "ret20_future_pct": None,
+                "low20_future_pct": None,
+                "high20_future_pct": None,
                 "status": "OPEN",
             }
             if mask.any():
@@ -113,6 +125,8 @@ def upsert_alert_tracking(
                     continue
 
                 closes = df["Close"].reset_index(drop=True)
+                lows = df["Low"].reset_index(drop=True) if "Low" in df.columns else None
+                highs = df["High"].reset_index(drop=True) if "High" in df.columns else None
                 date_to_idx = {dt: idx for idx, dt in enumerate(df.index.strftime("%Y-%m-%d"))}
 
                 for row_idx, row in ticker_rows.iterrows():
@@ -123,10 +137,22 @@ def upsert_alert_tracking(
 
                     if pd.isna(row.get("ret1_future_pct")) and idx + 1 < len(closes):
                         hist.at[row_idx, "ret1_future_pct"] = round((float(closes.iloc[idx + 1]) / entry - 1.0) * 100, 2)
+                    if lows is not None and pd.isna(row.get("low1_future_pct")) and idx + 1 < len(lows):
+                        hist.at[row_idx, "low1_future_pct"] = round((float(lows.iloc[idx + 1]) / entry - 1.0) * 100, 2)
+                    if highs is not None and pd.isna(row.get("high1_future_pct")) and idx + 1 < len(highs):
+                        hist.at[row_idx, "high1_future_pct"] = round((float(highs.iloc[idx + 1]) / entry - 1.0) * 100, 2)
                     if pd.isna(row.get("ret5_future_pct")) and idx + 5 < len(closes):
                         hist.at[row_idx, "ret5_future_pct"] = round((float(closes.iloc[idx + 5]) / entry - 1.0) * 100, 2)
+                    if lows is not None and pd.isna(row.get("low5_future_pct")) and idx + 5 < len(lows):
+                        hist.at[row_idx, "low5_future_pct"] = round((float(lows.iloc[idx + 1 : idx + 6].min()) / entry - 1.0) * 100, 2)
+                    if highs is not None and pd.isna(row.get("high5_future_pct")) and idx + 5 < len(highs):
+                        hist.at[row_idx, "high5_future_pct"] = round((float(highs.iloc[idx + 1 : idx + 6].max()) / entry - 1.0) * 100, 2)
                     if pd.isna(row.get("ret20_future_pct")) and idx + 20 < len(closes):
                         hist.at[row_idx, "ret20_future_pct"] = round((float(closes.iloc[idx + 20]) / entry - 1.0) * 100, 2)
                         hist.at[row_idx, "status"] = "CLOSED"
+                    if lows is not None and pd.isna(row.get("low20_future_pct")) and idx + 20 < len(lows):
+                        hist.at[row_idx, "low20_future_pct"] = round((float(lows.iloc[idx + 1 : idx + 21].min()) / entry - 1.0) * 100, 2)
+                    if highs is not None and pd.isna(row.get("high20_future_pct")) and idx + 20 < len(highs):
+                        hist.at[row_idx, "high20_future_pct"] = round((float(highs.iloc[idx + 1 : idx + 21].max()) / entry - 1.0) * 100, 2)
 
     hist.to_csv(alert_track_csv, index=False, encoding="utf-8-sig")
