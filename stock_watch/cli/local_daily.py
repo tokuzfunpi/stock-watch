@@ -68,12 +68,14 @@ ACTION_SUMMARY_BUCKET_KEYS = {
     "action_trial_tickers",
     "action_pullback_tickers",
     "action_midlong_tickers",
+    "action_high_risk_reward_tickers",
     "action_wait_strength_tickers",
     "action_cooldown_tickers",
     "action_low_liquidity_tickers",
     "action_watch_tickers",
 }
 ACTION_SUMMARY_BUCKET_WEIGHTS = {
+    "action_high_risk_reward_tickers": 105,
     "action_cooldown_tickers": 100,
     "action_low_liquidity_tickers": 95,
     "action_trial_tickers": 85,
@@ -82,6 +84,11 @@ ACTION_SUMMARY_BUCKET_WEIGHTS = {
     "action_wait_strength_tickers": 55,
     "action_watch_tickers": 30,
 }
+HIGH_RISK_REWARD_LIMIT = 5
+HIGH_RISK_REWARD_MIN_REWARD_SCORE = 45.0
+HIGH_RISK_REWARD_MIN_RISK_SCORE = 35.0
+HIGH_RISK_REWARD_TRIAL_CAP = "≤1/5 HRR試單"
+HIGH_RISK_REWARD_TRIAL_RULE = "總HRR≤1單位；破前低或1ATR停損"
 LUCKY_PICK_TAGLINES = (
     "{weekday}幸運籤抽到 {stock}：一眼不看，心態自來。",
     "{weekday}市場小紙條寫 {stock}：別人歐印我先等等，別人畢業我還在寫作業。",
@@ -392,6 +399,13 @@ def send_quality_value_notification(
                     us_market,
                     daily_module=daily_theme_watchlist,
                 )
+                watchlist_summary = _merge_action_summary_metrics(
+                    watchlist_summary,
+                    _collect_high_risk_reward_action_summary(
+                        entry_plan_csv.parent / "shadow_open_not_chase_candidates.csv",
+                        daily_rank_csv=entry_plan_csv.parent / "daily_rank.csv",
+                    ),
+                )
         except Exception:
             watchlist_summary = {}
         metrics = _merge_action_summary_metrics(metrics, watchlist_summary)
@@ -431,21 +445,22 @@ def _metrics_with_lucky_pick(
 
 def build_simple_action_summary_notification(metrics: dict[str, object]) -> str:
     header = _action_summary_header_lines(metrics, simple=True)
+    guidance = ["原則：只列可買 / 可等價位買；買不買和何時買由你決定，逃跑價要先看。"]
 
-    def _section(label: str, key: str, *, price_label: str = "買") -> list[str]:
+    def _section(label: str, key: str, *, price_label: str = "買", limit: int = 3) -> list[str]:
         values = metrics.get(key, [])
         if not isinstance(values, list):
             values = []
-        visible_values = [_format_action_summary_item(str(value), price_label=price_label) for value in values[:3] if str(value).strip()]
+        visible_values = [_format_buy_recommendation_item(str(value), price_label=price_label) for value in values[:limit] if str(value).strip()]
         if not visible_values:
             return []
         return [label, *[f"• {value}" for value in visible_values]]
 
     sections = [
-        _section("🟢 今天可小買：(小買試水溫，不重壓)", "action_trial_tickers", price_label="買"),
-        _section("🟡 等便宜再買：(等回到買的位置，不追高)", "action_pullback_tickers", price_label="等買"),
-        _section("🧱 中長線布局：(波段倉，分批處理)", "action_midlong_tickers", price_label="買"),
-        _section("⚪ 量縮先等：(已從可行動名單排除)", "action_low_liquidity_tickers", price_label="等量再說"),
+        _section("🟢 可小買：小買試水溫，不重壓", "action_trial_tickers", price_label="買"),
+        _section("🔥 高風險小試 Top 5：自動評分，倉位更小", "action_high_risk_reward_tickers", price_label="看", limit=HIGH_RISK_REWARD_LIMIT),
+        _section("🟡 等到價位再買：不要追高", "action_pullback_tickers", price_label="等買"),
+        _section("🧱 中長線可分批：波段倉", "action_midlong_tickers", price_label="買"),
     ]
     visible_sections: list[str] = []
     for section in sections:
@@ -455,31 +470,28 @@ def build_simple_action_summary_notification(metrics: dict[str, object]) -> str:
             visible_sections.append("")
         visible_sections.extend(section)
     if not visible_sections:
-        visible_sections = ["今天沒有新的可小買 / 等便宜買動作。"]
-    return "\n".join(["📌 今日可行動名單", *header, "", *visible_sections])
+        visible_sections = ["今天沒有新的可買標的；觀察名單已留在報告裡。"]
+    return "\n".join(["📌 今日可買名單", *header, "", *guidance, "", *visible_sections])
 
 
 def build_action_summary_notification(metrics: dict[str, object]) -> str:
     header = _action_summary_header_lines(metrics, simple=False)
+    guidance = ["原則：只列可買 / 可等價位買；買不買和何時買由你決定，逃跑價要先看。"]
 
     def _section(label: str, key: str, *, price_label: str = "買") -> list[str]:
         values = metrics.get(key, [])
         if not isinstance(values, list):
             values = []
-        visible_values = [_format_action_summary_item(str(value), price_label=price_label) for value in values[:5] if str(value).strip()]
+        visible_values = [_format_buy_recommendation_item(str(value), price_label=price_label) for value in values[:5] if str(value).strip()]
         if not visible_values:
             return []
         return [label, *[f"• {value}" for value in visible_values]]
 
     sections = [
-        _section("🟢 今天可小買：(小買試水溫，不重壓)", "action_trial_tickers", price_label="買"),
-        _section("🟡 等便宜再買：(等回到買的位置，不追高)", "action_pullback_tickers", price_label="等買"),
-        _section("🧱 中長線布局：(波段倉，分批處理)", "action_midlong_tickers", price_label="買"),
-        _section("⚪ 量縮先等：(交易量太低，先不動)", "action_low_liquidity_tickers", price_label="等量再說"),
-        _section("🔵 等變強再買：(訊號還沒完整，等量價確認)", "action_wait_strength_tickers", price_label="等強再買"),
-        _section("🔴 太熱別追：(漲幅或風險偏高，先等降溫)", "action_cooldown_tickers", price_label="別追，等"),
-        _section("👀 備選觀察：(有訊號但不是今天主動作)", "action_watch_tickers", price_label="看"),
-        _section("🧪 買後檢查：(已列試單，檢查變強或逃)", "trial_ledger_action_tickers"),
+        _section("🟢 可小買：小買試水溫，不重壓", "action_trial_tickers", price_label="買"),
+        _section("🔥 高風險小試 Top 5：自動評分，倉位更小", "action_high_risk_reward_tickers", price_label="看"),
+        _section("🟡 等到價位再買：不要追高", "action_pullback_tickers", price_label="等買"),
+        _section("🧱 中長線可分批：波段倉", "action_midlong_tickers", price_label="買"),
     ]
     visible_sections: list[str] = []
     for section in sections:
@@ -489,8 +501,8 @@ def build_action_summary_notification(metrics: dict[str, object]) -> str:
             visible_sections.append("")
         visible_sections.extend(section)
     if not visible_sections:
-        visible_sections = ["今天沒有新的可小買 / 等便宜買動作。"]
-    return "\n".join(["📌 今日動作摘要", *header, "", *visible_sections])
+        visible_sections = ["今天沒有新的可買標的；觀察名單已留在報告裡。"]
+    return "\n".join(["📌 今日可買名單", *header, "", *guidance, "", *visible_sections])
 
 
 def _action_summary_header_lines(metrics: dict[str, object], *, simple: bool) -> list[str]:
@@ -608,6 +620,11 @@ def _action_summary_ticker(text: str) -> str:
 
 def _action_summary_weight(key: str, text: str) -> float:
     score = float(ACTION_SUMMARY_BUCKET_WEIGHTS.get(key, 0))
+    if key == "action_high_risk_reward_tickers":
+        match = re.search(r"HRR\s+([0-9]+(?:\.[0-9]+)?)", text)
+        if match:
+            score += float(match.group(1)) / 10.0
+        return score
     if "短線：" in text:
         score += 8
     if "中長線：" in text:
@@ -677,6 +694,8 @@ def _empty_shadow_open_not_chase_tracking_df() -> pd.DataFrame:
             "rank",
             "scenario_label",
             "market_heat",
+            "heat_policy_state",
+            "heat_participation_bias",
             "spec_risk_bucket",
             "shadow_target",
             "manual_trial_cap",
@@ -723,12 +742,20 @@ def build_shadow_open_not_chase_tracking_df(
         "0%",
     )
     shadow["manual_trial_cap"] = shadow["manual_trial_cap"].mask(
+        shadow["shadow_eligible"] & fallback_target.eq("開高不追"),
+        "<= 1/4 test position",
+    )
+    shadow["manual_trial_cap"] = shadow["manual_trial_cap"].mask(
         (shadow["manual_trial_cap"] == "") & fallback_target.eq("只觀察不追"),
         "<= 1/3 test position",
     )
     shadow["manual_trial_rule"] = shadow["manual_trial_rule"].mask(
         (shadow["manual_trial_rule"] == "") & fallback_target.eq("開高不追"),
         "只做 shadow，不試單",
+    )
+    shadow["manual_trial_rule"] = shadow["manual_trial_rule"].mask(
+        shadow["shadow_eligible"] & fallback_target.eq("開高不追"),
+        "強勢盤小倉參與；隔日不失守才試，收盤破前低或 1 ATR 出，不攤平",
     )
     shadow["manual_trial_rule"] = shadow["manual_trial_rule"].mask(
         (shadow["manual_trial_rule"] == "") & fallback_target.eq("只觀察不追"),
@@ -863,7 +890,7 @@ def render_shadow_open_not_chase_tracking_markdown(
             "- `action_signal_dates >= 2`",
             "- `dominant_positive_share_pct <= 70`",
             "- recent `below-ok > 0`",
-            "- `只觀察不追` 只能進 shadow review；正式升格前需要人工決定，且單筆不得超過 1/3 試單",
+            "- `只觀察不追` 只能進 shadow review；HRR Top 5 可進自動試單候選，其他正式升格仍需人工決定",
             "- edge should not come only from `hot` + non-normal `spec_risk`",
             "",
         ]
@@ -1276,7 +1303,7 @@ def _plain_action_summary_terms(text: str) -> str:
     plain = re.sub(r"(?:可)?買區", "買", plain)
     for old, new in replacements:
         plain = plain.replace(old, new)
-    plain = plain.replace("/", "、")
+    plain = re.sub(r"(?<!\d)/(?!\d)", "、", plain)
     return plain
 
 
@@ -1287,6 +1314,21 @@ def _format_action_summary_item(value: str, *, price_label: str = "買") -> str:
         return _apply_action_price_label(_plain_action_summary_terms(text), price_label)
     ticker, name, rest = match.groups()
     return _apply_action_price_label(_plain_action_summary_terms(f"{_format_stock_display(ticker, name)}{rest}".strip()), price_label)
+
+
+def _format_buy_recommendation_item(value: str, *, price_label: str = "買") -> str:
+    text = _format_action_summary_item(value, price_label=price_label)
+    for pattern in [
+        r"｜新加入：[^｜]+",
+        r"｜短線備選：[^｜]+",
+        r"｜中長線備選：[^｜]+",
+        r"｜短線：[^｜]+",
+        r"｜中長線：[^｜]+",
+        r"｜持股：[^｜]+",
+    ]:
+        text = re.sub(pattern, "", text)
+    text = re.sub(r"\s+(?:短線|中長線)\s+", " ", text)
+    return text
 
 
 def _apply_action_price_label(text: str, price_label: str) -> str:
@@ -1515,6 +1557,143 @@ def _collect_portfolio_action_summary(portfolio_report_md: Path) -> dict[str, li
                 price_parts.append(sell)
             trim_tickers.append("｜".join(price_parts))
     return {"portfolio_trim_tickers": trim_tickers[:5]}
+
+
+def _hrr_numeric(row: pd.Series, column: str, default: float = 0.0) -> float:
+    value = pd.to_numeric(pd.Series([row.get(column)]), errors="coerce").fillna(default).iloc[0]
+    return float(value)
+
+
+def _hrr_numeric_column(df: pd.DataFrame, column: str, default: float = 0.0) -> pd.Series:
+    if column not in df.columns:
+        return pd.Series(default, index=df.index, dtype=float)
+    return pd.to_numeric(df[column], errors="coerce").fillna(default)
+
+
+def _high_risk_reward_score(row: pd.Series) -> tuple[float, float, float, str]:
+    ret5 = max(_hrr_numeric(row, "ret5_pct"), 0.0)
+    ret20 = max(_hrr_numeric(row, "ret20_pct"), 0.0)
+    setup_score = max(_hrr_numeric(row, "setup_score"), 0.0)
+    raw_risk_score = max(_hrr_numeric(row, "risk_score"), 0.0)
+    volume_ratio = max(_hrr_numeric(row, "volume_ratio20"), 0.0)
+    spec_bucket = str(row.get("spec_risk_bucket", "") or "").strip()
+    spec_label = str(row.get("spec_risk_label", "") or "").strip()
+    signals = str(row.get("signals", "") or "").upper()
+
+    signal_bonus = 0.0
+    if "TREND" in signals:
+        signal_bonus += 5.0
+    if "ACCEL" in signals:
+        signal_bonus += 5.0
+    if "SURGE" in signals:
+        signal_bonus += 5.0
+    reward_score = min(35.0, ret20 * 0.7) + min(25.0, ret5 * 1.2) + min(20.0, setup_score * 1.35) + signal_bonus
+    if volume_ratio >= 1.2:
+        reward_score += min(5.0, (volume_ratio - 1.0) * 2.5)
+
+    risk_score = min(30.0, raw_risk_score * 3.0)
+    if spec_bucket == "high" or spec_label == "疑似炒作風險高":
+        risk_score += 40.0
+    elif spec_bucket == "watch" or spec_label in {"投機偏高", "偏熱", "留意"}:
+        risk_score += 25.0
+    risk_score += min(10.0, max(ret20 - 25.0, 0.0) * 0.25)
+    if volume_ratio >= 2.0:
+        risk_score += min(10.0, (volume_ratio - 2.0) * 5.0)
+    elif 0.0 < volume_ratio < 0.8:
+        risk_score += 6.0
+
+    reward_score = min(100.0, reward_score)
+    risk_score = min(100.0, risk_score)
+    hrr_score = round((reward_score * 0.65) + (risk_score * 0.35), 1)
+    standard = "標準: 高投機風險 + 強動能報酬"
+    return hrr_score, round(reward_score, 1), round(risk_score, 1), standard
+
+
+def _prepare_high_risk_reward_source(shadow_candidates_csv: Path, daily_rank_csv: Path | None) -> pd.DataFrame:
+    rank_path = daily_rank_csv or shadow_candidates_csv.parent / "daily_rank.csv"
+    daily_rank = _load_csv_safely(rank_path)
+    if not daily_rank.empty:
+        work = daily_rank.copy()
+        work["spec_risk_bucket"] = _spec_risk_bucket(work)
+        return work
+
+    shadow = _load_csv_safely(shadow_candidates_csv)
+    if shadow.empty:
+        return pd.DataFrame()
+    work = shadow.copy()
+    if "spec_risk_bucket" not in work.columns:
+        work["spec_risk_bucket"] = _spec_risk_bucket(work)
+    return work
+
+
+def _collect_high_risk_reward_action_summary(
+    shadow_candidates_csv: Path,
+    *,
+    daily_rank_csv: Path | None = None,
+) -> dict[str, list[str]]:
+    work = _prepare_high_risk_reward_source(shadow_candidates_csv, daily_rank_csv)
+    if work.empty:
+        return {"action_high_risk_reward_tickers": []}
+
+    for col in ["rank", "setup_score", "risk_score", "ret5_pct", "ret20_pct", "volume_ratio20"]:
+        if col in work.columns:
+            work[col] = pd.to_numeric(work[col], errors="coerce")
+    if "rank" not in work.columns:
+        work["rank"] = range(1, len(work) + 1)
+    if "spec_risk_bucket" not in work.columns:
+        work["spec_risk_bucket"] = _spec_risk_bucket(work)
+
+    spec = work.get("spec_risk_bucket", pd.Series(index=work.index, dtype=object)).fillna("").astype(str)
+    label = work.get("spec_risk_label", pd.Series(index=work.index, dtype=object)).fillna("").astype(str)
+    signals = work.get("signals", pd.Series(index=work.index, dtype=object)).fillna("").astype(str).str.upper()
+    ret5 = _hrr_numeric_column(work, "ret5_pct")
+    ret20 = _hrr_numeric_column(work, "ret20_pct")
+    setup = _hrr_numeric_column(work, "setup_score")
+
+    high_risk_mask = spec.isin(["high", "watch"]) | label.isin(["疑似炒作風險高", "投機偏高", "偏熱", "留意"])
+    high_reward_mask = ((ret5 >= 10.0) | (ret20 >= 25.0)) & (setup >= 8.0) & signals.str.contains("TREND|ACCEL|SURGE", regex=True)
+    work = work[high_risk_mask & high_reward_mask].copy()
+    if work.empty:
+        return {"action_high_risk_reward_tickers": []}
+
+    scored = work.apply(_high_risk_reward_score, axis=1, result_type="expand")
+    work[["_hrr_score", "_hrr_reward_score", "_hrr_risk_score", "_hrr_standard"]] = scored
+    work = work[
+        (work["_hrr_reward_score"] >= HIGH_RISK_REWARD_MIN_REWARD_SCORE)
+        & (work["_hrr_risk_score"] >= HIGH_RISK_REWARD_MIN_RISK_SCORE)
+    ].copy()
+    if work.empty:
+        return {"action_high_risk_reward_tickers": []}
+    work["_rank"] = pd.to_numeric(work["rank"], errors="coerce").fillna(9999)
+    work = work.sort_values(by=["_hrr_score", "_hrr_reward_score", "_rank"], ascending=[False, False, True])
+
+    items: list[str] = []
+    for _, row in work.head(HIGH_RISK_REWARD_LIMIT).iterrows():
+        ticker = str(row.get("ticker", "") or "").strip()
+        name = str(row.get("name", "") or "").strip()
+        if not ticker and not name:
+            continue
+        ret5_value = row.get("ret5_pct")
+        ret20_value = row.get("ret20_pct")
+        returns: list[str] = []
+        if pd.notna(ret5_value):
+            returns.append(f"5D {float(ret5_value):.1f}%")
+        if pd.notna(ret20_value):
+            returns.append(f"20D {float(ret20_value):.1f}%")
+        heat = str(row.get("heat_policy_state", "") or "").strip()
+        notes = [
+            "高風險高報酬",
+            f"HRR {float(row['_hrr_score']):.1f}",
+            "自動試單候選",
+        ]
+        if returns:
+            notes.append("、".join(returns))
+        if heat:
+            notes.append(heat)
+        notes.append(HIGH_RISK_REWARD_TRIAL_CAP)
+        notes.append(HIGH_RISK_REWARD_TRIAL_RULE)
+        items.append(f"{ticker} {name}｜" + "｜".join(notes))
+    return {"action_high_risk_reward_tickers": items}
 
 
 def _collect_new_additions_action_summary(new_additions_tracking_csv: Path) -> dict[str, list[str]]:
@@ -2498,7 +2677,16 @@ def collect_status_metrics(theme_outdir: Path = THEME_OUTDIR, verification_outdi
     portfolio_summary = _collect_portfolio_action_summary(theme_outdir / "portfolio_report.md")
     new_additions_summary = _collect_new_additions_action_summary(theme_outdir / "quality_value_new_additions_tracking.csv")
     trial_ledger_summary = _collect_trial_ledger_action_summary(theme_outdir / "quality_value_trial_ledger.csv")
-    combined_action_summary = _merge_action_summary_metrics(action_summary, new_additions_summary, trial_ledger_summary)
+    high_risk_reward_summary = _collect_high_risk_reward_action_summary(
+        theme_outdir / "shadow_open_not_chase_candidates.csv",
+        daily_rank_csv=daily_rank_csv,
+    )
+    combined_action_summary = _merge_action_summary_metrics(
+        action_summary,
+        high_risk_reward_summary,
+        new_additions_summary,
+        trial_ledger_summary,
+    )
     snapshots_df = _load_csv_safely(snapshots_csv)
     outcomes_df = _load_csv_safely(outcomes_csv)
     verification_gate = build_data_quality_gate(outcomes_df, snapshots_df)
@@ -2646,6 +2834,7 @@ def render_local_status_markdown(
             "## Action Summary",
             "",
             f"- 可試單: `{', '.join(metrics.get('action_trial_tickers', [])) or 'n/a'}`",
+            f"- 高風險高報酬: `{', '.join(metrics.get('action_high_risk_reward_tickers', [])) or 'n/a'}`",
             f"- 等拉回: `{', '.join(metrics.get('action_pullback_tickers', [])) or 'n/a'}`",
             f"- 量縮先等: `{', '.join(metrics.get('action_low_liquidity_tickers', [])) or 'n/a'}`",
             f"- 等轉強: `{', '.join(metrics.get('action_wait_strength_tickers', [])) or 'n/a'}`",

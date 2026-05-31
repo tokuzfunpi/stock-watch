@@ -23,6 +23,7 @@ from stock_watch.cli.local_daily import send_quality_value_notification
 from stock_watch.cli.local_daily import should_run_step
 from stock_watch.cli.local_daily import update_quality_value_tracking
 from stock_watch.cli.local_daily import _collect_new_additions_action_summary
+from stock_watch.cli.local_daily import _collect_high_risk_reward_action_summary
 from stock_watch.cli.local_daily import _collect_watchlist_action_summary
 from stock_watch.cli.local_daily import _build_lucky_pick_line
 from stock_watch.cli.local_daily import LUCKY_PICK_TAGLINES
@@ -92,17 +93,22 @@ class RunLocalDailyTests(unittest.TestCase):
             }
         )
 
-        self.assertIn("📌 今日動作摘要", message)
+        self.assertIn("📌 今日可買名單", message)
         self.assertEqual(message.splitlines()[1], "星期三幸運籤抽到 台積電 (2330.TW)：一眼不看，心態自來。")
         self.assertNotIn("小彩蛋：", message)
         self.assertIn("盤勢：高檔震盪盤｜邊做邊收", message)
         self.assertIn("重點：進場要更挑買點", message)
-        self.assertIn("🟢 今天可小買：(小買試水溫，不重壓)\n• 捷波 (6161.TWO)", message)
-        self.assertIn("🟡 等便宜再買：(等回到買的位置，不追高)\n• 華擎 (3515.TW)\n• 茂訊 (3213.TWO) 可小買", message)
-        self.assertIn("🧱 中長線布局：(波段倉，分批處理)\n• 聯陽 (3014.TW) 中長線 繼續看好", message)
-        self.assertIn("👀 備選觀察：(有訊號但不是今天主動作)\n• 緯創 (3231.TW) 短線備選 續追蹤", message)
-        self.assertIn("🧪 買後檢查：(已列試單，檢查變強或逃)\n• 茂訊 (3213.TWO) 試買中、風險偏高，買更小 第一筆可小買", message)
+        self.assertIn("原則：只列可買 / 可等價位買；買不買和何時買由你決定，逃跑價要先看。", message)
+        self.assertIn("🟢 可小買：小買試水溫，不重壓\n• 捷波 (6161.TWO)", message)
+        self.assertIn("🟡 等到價位再買：不要追高\n• 華擎 (3515.TW)\n• 茂訊 (3213.TWO) 可小買", message)
+        self.assertIn("🧱 中長線可分批：波段倉\n• 聯陽 (3014.TW) 繼續看好", message)
+        self.assertNotIn("備選觀察", message)
+        self.assertNotIn("買後檢查", message)
+        self.assertNotIn("等變強再買", message)
+        self.assertNotIn("太熱別追", message)
         self.assertNotIn("新加入觀察", message)
+        self.assertNotIn("短線備選", message)
+        self.assertNotIn("中長線：", message)
         self.assertNotIn("active_trial", message)
         self.assertNotIn("risk_watch", message)
         self.assertNotIn("1/3", message)
@@ -130,20 +136,130 @@ class RunLocalDailyTests(unittest.TestCase):
             }
         )
 
-        self.assertIn("📌 今日可行動名單", message)
+        self.assertIn("📌 今日可買名單", message)
         self.assertEqual(message.splitlines()[1], "星期三雷達嗶到 台積電 (2330.TW)：不是叫你衝，是叫你假裝很懂地觀察。")
         self.assertIn("盤勢：高檔震盪盤｜邊做邊收", message)
-        self.assertIn("🟢 今天可小買：(小買試水溫，不重壓)\n• 捷波 (6161.TWO)｜買 42.92–44｜逃 40.85", message)
+        self.assertIn("原則：只列可買 / 可等價位買；買不買和何時買由你決定，逃跑價要先看。", message)
+        self.assertIn("🟢 可小買：小買試水溫，不重壓\n• 捷波 (6161.TWO)｜買 42.92–44｜逃 40.85", message)
         self.assertIn("• 富鼎 (8261.TW)｜買 120.72–128｜逃 110.21", message)
         self.assertNotIn("可可買區", message)
         self.assertNotIn("茂訊 (3213.TWO)", message)
-        self.assertIn("🟡 等便宜再買：(等回到買的位置，不追高)\n• 華擎 (3515.TW)｜等買 300–315｜逃 286", message)
+        self.assertIn("🟡 等到價位再買：不要追高\n• 華擎 (3515.TW)｜等買 300–315｜逃 286", message)
         self.assertNotIn("英業達", message)
         self.assertNotIn("持股", message)
+        self.assertNotIn("新加入：", message)
         self.assertNotIn("等轉強", message)
         self.assertNotIn("過熱先等", message)
         self.assertNotIn("新加入觀察", message)
         self.assertNotIn("買後檢查", message)
+
+    def test_build_action_summary_notification_marks_high_risk_reward_separately(self) -> None:
+        message = build_action_summary_notification(
+            {
+                "action_trial_tickers": ["2881.TW 富邦金｜買 108–110｜逃 104"],
+                "action_high_risk_reward_tickers": [
+                    "2495.TW 普安｜高風險高報酬｜HRR 71.2｜自動試單候選｜5D 16.5%、20D 28.1%｜hot_trend｜≤1/5 HRR試單｜總HRR≤1單位；破前低或1ATR停損"
+                ],
+                "action_cooldown_tickers": ["2312.TW 金寶"],
+            }
+        )
+
+        self.assertIn("🟢 可小買", message)
+        self.assertIn("🔥 高風險小試 Top 5：自動評分，倉位更小", message)
+        self.assertIn("普安 (2495.TW)｜高風險高報酬｜HRR 71.2", message)
+        self.assertIn("自動試單候選", message)
+        self.assertIn("≤1/5 HRR試單", message)
+        self.assertNotIn("標準: 高投機風險 + 強動能報酬", message)
+        self.assertIn("🟢 可小買：小買試水溫，不重壓\n• 富邦金 (2881.TW)", message)
+
+    def test_collect_high_risk_reward_action_summary_reads_shadow_candidates(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            shadow_csv = Path(tmpdir) / "shadow_open_not_chase_candidates.csv"
+            pd.DataFrame(
+                [
+                    {
+                        "rank": 2,
+                        "ticker": "2495.TW",
+                        "name": "普安",
+                        "shadow_target": "只觀察不追",
+                        "spec_risk_bucket": "high",
+                        "shadow_status": "decision_required",
+                        "heat_policy_state": "hot_trend",
+                        "setup_score": 15,
+                        "risk_score": 4,
+                        "volume_ratio20": 2.03,
+                        "signals": "SURGE,TREND,ACCEL",
+                        "ret5_pct": 16.52,
+                        "ret20_pct": 28.11,
+                    },
+                    {
+                        "rank": 13,
+                        "ticker": "2881.TW",
+                        "name": "富邦金",
+                        "shadow_target": "開高不追",
+                        "spec_risk_bucket": "normal",
+                        "shadow_status": "eligible",
+                        "heat_policy_state": "hot_trend",
+                        "setup_score": 11,
+                        "risk_score": 4,
+                        "volume_ratio20": 2.75,
+                        "signals": "SURGE,TREND,ACCEL",
+                        "ret5_pct": 15.67,
+                        "ret20_pct": 22.22,
+                    },
+                ]
+            ).to_csv(shadow_csv, index=False)
+
+            result = _collect_high_risk_reward_action_summary(shadow_csv)
+
+        self.assertEqual(len(result["action_high_risk_reward_tickers"]), 1)
+        self.assertIn("2495.TW 普安", result["action_high_risk_reward_tickers"][0])
+        self.assertIn("高風險高報酬", result["action_high_risk_reward_tickers"][0])
+        self.assertIn("HRR", result["action_high_risk_reward_tickers"][0])
+        self.assertIn("自動試單候選", result["action_high_risk_reward_tickers"][0])
+        self.assertIn("≤1/5 HRR試單", result["action_high_risk_reward_tickers"][0])
+
+    def test_collect_high_risk_reward_action_summary_ranks_daily_top_five(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            shadow_csv = root / "shadow_open_not_chase_candidates.csv"
+            daily_rank_csv = root / "daily_rank.csv"
+            pd.DataFrame(
+                [
+                    {
+                        "rank": idx,
+                        "ticker": f"24{idx:02d}.TW",
+                        "name": f"高風險{idx}",
+                        "setup_score": 8 + idx,
+                        "risk_score": 4 + idx,
+                        "ret5_pct": 10 + idx,
+                        "ret20_pct": 25 + (idx * 3),
+                        "volume_ratio20": 1.2 + (idx / 10),
+                        "signals": "SURGE,TREND,ACCEL",
+                        "spec_risk_label": "疑似炒作風險高",
+                        "spec_risk_score": 6,
+                    }
+                    for idx in range(1, 8)
+                ]
+            ).to_csv(daily_rank_csv, index=False)
+
+            result = _collect_high_risk_reward_action_summary(shadow_csv, daily_rank_csv=daily_rank_csv)
+
+        items = result["action_high_risk_reward_tickers"]
+        self.assertEqual(len(items), 5)
+        self.assertIn("2407.TW 高風險7", items[0])
+        self.assertIn("2403.TW 高風險3", items[-1])
+        self.assertTrue(all("HRR" in item and "自動試單候選" in item for item in items))
+
+    def test_merge_prefers_high_risk_reward_over_generic_cooldown_for_same_ticker(self) -> None:
+        merged = _merge_action_summary_metrics(
+            {"action_cooldown_tickers": ["2495.TW 普安｜別追，等 40–42"]},
+            {"action_high_risk_reward_tickers": ["2495.TW 普安｜高風險高報酬｜自動試單候選"]},
+        )
+
+        self.assertEqual(merged["action_cooldown_tickers"], [])
+        self.assertEqual(len(merged["action_high_risk_reward_tickers"]), 1)
+        self.assertIn("高風險高報酬", merged["action_high_risk_reward_tickers"][0])
 
     def test_quality_value_notification_does_not_send_portfolio_only_actions(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -1024,6 +1140,8 @@ class RunLocalDailyTests(unittest.TestCase):
         self.assertAlmostEqual(float(tracking.iloc[0]["realized_ret_pct_1d"]), 9.92, places=2)
         self.assertTrue(bool(tracking.iloc[0]["matured_1d"]))
         self.assertTrue(bool(tracking.iloc[0]["win_1d"]))
+        self.assertEqual(str(tracking.iloc[0]["manual_trial_cap"]), "<= 1/4 test position")
+        self.assertIn("收盤破前低或 1 ATR 出", str(tracking.iloc[0]["manual_trial_rule"]))
 
     def test_write_shadow_open_not_chase_tracking_outputs_writes_summary_and_csv(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -1101,10 +1219,11 @@ class RunLocalDailyTests(unittest.TestCase):
 
         self.assertIn("短線候補 Daily Tracking", markdown)
         self.assertIn("Promotion Criteria", markdown)
-        self.assertIn("不得超過 1/3 試單", markdown)
+        self.assertIn("HRR Top 5 可進自動試單候選", markdown)
         self.assertIn("2026-05-04", markdown)
         self.assertEqual(len(tracking_csv), 2)
         self.assertEqual(str(tracking_csv.iloc[0]["ticker"]), "5386.TWO")
+        self.assertEqual(str(tracking_csv.iloc[0]["manual_trial_cap"]), "<= 1/4 test position")
         manual_row = tracking_csv[tracking_csv["ticker"].astype(str) == "9999.TW"].iloc[0]
         self.assertEqual(str(manual_row["manual_trial_cap"]), "<= 1/3 test position")
 

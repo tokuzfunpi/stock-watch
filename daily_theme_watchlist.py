@@ -49,6 +49,7 @@ from stock_watch.runtime import ALERT_TRACK_CSV, FEEDBACK_SUMMARY_CSV, LOCAL_TZ,
 from stock_watch.state import run_state
 from stock_watch.strategy import candidates as strategy_candidates
 from stock_watch.strategy import feedback as strategy_feedback
+from stock_watch.strategy import heat_policy as strategy_heat_policy
 from stock_watch.strategy import scenario as strategy_scenario
 from stock_watch.telegram_config import resolve_telegram_token
 from stock_watch.workflows import market_context
@@ -1395,27 +1396,7 @@ def build_candidate_sets(
 
 
 def market_heat_bucket(df_rank: Optional[pd.DataFrame], scenario: dict) -> str:
-    if df_rank is None or df_rank.empty:
-        return "normal"
-    working = df_rank.head(10).copy()
-    if working.empty:
-        return "normal"
-    for col in ["risk_score", "ret5_pct"]:
-        if col in working.columns:
-            working[col] = pd.to_numeric(working[col], errors="coerce")
-    hot_mask = (
-        working.get("risk_score", pd.Series(dtype=float)).fillna(0).ge(5)
-        | working.get("ret5_pct", pd.Series(dtype=float)).fillna(0).ge(12)
-        | working.get("volatility_tag", pd.Series(dtype=str)).astype(str).isin(["活潑", "劇烈"])
-        | working.get("spec_risk_label", pd.Series(dtype=str)).astype(str).eq("疑似炒作風險高")
-    )
-    hot_ratio = float(hot_mask.mean()) if len(working) else 0.0
-    label = str(scenario.get("label", "") or "")
-    if hot_ratio >= 0.3 and label in {"高檔震盪盤", "強勢延伸盤"}:
-        return "hot"
-    if hot_ratio >= 0.15:
-        return "warm"
-    return "normal"
+    return strategy_heat_policy.build_market_heat_policy(df_rank, scenario).market_heat
 
 
 def _shadow_spec_risk_bucket(spec_label: str) -> str:
@@ -1445,6 +1426,8 @@ def _empty_shadow_open_not_chase_df() -> pd.DataFrame:
             "spec_risk_label",
             "scenario_label",
             "market_heat",
+            "heat_policy_state",
+            "heat_participation_bias",
             "spec_risk_bucket",
             "action_label",
             "shadow_target",
@@ -1475,7 +1458,8 @@ def build_open_not_chase_shadow_observations(
         return _empty_shadow_open_not_chase_df()
 
     scenario = build_market_scenario(market_regime, us_market, df_rank)
-    market_heat = market_heat_bucket(df_rank, scenario)
+    heat_policy = strategy_heat_policy.build_market_heat_policy(df_rank, scenario)
+    market_heat = heat_policy.market_heat
     pool = rank_short_term_pool(df_rank).copy()
     if pool.empty:
         return _empty_shadow_open_not_chase_df()
@@ -1488,6 +1472,8 @@ def build_open_not_chase_shadow_observations(
 
     pool["scenario_label"] = str(scenario.get("label", ""))
     pool["market_heat"] = market_heat
+    pool["heat_policy_state"] = heat_policy.state
+    pool["heat_participation_bias"] = heat_policy.participation_bias
     pool["spec_risk_bucket"] = pool.get("spec_risk_label", "").astype(str).apply(_shadow_spec_risk_bucket)
     pool["shadow_target"] = pool["action_label"].astype(str)
     pool["shadow_guardrail_scope"] = pool["action_label"].astype(str).map(
@@ -1499,13 +1485,13 @@ def build_open_not_chase_shadow_observations(
     pool["manual_trial_cap"] = pool["action_label"].astype(str).map(
         {
             "開高不追": "0%",
-            "只觀察不追": "<= 1/3 test position",
+            "只觀察不追": heat_policy.observe_only_trial_cap,
         }
     ).fillna("0%")
     pool["manual_trial_rule"] = pool["action_label"].astype(str).map(
         {
             "開高不追": "只做 shadow，不試單",
-            "只觀察不追": "僅限人工點名；不得自動推播或自動升格",
+            "只觀察不追": heat_policy.observe_only_trial_rule,
         }
     ).fillna("只做 shadow")
     scenario_ok = pool["scenario_label"].astype(str).isin(["強勢延伸盤", "高檔震盪盤"])
@@ -1513,9 +1499,18 @@ def build_open_not_chase_shadow_observations(
     spec_normal = pool["spec_risk_bucket"].astype(str).eq("normal")
     pool["shadow_eligible"] = (
         pool["action_label"].astype(str).eq("開高不追")
+        & bool(heat_policy.allow_open_not_chase_trial)
         & scenario_ok
         & heat_ok
         & spec_normal
+    )
+    pool["manual_trial_cap"] = pool["manual_trial_cap"].mask(
+        pool["shadow_eligible"],
+        heat_policy.open_not_chase_trial_cap,
+    )
+    pool["manual_trial_rule"] = pool["manual_trial_rule"].mask(
+        pool["shadow_eligible"],
+        heat_policy.open_not_chase_trial_rule,
     )
 
     def _shadow_reason(row: pd.Series) -> str:
@@ -1524,6 +1519,8 @@ def build_open_not_chase_shadow_observations(
             reasons.append("scenario 不在目標區")
         if str(row.get("market_heat", "")) != "hot":
             reasons.append("market_heat 非 hot")
+        if not bool(heat_policy.allow_open_not_chase_trial) and str(row.get("action_label", "")) == "開高不追":
+            reasons.append(f"heat_policy={heat_policy.state} 不允許小倉")
         if str(row.get("action_label", "")) == "只觀察不追":
             reasons.append("只觀察不追仍需人工決定，暫不升格")
         if str(row.get("spec_risk_bucket", "")) != "normal":
@@ -1604,20 +1601,23 @@ def build_open_not_chase_shadow_markdown(df_shadow: pd.DataFrame) -> str:
         return "\n".join(lines)
 
     eligible_count = int(df_shadow.get("shadow_eligible", pd.Series(dtype=bool)).astype(bool).sum())
+    heat_state = str(df_shadow.get("heat_policy_state", pd.Series([""])).iloc[0] if "heat_policy_state" in df_shadow.columns else "")
+    heat_bias = str(df_shadow.get("heat_participation_bias", pd.Series([""])).iloc[0] if "heat_participation_bias" in df_shadow.columns else "")
     lines.extend(
         [
             f"- Total observed: `{len(df_shadow)}`",
             f"- Eligible now: `{eligible_count}`",
+            f"- Heat policy: `{heat_state}` / `{heat_bias}`",
             "",
             "## Candidates",
             "",
-            "| Rank | Ticker | Name | Target | Scenario | Heat | Spec | Eligible | Status | Trial Cap | Reason | 5D | 20D | Signals |",
-            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+            "| Rank | Ticker | Name | Target | Scenario | Heat Policy | Heat | Spec | Eligible | Status | Trial Cap | Reason | 5D | 20D | Signals |",
+            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
         ]
     )
     for _, row in df_shadow.iterrows():
         lines.append(
-            f"| {int(row['rank'])} | {row['ticker']} | {row['name']} | {row['shadow_target']} | {row['scenario_label']} | {row['market_heat']} | "
+            f"| {int(row['rank'])} | {row['ticker']} | {row['name']} | {row['shadow_target']} | {row['scenario_label']} | {row.get('heat_policy_state', '')} | {row['market_heat']} | "
             f"{row['spec_risk_bucket']} | {str(bool(row['shadow_eligible']))} | {row['shadow_status']} | {row['manual_trial_cap']} | {row['shadow_reason']} | "
             f"{row['ret5_pct']} | {row['ret20_pct']} | {row['signals']} |"
         )
