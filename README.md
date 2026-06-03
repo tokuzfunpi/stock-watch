@@ -4,7 +4,12 @@
 
 ## 重點邏輯
 
-- Attack 候選需同時滿足：`ret5 > 8`、`volume_ratio > 1.3`、`ret20 > 0`，或出現 `ACCEL`。
+- Steady / Attack 事件分類的門檻集中定義在 `config.json` 的 `classification` 區塊，並由
+  `stock_watch/strategy/classification.py` 作為唯一真實來源 (single source of truth)，
+  回測 (`run_backtest_dual`) 與線上判斷共用同一份規則，避免漂移。
+  - Steady：`setup_score >= 5` 且 `risk_score <= 4`。
+  - Attack：同時滿足 `ret5 > 8`、`volume_ratio > 1.3`、`ret20 > 0`，或出現 `ACCEL`。
+  - 要調整門檻時只改 `config.json`，不要在程式碼裡再寫死一份。
 - Theme / satellite 優先，theme 另外加分。
 - 排名偏重 `setup`、`ret5`、`volume_ratio`、`ret20`。
 - `spec_risk_score / spec_risk_subtype / spec_risk_note` 會標示急漲、爆量、乖離大、缺少結構支撐等疑似炒作型態。

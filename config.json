@@ -59,6 +59,14 @@
     "min_correction_ok_samples": 10,
     "new_watch_spotlight_limit": 3
   },
+  "classification": {
+    "steady_min_setup_score": 5,
+    "steady_max_risk_score": 4,
+    "attack_min_ret5_pct": 8.0,
+    "attack_min_volume_ratio": 1.3,
+    "attack_min_ret20_pct": 0.0,
+    "attack_breakout_signals": ["ACCEL"]
+  },
   "liquidity": {
     "policy_default": "per_bucket",
     "policy_notify": "tag_only",
