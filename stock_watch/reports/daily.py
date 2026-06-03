@@ -244,13 +244,28 @@ def build_daily_report_markdown(
         if backtest is None or backtest.empty:
             lines.append("- None")
         else:
-            lines.append("| Horizon | Trades | Win Rate | Avg Return | Median Return |")
-            lines.append("| --- | --- | --- | --- | --- |")
-            for _, row in backtest.iterrows():
+            has_risk_cols = "profit_factor" in backtest.columns
+            if has_risk_cols:
                 lines.append(
-                    f"| {int(row['horizon'])}D | {int(row['trades'])} | {row['win_rate_pct']}% | "
-                    f"{row['avg_return_pct']}% | {row['median_return_pct']}% |"
+                    "| Horizon | Trades | Win Rate | Avg Return | Median Return | "
+                    "Profit Factor | Payoff | Max DD |"
                 )
+                lines.append("| --- | --- | --- | --- | --- | --- | --- | --- |")
+                for _, row in backtest.iterrows():
+                    lines.append(
+                        f"| {int(row['horizon'])}D | {int(row['trades'])} | {row['win_rate_pct']}% | "
+                        f"{row['avg_return_pct']}% | {row['median_return_pct']}% | "
+                        f"{row.get('profit_factor', '')} | {row.get('payoff_ratio', '')} | "
+                        f"{row.get('max_drawdown_pct', '')}% |"
+                    )
+            else:
+                lines.append("| Horizon | Trades | Win Rate | Avg Return | Median Return |")
+                lines.append("| --- | --- | --- | --- | --- |")
+                for _, row in backtest.iterrows():
+                    lines.append(
+                        f"| {int(row['horizon'])}D | {int(row['trades'])} | {row['win_rate_pct']}% | "
+                        f"{row['avg_return_pct']}% | {row['median_return_pct']}% |"
+                    )
 
     if alert_track_csv.exists():
         try:
