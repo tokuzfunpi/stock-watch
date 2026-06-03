@@ -46,7 +46,16 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: Lint (ruff)
+        run: |
+          ruff check .
+
+      - name: Type check (mypy, non-blocking)
+        continue-on-error: true
+        run: |
+          mypy stock_watch || true
 
       - name: Run tests
         run: |

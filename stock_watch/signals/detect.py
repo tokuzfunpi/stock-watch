@@ -52,8 +52,89 @@ def add_indicators(df: pd.DataFrame, ma_period: int = 20) -> pd.DataFrame:
     out["ATR14"] = tr.rolling(14).mean()
     out["ATR_Pct"] = out["ATR14"] / out["Close"]
 
+    out = add_momentum_indicators(out)
+
     if ma_period not in [5, 10, 20, 60, 120, 250]:
         out[f"MA{ma_period}"] = out["Close"].rolling(ma_period).mean()
+    return out
+
+
+def add_momentum_indicators(
+    df: pd.DataFrame,
+    *,
+    rsi_period: int = 14,
+    macd_fast: int = 12,
+    macd_slow: int = 26,
+    macd_signal: int = 9,
+    adx_period: int = 14,
+) -> pd.DataFrame:
+    """Append RSI / MACD / ADX columns in place on a copy.
+
+    All columns are additive and NaN-safe (early rows are NaN until enough
+    history accumulates). Existing consumers that read columns by name are
+    unaffected.
+
+    Columns added:
+      - RSI14
+      - MACD, MACD_Signal, MACD_Hist
+      - ADX14, DI_Plus14, DI_Minus14
+    """
+    out = df.copy()
+    close = out["Close"]
+
+    # --- RSI (Wilder smoothing via EWM, alpha = 1/period) ---
+    delta = close.diff()
+    gain = delta.clip(lower=0.0)
+    loss = (-delta).clip(lower=0.0)
+    avg_gain = gain.ewm(alpha=1.0 / rsi_period, min_periods=rsi_period, adjust=False).mean()
+    avg_loss = loss.ewm(alpha=1.0 / rsi_period, min_periods=rsi_period, adjust=False).mean()
+    rs = avg_gain / avg_loss
+    rsi = 100.0 - (100.0 / (1.0 + rs))
+    # When avg_loss == 0 (only gains), RSI is 100; when avg_gain == 0, RSI is 0.
+    rsi = rsi.where(avg_loss != 0, 100.0)
+    rsi = rsi.where(avg_gain != 0, 0.0)
+    out[f"RSI{rsi_period}"] = rsi
+
+    # --- MACD ---
+    ema_fast = close.ewm(span=macd_fast, min_periods=macd_fast, adjust=False).mean()
+    ema_slow = close.ewm(span=macd_slow, min_periods=macd_slow, adjust=False).mean()
+    macd_line = ema_fast - ema_slow
+    signal_line = macd_line.ewm(span=macd_signal, min_periods=macd_signal, adjust=False).mean()
+    out["MACD"] = macd_line
+    out["MACD_Signal"] = signal_line
+    out["MACD_Hist"] = macd_line - signal_line
+
+    # --- ADX / Directional Indicators (Wilder) ---
+    high = out["High"]
+    low = out["Low"]
+    up_move = high.diff()
+    down_move = -low.diff()
+    plus_dm = ((up_move > down_move) & (up_move > 0)).astype(float) * up_move.clip(lower=0.0)
+    minus_dm = ((down_move > up_move) & (down_move > 0)).astype(float) * down_move.clip(lower=0.0)
+
+    true_range = pd.concat(
+        [
+            high - low,
+            (high - close.shift(1)).abs(),
+            (low - close.shift(1)).abs(),
+        ],
+        axis=1,
+    ).max(axis=1)
+
+    atr = true_range.ewm(alpha=1.0 / adx_period, min_periods=adx_period, adjust=False).mean()
+    plus_dm_s = plus_dm.ewm(alpha=1.0 / adx_period, min_periods=adx_period, adjust=False).mean()
+    minus_dm_s = minus_dm.ewm(alpha=1.0 / adx_period, min_periods=adx_period, adjust=False).mean()
+
+    di_plus = 100.0 * (plus_dm_s / atr)
+    di_minus = 100.0 * (minus_dm_s / atr)
+    di_sum = (di_plus + di_minus).replace(0.0, float("nan"))
+    dx = 100.0 * (di_plus - di_minus).abs() / di_sum
+    adx = dx.ewm(alpha=1.0 / adx_period, min_periods=adx_period, adjust=False).mean()
+
+    out[f"DI_Plus{adx_period}"] = di_plus
+    out[f"DI_Minus{adx_period}"] = di_minus
+    out[f"ADX{adx_period}"] = adx
+
     return out
 
 
