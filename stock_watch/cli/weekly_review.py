@@ -734,7 +734,6 @@ def build_short_gate_tuning_draft(
             }
 
     historical_ready = bool(summary.get("historical", {}).get("promotion_ready", False))
-    recent_ready = bool(summary.get("recent", {}).get("promotion_ready", False))
     hist_delta = float(summary.get("historical", {}).get("delta_avg_ret_below_minus_ok", 0.0) or 0.0)
     sim_delta = float(summary.get("simulation", {}).get("delta_avg_ret_simulated_minus_current", 0.0) or 0.0)
 

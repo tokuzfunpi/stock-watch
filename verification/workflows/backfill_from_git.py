@@ -15,7 +15,6 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from stock_watch.paths import THEME_OUTDIR
 from stock_watch.paths import VERIFICATION_OUTDIR
 from stock_watch.runtime import LOCAL_TZ
 from stock_watch.strategy.scenario import build_market_scenario
