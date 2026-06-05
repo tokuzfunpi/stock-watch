@@ -12,41 +12,42 @@ Status legend: `[ ]` planned · `[~]` in progress · `[x]` done
 
 Trustworthy conclusions depend on this layer. Do it first.
 
-- [ ] **A1. Single source of truth for strategy thresholds.**
-  The "attack/steady" definitions and magic numbers currently appear in multiple
-  places (`backtesting/core.py`, `README`, `config.notify`) and can drift, which makes
-  backtest rules diverge from the live `detect_row` rules. Consolidate into
-  `config.json` / a `strategy` dataclass shared by both paths.
+- [x] **A1. Single source of truth for strategy thresholds.**
+  The steady/attack definitions are now centralized in
+  `stock_watch/strategy/classification.py` (`ClassificationThresholds`,
+  `is_steady_event`, `is_attack_event`), loaded from a new `config.json`
+  `classification` block and shared by the backtest. Defaults reproduce the prior
+  hardcoded behavior; README points to the single source. Parity tests included.
 
-- [ ] **A2. Reduce backtest bias.**
-  - Yahoo `auto_adjust=True` retroactively changes historical prices on
-    dividends/splits, so signals computed today differ from what was visible then
-    (look-ahead bias). Preserve raw + adjusted series or label the limitation.
-  - The watchlist is hand-picked → survivorship bias inflates win rates. Add a clear
-    caveat to reports.
+- [x] **A2. Reduce backtest bias.** Documented in `docs/research/BACKTEST_BIASES.md`:
+  auto-adjust look-ahead, survivorship/selection bias, missing execution costs, and
+  no intraday path, with guidance on how to read results despite the biases.
 
-- [x] **A3. Risk-adjusted backtest metrics.** *(first increment — done)*
-  `summarize_events` previously reported only win rate / avg / median. Added
-  `avg_win_pct`, `avg_loss_pct`, `payoff_ratio`, `profit_factor`, `std_return_pct`,
-  and `max_drawdown_pct`, plus a `_max_drawdown_pct` helper. The daily report now
-  surfaces Profit Factor / Payoff / Max DD when present (backward compatible).
-  Next step within A3: per-quantile forward-return tear sheet by `setup_score` /
-  `risk_score` / `spec_risk` to validate predictive power.
+- [x] **A3. Risk-adjusted backtest metrics + factor tear sheet.**
+  `summarize_events` now reports `avg_win_pct`, `avg_loss_pct`, `payoff_ratio`,
+  `profit_factor`, `std_return_pct`, and `max_drawdown_pct` (daily report surfaces
+  Profit Factor / Payoff / Max DD, backward compatible). Added
+  `stock_watch/backtesting/tear_sheet.py` (`factor_tear_sheet`, `monotonicity_score`)
+  to validate whether `setup_score` / `risk_score` actually predict forward returns.
 
-- [ ] **A4. Execution realism.**
-  Forward returns are close-to-close and ignore Taiwan transaction tax (0.3% on sells)
-  + brokerage fees (0.1425%) and slippage. Incorporate costs before any P&L claim.
+- [x] **A4. Execution realism.**
+  `stock_watch/backtesting/costs.py` adds a Taiwan `CostModel` (~0.585% round trip =
+  2×0.1425% brokerage + 0.3% sell-side tax) with configurable slippage and
+  `net_return_pct()` to convert gross close-to-close returns to net.
 
 ## B. Analysis breadth (improve stock selection quality)
 
-- [ ] **B1. Relative strength vs the index (`^TWII`).** No relative-to-market strength
-  exists today; this is highly relevant for Taiwan stock selection.
-- [ ] **B2. Additional technical indicators.** RSI / MACD / ADX, volume–price
-  divergence, gap detection.
-- [ ] **B3. Market filter upgrade.** Currently a binary TWII MA20 check; add market
-  breadth (% of names above their MA) and sector rotation.
-- [ ] **B4. Data-quality gate.** Validate minimum history length, NaNs, and staleness
-  before scoring; reduce fragility of the single (Yahoo) source.
+- [x] **B1. Relative strength vs the index (`^TWII`).**
+  `stock_watch/signals/relative_strength.py` — RS ratio line, RS momentum, excess
+  return, outperformance flag, and a 1–99 RS rating.
+- [x] **B2. Additional technical indicators.** RSI / MACD / ADX added via
+  `add_momentum_indicators` and wired into `add_indicators` (`signals/detect.py`).
+  (Volume–price divergence and gap detection remain future work.)
+- [x] **B3. Market filter upgrade (breadth).**
+  `stock_watch/signals/market_breadth.py` — % of names above MA and advance/decline
+  ratio with a breadth label. (Sector rotation remains future work.)
+- [x] **B4. Data-quality gate.** `stock_watch/data/quality.py` validates minimum
+  history, NaNs, staleness, missing columns, and non-positive closes before scoring.
 
 ## C. Structure & maintainability (supports safe iteration)
 
@@ -55,8 +56,9 @@ Trustworthy conclusions depend on this layer. Do it first.
   removing the reverse dependency injection so scoring/ranking can be unit-tested.
 - [ ] **C2. Break up oversized files.** `local_daily.py`, `weekly_review.py`,
   `summarize_outcomes.py`.
-- [ ] **C3. CI quality gates.** Add ruff + mypy + coverage, pin dependencies, and add a
-  CI cron fallback to reduce the single-point-of-failure local scheduler.
+- [x] **C3. CI quality gates.** Added ruff + mypy config (`pyproject.toml`),
+  `requirements-dev.txt`, and ruff (blocking) + mypy (non-blocking) steps in both
+  workflows. (Coverage gate and CI cron fallback remain future work.)
 
 ---
 
@@ -71,3 +73,8 @@ Trustworthy conclusions depend on this layer. Do it first.
 - 2026-06-03: Branch `feature/analysis-improvements` created. Implemented the first
   A3 increment (risk-adjusted backtest summary metrics) with unit tests; full suite
   (276 tests) green.
+- 2026-06-05: Consolidated all completed work onto `feature/market-analysis-all`:
+  A1 (classification single source), A2 (bias docs), A3 (metrics + factor tear sheet),
+  A4 (execution costs), B1 (relative strength), B2 (RSI/MACD/ADX), B3 (market breadth),
+  B4 (data-quality gate), C3 (ruff/mypy CI). Full suite 329 tests green; ruff clean.
+  Remaining: C1 (data-layer refactor) and C2 (split oversized files).
