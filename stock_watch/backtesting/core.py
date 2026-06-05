@@ -6,6 +6,13 @@ from typing import Callable, Iterable, Optional
 
 import pandas as pd
 
+from stock_watch.strategy.classification import (
+    DEFAULT_THRESHOLDS,
+    ClassificationThresholds,
+    is_attack_event,
+    is_steady_event,
+)
+
 
 def summarize_events(events_df: pd.DataFrame, horizons: list[int]) -> pd.DataFrame:
     rows = []
@@ -83,6 +90,7 @@ def run_backtest_dual(
     get_indicator_frame: Callable[[str, str], pd.DataFrame],
     detect_row: Callable[[pd.DataFrame, str, str, str, str], dict],
     logger,
+    classification_thresholds: ClassificationThresholds = DEFAULT_THRESHOLDS,
 ) -> tuple[Optional[pd.DataFrame], Optional[pd.DataFrame]]:
     if not backtest_enabled:
         return None, None
@@ -158,14 +166,10 @@ def run_backtest_dual(
                     future = float(df.iloc[i + horizon]["Close"])
                     event[f"ret_{horizon}d"] = round((future / entry - 1.0) * 100, 2)
 
-                if row["setup_score"] >= 5 and row["risk_score"] <= 4:
+                if is_steady_event(row, classification_thresholds):
                     steady_events.append(event.copy())
 
-                if (
-                    row["ret5_pct"] > 8
-                    and row["volume_ratio20"] > 1.3
-                    and row["ret20_pct"] > 0
-                ) or ("ACCEL" in row["signals"]):
+                if is_attack_event(row, classification_thresholds):
                     attack_events.append(event.copy())
 
             updated_scanned_dates[str(ticker)] = df.index[end_idx - 1].strftime("%Y-%m-%d")
