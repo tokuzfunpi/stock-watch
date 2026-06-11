@@ -37,17 +37,29 @@ Trustworthy conclusions depend on this layer. Do it first.
 
 ## B. Analysis breadth (improve stock selection quality)
 
-- [x] **B1. Relative strength vs the index (`^TWII`).**
-  `stock_watch/signals/relative_strength.py` — RS ratio line, RS momentum, excess
-  return, outperformance flag, and a 1–99 RS rating.
-- [x] **B2. Additional technical indicators.** RSI / MACD / ADX added via
-  `add_momentum_indicators` and wired into `add_indicators` (`signals/detect.py`).
-  (Volume–price divergence and gap detection remain future work.)
-- [x] **B3. Market filter upgrade (breadth).**
-  `stock_watch/signals/market_breadth.py` — % of names above MA and advance/decline
-  ratio with a breadth label. (Sector rotation remains future work.)
-- [x] **B4. Data-quality gate.** `stock_watch/data/quality.py` validates minimum
-  history, NaNs, staleness, missing columns, and non-positive closes before scoring.
+> Note on status: items marked `[~]` ship a tested, importable **utility** but
+> are **not yet wired into the production scan/report flow**. They are
+> infrastructure for a follow-up PR, not behavior changes today. Do not assume a
+> recommendation already uses these signals until they are marked `[x]`.
+
+- [~] **B1. Relative strength vs the index (`^TWII`).** *(utility added; production
+  wiring pending)* `stock_watch/signals/relative_strength.py` — RS ratio line, RS
+  momentum, excess return, outperformance flag, and a 1–99 RS rating. Not yet
+  consumed by the rank table or candidate summaries.
+- [~] **B2. Additional technical indicators.** *(computed in the indicator pipeline;
+  not yet consumed by scoring)* RSI / MACD / ADX are added via
+  `add_momentum_indicators` and run inside `add_indicators` (`signals/detect.py`), so
+  every frame now carries them — but `detect_row` / scoring does not read them yet.
+  Volume–price divergence and gap detection remain future work.
+- [~] **B3. Market filter upgrade (breadth).** *(utility added; production wiring
+  pending)* `stock_watch/signals/market_breadth.py` — % of names above MA and
+  advance/decline ratio with a breadth label. Not yet wired into the daily report or
+  market context. Sector rotation remains future work.
+- [~] **B4. Data-quality gate.** *(utility added; production wiring pending)*
+  `stock_watch/data/quality.py::check_price_history` validates minimum history, NaNs,
+  staleness, missing columns, and non-positive closes. Not yet called on the
+  OHLCV→scoring path. (Distinct from the pre-existing verification
+  `build_data_quality_gate`.)
 
 ## C. Structure & maintainability (supports safe iteration)
 
@@ -78,3 +90,9 @@ Trustworthy conclusions depend on this layer. Do it first.
   A4 (execution costs), B1 (relative strength), B2 (RSI/MACD/ADX), B3 (market breadth),
   B4 (data-quality gate), C3 (ruff/mypy CI). Full suite 329 tests green; ruff clean.
   Remaining: C1 (data-layer refactor) and C2 (split oversized files).
+- 2026-06-10: Status correction after review. B1/B3/B4 reclassified from `[x]` to
+  `[~]`: they ship tested utilities but are **not yet wired into the production
+  scan/report flow**. B2 indicators are computed in `add_indicators` but not yet
+  consumed by scoring. Only A1–A4 and C3 are end-to-end live. This PR is therefore
+  "infrastructure + tests + RSI/MACD/ADX columns + backtest metrics"; B1/B3/B4
+  production wiring is deferred to a dedicated follow-up PR for cleaner review.
