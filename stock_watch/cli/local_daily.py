@@ -1515,9 +1515,10 @@ def _collect_quality_value_action_summary(
             for ticker in set(work.get("ticker", pd.Series(dtype=str)).astype(str).tolist())
             if str(ticker).strip()
         }
-        formatter = lambda df, *, price_label, limit=5: _format_ticker_names_with_note(  # type: ignore[misc]
-            df, price_label=price_label, note_by_ticker=note_by_ticker, limit=limit
-        )
+        def formatter(df, *, price_label, limit=5):
+            return _format_ticker_names_with_note(
+                df, price_label=price_label, note_by_ticker=note_by_ticker, limit=limit
+            )
 
     return {
         "action_trial_tickers": formatter(trial_df, price_label="買"),

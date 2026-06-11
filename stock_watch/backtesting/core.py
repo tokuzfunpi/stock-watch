@@ -6,6 +6,27 @@ from typing import Callable, Iterable, Optional
 
 import pandas as pd
 
+from stock_watch.strategy.classification import (
+    DEFAULT_THRESHOLDS,
+    ClassificationThresholds,
+    is_attack_event,
+    is_steady_event,
+)
+
+
+def _max_drawdown_pct(returns: pd.Series) -> float:
+    """Approximate max drawdown of an equity curve built by compounding the
+    per-trade percentage returns in their recorded order.
+
+    Returns a non-positive number (percent). 0.0 means no drawdown / no data.
+    """
+    if returns.empty:
+        return 0.0
+    equity = (1.0 + returns / 100.0).cumprod()
+    running_peak = equity.cummax()
+    drawdown = equity / running_peak - 1.0
+    return round(float(drawdown.min()) * 100, 2)
+
 
 def summarize_events(events_df: pd.DataFrame, horizons: list[int]) -> pd.DataFrame:
     rows = []
@@ -14,6 +35,17 @@ def summarize_events(events_df: pd.DataFrame, horizons: list[int]) -> pd.DataFra
         series = events_df[col].dropna()
         if series.empty:
             continue
+
+        wins = series[series > 0]
+        losses = series[series < 0]
+        gross_profit = float(wins.sum())
+        gross_loss = float(-losses.sum())  # positive magnitude of losses
+
+        avg_win = round(float(wins.mean()), 2) if not wins.empty else 0.0
+        avg_loss = round(float(losses.mean()), 2) if not losses.empty else 0.0  # negative
+        payoff_ratio = round(avg_win / abs(avg_loss), 2) if avg_loss != 0 else float("inf")
+        profit_factor = round(gross_profit / gross_loss, 2) if gross_loss > 0 else float("inf")
+
         rows.append(
             {
                 "horizon": horizon,
@@ -21,6 +53,13 @@ def summarize_events(events_df: pd.DataFrame, horizons: list[int]) -> pd.DataFra
                 "win_rate_pct": round((series.gt(0).mean()) * 100, 2),
                 "avg_return_pct": round(series.mean(), 2),
                 "median_return_pct": round(series.median(), 2),
+                # Risk-adjusted / distribution metrics (additive).
+                "avg_win_pct": avg_win,
+                "avg_loss_pct": avg_loss,
+                "payoff_ratio": payoff_ratio,
+                "profit_factor": profit_factor,
+                "std_return_pct": round(float(series.std(ddof=0)), 2),
+                "max_drawdown_pct": _max_drawdown_pct(series),
             }
         )
     return pd.DataFrame(rows)
@@ -83,6 +122,7 @@ def run_backtest_dual(
     get_indicator_frame: Callable[[str, str], pd.DataFrame],
     detect_row: Callable[[pd.DataFrame, str, str, str, str], dict],
     logger,
+    classification_thresholds: ClassificationThresholds = DEFAULT_THRESHOLDS,
 ) -> tuple[Optional[pd.DataFrame], Optional[pd.DataFrame]]:
     if not backtest_enabled:
         return None, None
@@ -158,14 +198,10 @@ def run_backtest_dual(
                     future = float(df.iloc[i + horizon]["Close"])
                     event[f"ret_{horizon}d"] = round((future / entry - 1.0) * 100, 2)
 
-                if row["setup_score"] >= 5 and row["risk_score"] <= 4:
+                if is_steady_event(row, classification_thresholds):
                     steady_events.append(event.copy())
 
-                if (
-                    row["ret5_pct"] > 8
-                    and row["volume_ratio20"] > 1.3
-                    and row["ret20_pct"] > 0
-                ) or ("ACCEL" in row["signals"]):
+                if is_attack_event(row, classification_thresholds):
                     attack_events.append(event.copy())
 
             updated_scanned_dates[str(ticker)] = df.index[end_idx - 1].strftime("%Y-%m-%d")

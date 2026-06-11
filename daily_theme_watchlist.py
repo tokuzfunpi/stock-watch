@@ -51,6 +51,7 @@ from stock_watch.strategy import candidates as strategy_candidates
 from stock_watch.strategy import feedback as strategy_feedback
 from stock_watch.strategy import heat_policy as strategy_heat_policy
 from stock_watch.strategy import scenario as strategy_scenario
+from stock_watch.strategy.classification import ClassificationThresholds
 from stock_watch.telegram_config import resolve_telegram_token
 from stock_watch.workflows import market_context
 from stock_watch.workflows import runtime_metrics
@@ -240,8 +241,6 @@ class ScenarioPolicy:
     correction_midlong_top_n: int
     min_correction_ok_samples: int
     new_watch_spotlight_limit: int
-
-
 @dataclass
 class AppConfig:
     yf_period: str
@@ -255,6 +254,7 @@ class AppConfig:
     group_weights: GroupWeights
     strategy: StrategyConfig
     scenario_policy: ScenarioPolicy
+    classification: ClassificationThresholds
 
 
 def load_config(path: Path) -> AppConfig:
@@ -262,6 +262,7 @@ def load_config(path: Path) -> AppConfig:
     notify_raw = raw["notify"]
     strat_raw = raw.get("strategy", {})
     scenario_policy_raw = raw.get("scenario_policy", {})
+    classification_raw = raw.get("classification", {})
     return AppConfig(
         yf_period=raw.get("yf_period", "3y"),
         state_enabled=bool(raw.get("state_enabled", True)),
@@ -300,6 +301,7 @@ def load_config(path: Path) -> AppConfig:
             min_correction_ok_samples=int(scenario_policy_raw.get("min_correction_ok_samples", 10)),
             new_watch_spotlight_limit=int(scenario_policy_raw.get("new_watch_spotlight_limit", 3)),
         ),
+        classification=ClassificationThresholds.from_mapping(classification_raw),
     )
 
 
@@ -2507,6 +2509,7 @@ def run_backtest_dual() -> tuple[Optional[pd.DataFrame], Optional[pd.DataFrame]]
         get_indicator_frame=get_indicator_frame,
         detect_row=detect_row,
         logger=logger,
+        classification_thresholds=CONFIG.classification,
     )
 
 

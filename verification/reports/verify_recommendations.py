@@ -31,9 +31,7 @@ from daily_theme_watchlist import (
     get_market_regime,
     get_us_market_reference,
     select_midlong_backup_candidates,
-    select_midlong_candidates,
     select_short_term_backup_candidates,
-    select_short_term_candidates,
 )
 from stock_watch.signals import apply_signal_template_labels
 from stock_watch.signals import summarize_signal_templates
